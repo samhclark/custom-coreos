@@ -29,11 +29,8 @@ ARG ZFS_VERSION
 ARG FEDORA_VERSION
 COPY --from=kernel-query /kernel-version.txt /kernel-version.txt
 
-# TODO: Do I *really* need this? And is this the right URL? 
 # Need to add the updates archive to install specific kernel versions
-WORKDIR /etc/yum.repos.d
-RUN curl -L --remote-name https://src.fedoraproject.org/rpms/fedora-repos/raw/f${FEDORA_VERSION}/f/fedora-updates-archive.repo && \
-    sed -i 's/enabled=AUTO_VALUE/enabled=true/' fedora-updates-archive.repo
+RUN dnf install -y fedora-repos-archive
 
 # Install ZFS build dependencies
 RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
@@ -51,7 +48,8 @@ RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
         tar xzf - -C . --strip-components 1
 
 # Build ZFS
-RUN ./autogen.sh && \
+RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
+    ./autogen.sh && \
     ./configure \
         -with-linux=/usr/src/kernels/$KERNEL_VERSION/ \
         -with-linux-obj=/usr/src/kernels/$KERNEL_VERSION/ && \
@@ -60,12 +58,10 @@ RUN ./autogen.sh && \
 # Remove unnecessary artifacts
 RUN rm /zfs/*devel*.rpm /zfs/zfs-test*.rpm
 
-# TODO: missing *.noarch.rpm install
 # TODO: Figure out if there's a race here. Can I pull a newer CoreOS than I checked earlier?
 FROM quay.io/fedora/fedora-coreos:stable
-COPY --from=builder /zfs/*.rpm /zfs/
-RUN rpm-ostree install \
-      /zfs/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm && \
+RUN --mount=type=bind,from=builder,source=/zfs,target=/zfs rpm-ostree install \
+    /zfs/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm /zfs/*.noarch.rpm && \
     # Auto-load ZFS module
     depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
     echo "zfs" > /etc/modules-load.d/zfs.conf && \
