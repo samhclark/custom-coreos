@@ -32,8 +32,8 @@ COPY --from=kernel-query /kernel-version.txt /kernel-version.txt
 WORKDIR /etc/yum.repos.d
 RUN curl -L --remote-name https://src.fedoraproject.org/rpms/fedora-repos/raw/f${FEDORA_VERSION}/f/fedora-updates-archive.repo && \
     sed -i 's/enabled=AUTO_VALUE/enabled=true/' fedora-updates-archive.repo
-WORKDIR /
 
+# Install ZFS build dependencies
 RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
     dnf install -y autoconf automake dkms gcc \
     kernel-$KERNEL_VERSION kernel-devel-$KERNEL_VERSION kernel-modules-$KERNEL_VERSION kernel-rpm-macros \
@@ -42,19 +42,19 @@ RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
     python3 python3-devel python3-cffi python3-packaging python3-setuptools \
     rpm-build systemd-devel zlib-ng-compat-devel
 
-# It's a little weird.
-# ZFS_VERSION is the tag name, which looks like: zfs-2.3.3
-# But when you extract the tarball, you get a dir like zfs-zfs-2.3.3. 
-# So zfs-$ZFS_VERSION is right. 
+# Get OpenZFS source code
+WORKDIR /zfs
 RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
-    curl -L --remote-name "https://github.com/openzfs/zfs/archive/refs/tags/${ZFS_VERSION}.tar.gz" && \
-    tar xzf "${ZFS_VERSION}.tar.gz" && \
-    mv "zfs-${ZFS_VERSION}" zfs && \
-    cd zfs && \
-    ./autogen.sh && \
+    curl -L "https://github.com/openzfs/zfs/archive/refs/tags/${ZFS_VERSION}.tar.gz" | \
+        tar xzf - -C . --strip-components 1
+
+# Build ZFS
+RUN ./autogen.sh && \
     ./configure -with-linux=/usr/src/kernels/$KERNEL_VERSION/ -with-linux-obj=/usr/src/kernels/$KERNEL_VERSION/ && \
-    make -j1 rpm-utils rpm-kmod && \
-    rm /zfs/*devel*.rpm /zfs/zfs-test*.rpm
+    make -j1 rpm-utils rpm-kmod
+
+# Remove unnecessary artifacts
+RUN rm /zfs/*devel*.rpm /zfs/zfs-test*.rpm
 
 FROM quay.io/fedora/fedora-coreos:stable
 COPY --from=builder /zfs/*.rpm /zfs/
