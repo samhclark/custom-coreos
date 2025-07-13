@@ -34,12 +34,13 @@ RUN curl -L --remote-name https://src.fedoraproject.org/rpms/fedora-repos/raw/f$
     sed -i 's/enabled=AUTO_VALUE/enabled=true/' fedora-updates-archive.repo
 WORKDIR /
 
-# from ZFS docs..
 RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
-    dnf install -y gcc make autoconf automake libtool rpm-build kernel-rpm-macros libtirpc-devel libblkid-devel \
-    libuuid-devel systemd-devel openssl-devel zlib-ng-compat-devel libaio-devel libattr-devel libffi-devel \
-    kernel-$KERNEL_VERSION kernel-modules-$KERNEL_VERSION kernel-devel-$KERNEL_VERSION \
-    libunwind-devel python3 python3-devel python3-setuptools python3-cffi openssl ncompress python3-packaging dkms
+    dnf install -y autoconf automake dkms gcc \
+    kernel-$KERNEL_VERSION kernel-devel-$KERNEL_VERSION kernel-modules-$KERNEL_VERSION kernel-rpm-macros \
+    libaio-devel libattr-devel libblkid-devel libffi-devel libtirpc-devel libtool libunwind-devel libuuid-devel \
+    make ncompress openssl openssl-devel \
+    python3 python3-devel python3-cffi python3-packaging python3-setuptools \
+    rpm-build systemd-devel zlib-ng-compat-devel
 
 # It's a little weird.
 # ZFS_VERSION is the tag name, which looks like: zfs-2.3.3
