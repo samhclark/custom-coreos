@@ -13,6 +13,7 @@ ARG ZFS_VERSION
 ARG FEDORA_VERSION
 ARG KERNEL_MAJOR_MINOR
 
+# TODO: Figure this out. Try finding the max supported kernel and going with that.
 # Confirm the base Fedora version and the kernel version don't move too much. 
 # I want to manually make changes when the kernel changes because ZFS doesn't always keep up
 # Don't use `uname -r`. It will pick up the host kernel version
@@ -28,6 +29,7 @@ ARG ZFS_VERSION
 ARG FEDORA_VERSION
 COPY --from=kernel-query /kernel-version.txt /kernel-version.txt
 
+# TODO: Do I *really* need this? And is this the right URL? 
 # Need to add the updates archive to install specific kernel versions
 WORKDIR /etc/yum.repos.d
 RUN curl -L --remote-name https://src.fedoraproject.org/rpms/fedora-repos/raw/f${FEDORA_VERSION}/f/fedora-updates-archive.repo && \
@@ -50,12 +52,16 @@ RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
 
 # Build ZFS
 RUN ./autogen.sh && \
-    ./configure -with-linux=/usr/src/kernels/$KERNEL_VERSION/ -with-linux-obj=/usr/src/kernels/$KERNEL_VERSION/ && \
+    ./configure \
+        -with-linux=/usr/src/kernels/$KERNEL_VERSION/ \
+        -with-linux-obj=/usr/src/kernels/$KERNEL_VERSION/ && \
     make -j1 rpm-utils rpm-kmod
 
 # Remove unnecessary artifacts
 RUN rm /zfs/*devel*.rpm /zfs/zfs-test*.rpm
 
+# TODO: missing *.noarch.rpm install
+# TODO: Figure out if there's a race here. Can I pull a newer CoreOS than I checked earlier?
 FROM quay.io/fedora/fedora-coreos:stable
 COPY --from=builder /zfs/*.rpm /zfs/
 RUN rpm-ostree install \
