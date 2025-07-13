@@ -2,6 +2,10 @@
 # gh release view --repo openzfs/zfs --json tagName -q '.tagName'
 ARG ZFS_VERSION
 ARG FEDORA_VERSION=42
+
+# Maybe there's something to be done parsing the release notes to find the
+# max compatible kernel version
+# gh release view --repo openzfs/zfs | grep -E 'Linux.*compatible.*kernels' | sed 's/.*\([0-9]\+\.[0-9]\+\) kernels.*/\1/'
 ARG KERNEL_MAJOR_MINOR=6.14
 
 FROM quay.io/fedora/fedora-coreos:stable as kernel-query
