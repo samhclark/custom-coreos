@@ -37,7 +37,6 @@ FROM quay.io/fedora/fedora:${FEDORA_VERSION}
 ARG ZFS_VERSION
 ARG FEDORA_VERSION
 COPY --from=kernel-query /kernel-version.txt /kernel-version.txt
-COPY zfs-reproducible.patch /zfs-reproducible.patch
 
 # Need to add the updates archive to install specific kernel versions
 RUN dnf install -y fedora-repos-archive
@@ -45,28 +44,21 @@ RUN dnf install -y fedora-repos-archive
 # Install ZFS build dependencies
 # Using https://openzfs.github.io/openzfs-docs/Developer%20Resources/Custom%20Packages.html
 RUN KERNEL_VERSION=$(cat /kernel-version.txt) && \
-    dnf install -y autoconf automake dkms gcc git \
+    dnf install -y --setopt=install_weak_deps=False \
+        autoconf automake gcc \
         kernel-$KERNEL_VERSION kernel-devel-$KERNEL_VERSION kernel-modules-$KERNEL_VERSION kernel-rpm-macros \
         libaio-devel libattr-devel libblkid-devel libffi-devel libtirpc-devel libtool libunwind-devel libuuid-devel \
         make ncompress openssl openssl-devel \
         python3 python3-devel python3-cffi python3-packaging python3-setuptools \
         rpm-build systemd-devel zlib-ng-compat-devel
 
-# Get OpenZFS source code
-RUN git clone --revision="refs/tags/${ZFS_VERSION}" --depth 1 https://github.com/openzfs/zfs.git
-
 # Build ZFS
 WORKDIR /zfs
-
-# Config for reproducibility
-RUN git apply --ignore-space-change --ignore-whitespace /zfs-reproducible.patch
+RUN export KERNEL_VERSION=$(cat /kernel-version.txt) && \
+    curl -L "https://github.com/openzfs/zfs/archive/refs/tags/${ZFS_VERSION}.tar.gz" | \
+        tar xzf - -C . --strip-components 1
 
 RUN export KERNEL_VERSION=$(cat /kernel-version.txt) && \
-    export SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct) && \
-    export KBUILD_BUILD_TIMESTAMP="@${SOURCE_DATE_EPOCH}" && \
-    export KBUILD_BUILD_USER="builder" && \
-    export KBUILD_BUILD_HOST="buildhost" && \
-    echo "SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}" && \
     ./autogen.sh && \
     ./configure \
         -with-linux=/usr/src/kernels/$KERNEL_VERSION/ \

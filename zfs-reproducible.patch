@@ -2,23 +2,14 @@ diff --git a/config/zfs-build.m4 b/config/zfs-build.m4
 index 55fc029..72f1278 100644
 --- a/config/zfs-build.m4
 +++ b/config/zfs-build.m4
-@@ -337,6 +337,19 @@ AC_DEFUN([ZFS_AC_RPM], [
+@@ -337,6 +337,10 @@ AC_DEFUN([ZFS_AC_RPM], [
         RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "$(DEBUG_KMEM_TRACKING_ZFS) 1"'
         RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "$(ASAN_ZFS) 1"'
         RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "$(UBSAN_ZFS) 1"'
 +       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --undefine source_date_epoch_from_changelog'
 +       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "clamp_mtime_to_source_date_epoch 1"'
 +       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "use_source_date_epoch_as_buildtime 1"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_buildhost buildhost"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_builddir /build"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_buildrootdir /buildroot"'  
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_rpmdir /rpmdir"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_sourcedir /sourcedir"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_build_id_links none"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_unique_build_ids 0"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_missing_build_ids_terminate_build 0"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_binary_payload w9T.xzdio"'
-+       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_source_payload w9T.xzdio"'
++       RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "_buildhost reproducible"'
  
         AS_IF([test "x$enable_debuginfo" = xyes], [
                 RPM_DEFINE_COMMON=${RPM_DEFINE_COMMON}' --define "__strip /bin/true"'
