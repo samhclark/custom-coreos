@@ -1,0 +1,28 @@
+variant: fcos
+version: 1.6.0
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+        - ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCXLMgaiwxwbRJPfOAqiZ1xdvxp8yprodU8mi72BUnqX62x1OFWKxTJf44Sej/Hm8JyOquVTtRXKiveJOSsV2Ws=
+storage:
+  luks:
+    - name: root
+      label: luks-root
+      device: /dev/disk/by-partlabel/root
+      clevis:
+        custom:
+          needs_network: false
+          pin: tpm2
+          config: '{"pcr_bank":"sha256","pcr_ids":"7"}'
+      wipe_volume: true
+  filesystems:
+    - device: /dev/mapper/root
+      format: btrfs
+      wipe_filesystem: true
+      label: root
+  files:
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: nas
