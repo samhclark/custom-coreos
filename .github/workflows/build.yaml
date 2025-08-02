@@ -1,0 +1,123 @@
+name: Build Custom CoreOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: 'Force rebuild even if up to date'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  query-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      kernel-version: ${{ steps.kernel-info.outputs.kernel-version }}
+      zfs-tag: ${{ steps.zfs-version.outputs.zfs-tag }}
+      zfs-version: ${{ steps.zfs-version.outputs.zfs-version }}
+      zfs-available: ${{ steps.check-zfs.outputs.available }}
+
+    steps:
+      - name: Query kernel version from CoreOS container labels
+        id: kernel-info
+        run: |
+          # Get kernel version from remote container labels (no pull required!)
+          KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
+          
+          echo "kernel-version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
+          echo "Found kernel version: $KERNEL_VERSION"
+
+      - name: Find latest ZFS version
+        id: zfs-version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get the latest ZFS 2.3.x release
+          ZFS_VERSION=$(gh release list \
+            --repo openzfs/zfs \
+            --json tagName \
+            -q '.[] | select(.tagName | startswith("zfs-2.3")) | .tagName' \
+            --limit 1)
+          
+          # Extract just the version part for container tag
+          ZFS_VERSION_CLEAN=${ZFS_VERSION#zfs-}
+          
+          echo "zfs-tag=$ZFS_VERSION" >> $GITHUB_OUTPUT
+          echo "zfs-version=$ZFS_VERSION_CLEAN" >> $GITHUB_OUTPUT
+          echo "Found ZFS version: $ZFS_VERSION"
+
+      - name: Check if prebuilt ZFS kmods are available
+        id: check-zfs
+        run: |
+          ZFS_VERSION="${{ steps.zfs-version.outputs.zfs-version }}"
+          KERNEL_VERSION="${{ steps.kernel-info.outputs.kernel-version }}"
+          IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
+          
+          echo "🔍 Checking availability: $IMAGE"
+          
+          if skopeo inspect docker://$IMAGE >/dev/null 2>&1; then
+            echo "✅ ZFS kmods available for ZFS $ZFS_VERSION + kernel $KERNEL_VERSION"
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ No prebuilt ZFS kmods found for this combination"
+            echo "   ZFS version: $ZFS_VERSION"
+            echo "   Kernel version: $KERNEL_VERSION" 
+            echo "   Expected image: $IMAGE"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  build:
+    needs: query-versions
+    if: needs.query-versions.outputs.zfs-available == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Build container image
+        id: build
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: stable
+          containerfiles: |
+            ./Containerfile
+          build-args: |
+            ZFS_VERSION=${{ needs.query-versions.outputs.zfs-version }}
+            KERNEL_VERSION=${{ needs.query-versions.outputs.kernel-version }}
+
+      - name: Log in to Container Registry
+        uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1.7
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to registry
+        id: push
+        uses: redhat-actions/push-to-registry@5ed88d269cf581ea9ef6dd6806d01562096bee9c # v2.8
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+          registry: ${{ env.REGISTRY }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

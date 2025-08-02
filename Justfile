@@ -21,42 +21,31 @@ kernel-major-minor:
     KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
     echo "$KERNEL_VERSION" | cut -d'.' -f1-2
 
-# Check if ZFS version is compatible with kernel version
-check-compatibility:
+# Check if prebuilt ZFS kmods exist for current versions
+check-zfs-available:
     #!/usr/bin/env bash
-    ZFS_VERSION=$(just zfs-version)
-    KERNEL_MAJOR_MINOR=$(just kernel-major-minor)
+    ZFS_VERSION=$(just zfs-version | sed 's/^zfs-//')
+    KERNEL_VERSION=$(just kernel-version)
+    IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
     
-    # Define compatibility matrix for ZFS versions
-    # Format: "zfs-version:max-kernel-version"
-    declare -A compatibility_matrix=(
-        ["zfs-2.2.7"]="6.12"
-        ["zfs-2.3.0"]="6.12"
-        ["zfs-2.3.1"]="6.13"
-        ["zfs-2.3.2"]="6.14"
-        ["zfs-2.2.8"]="6.15"
-        ["zfs-2.3.3"]="6.15"
-    )
+    echo "🔍 Checking availability: $IMAGE"
     
-    # Check if we have compatibility info for this ZFS version
-    if [[ -z "${compatibility_matrix[$ZFS_VERSION]}" ]]; then
-        echo "ERROR: Unknown ZFS version $ZFS_VERSION"
-        echo "This version is not in the compatibility matrix."
-        echo "Please update the compatibility matrix in the Justfile to include this version."
+    if skopeo inspect docker://$IMAGE >/dev/null 2>&1; then
+        echo "✅ ZFS kmods available for ZFS $ZFS_VERSION + kernel $KERNEL_VERSION"
+    else
+        echo "❌ No prebuilt ZFS kmods found for this combination"
+        echo "   ZFS version: $ZFS_VERSION"
+        echo "   Kernel version: $KERNEL_VERSION"
+        echo "   Expected image: $IMAGE"
+        echo ""
+        echo "This likely means either:"
+        echo "  1. This ZFS/kernel combination is incompatible"
+        echo "  2. The fedora-zfs-kmods build hasn't run yet for these versions"
+        echo "  3. The fedora-zfs-kmods build failed for these versions"
+        echo ""
+        echo "Check https://github.com/samhclark/fedora-zfs-kmods for recent builds"
         exit 1
     fi
-    
-    MAX_KERNEL="${compatibility_matrix[$ZFS_VERSION]}"
-    
-    # Check if current kernel is compatible
-    if [[ $(echo "$KERNEL_MAJOR_MINOR $MAX_KERNEL" | tr ' ' '\n' | sort -V | tail -n1) != "$MAX_KERNEL" ]]; then
-        echo "ERROR: ZFS $ZFS_VERSION is only compatible with Linux kernels up to $MAX_KERNEL"
-        echo "Current kernel: $KERNEL_MAJOR_MINOR"
-        echo "Please wait for a newer ZFS release or use an older kernel"
-        exit 1
-    fi
-    
-    echo "✓ ZFS $ZFS_VERSION is compatible with kernel $KERNEL_MAJOR_MINOR (max: $MAX_KERNEL)"
 
 # Show all versions that will be used for build
 versions:
@@ -65,12 +54,12 @@ versions:
     echo "Kernel Version: $(just kernel-version)"
     echo "Kernel Major.Minor: $(just kernel-major-minor)"
     echo ""
-    just check-compatibility
+    just check-zfs-available
 
 # Build the image locally for testing
 build:
     #!/usr/bin/env bash
-    just check-compatibility
+    just check-zfs-available
     
     ZFS_VERSION=$(just zfs-version)
     KERNEL_VERSION=$(just kernel-version)
@@ -93,7 +82,7 @@ build:
 # Quick build test (just verify it builds, don't keep the image)
 test-build:
     #!/usr/bin/env bash
-    just check-compatibility
+    just check-zfs-available
     
     ZFS_VERSION=$(just zfs-version)
     KERNEL_VERSION=$(just kernel-version)
@@ -112,6 +101,21 @@ test-build:
         --build-arg KERNEL_VERSION="$KERNEL_VERSION" \
         -t "custom-coreos:test" \
         . && podman rmi "custom-coreos:test"
+
+# Generate Ignition file from butane.yaml
+generate-ignition:
+    #!/usr/bin/env bash
+    echo "Generating Ignition file from butane.yaml..."
+    just butane < butane.yaml > ignition.json
+    echo "✅ Generated ignition.json"
+
+# Trigger GitHub Actions workflow
+run-workflow:
+    gh workflow run build.yaml
+
+# Check status of GitHub Actions workflow runs  
+workflow-status:
+    gh run list --workflow=build.yaml --limit=5
 
 @butane:
     podman run --rm --interactive         \
