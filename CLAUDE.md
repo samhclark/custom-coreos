@@ -4,152 +4,177 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository creates a custom CoreOS container image with ZFS and Tailscale support. It is currently undergoing a major architectural overhaul to use prebuilt ZFS kernel modules and implement CI/CD workflows.
+This repository creates a custom CoreOS container image with ZFS and Tailscale support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
 
-**Current State**: Traditional build-from-source approach with ~10+ minute build times
-**Future State**: Streamlined build using prebuilt RPMs with ~2-3 minute build times
+**Status**: ✅ **PRODUCTION READY** - All core functionality implemented and tested
+**Build Time**: ~2-3 minutes (down from 10+ minutes)
+**Container Registry**: `ghcr.io/samhclark/custom-coreos:stable`
+**Ignition File**: `https://samhclark.github.io/custom-coreos/ignition.json`
 
 ## Project Relationship
 
-This project has a sibling dependency on `../fedora-zfs-kmods/` which builds and publishes prebuilt ZFS kernel modules as container images. The overhaul plan transitions this project from building ZFS from source to consuming those prebuilt RPMs.
+This project depends on `../fedora-zfs-kmods/` which builds and publishes prebuilt ZFS kernel modules as container images. The architecture uses registry-based compatibility checking - if a ZFS+kernel combination exists in the fedora-zfs-kmods registry, it's compatible.
 
-## Key Commands (Current)
+## Key Commands
 
-- `just` - Show available commands (default recipe)
-- `just butane` - Run Butane to process configuration files using podman
-- `podman build --build-arg ZFS_VERSION=<version> .` - Build the custom CoreOS image
-
-## Key Commands (Planned)
-
+### Version Discovery & Compatibility
 - `just versions` - Show ZFS, kernel versions and compatibility status
-- `just check-compatibility` - Verify ZFS/kernel compatibility matrix
-- `just build` - Build with automatic version discovery
-- `just generate-ignition` - Generate Ignition files for CoreOS installation
-- `just run-workflow` - Trigger GitHub Actions build
+- `just zfs-version` - Get latest ZFS 2.3.x release
+- `just kernel-version` - Get current CoreOS kernel version
+- `just check-zfs-available` - Verify prebuilt ZFS kmods exist for current versions
 
-## Architecture (Current)
+### Building & Testing
+- `just build` - Build image locally with automatic version discovery
+- `just test-build` - Quick build test (builds then removes image)
 
-The project consists of three main components:
+### Ignition File Management  
+- `just butane` - Run Butane container to process configuration files
+- `just generate-ignition` - Generate Ignition JSON from butane.yaml
 
-1. **Multi-stage Containerfile build process:**
-   - Stage 1: Query CoreOS kernel version and validate compatibility
-   - Stage 2: Build ZFS kernel modules from source using Fedora base image (10+ minutes)
-   - Stage 3: Final image assembly (currently commented out)
+### CI/CD Integration
+- `just run-workflow` - Trigger main build workflow
+- `just run-pages` - Trigger Ignition file generation and GitHub Pages deployment
+- `just run-cleanup` - Trigger container cleanup (dry run)
+- `just run-cleanup-force` - Trigger container cleanup (actual deletion)
+- `just workflow-status` - Check build workflow status
+- `just all-workflows` - Check status of all workflows
 
-2. **Butane configuration (butane.yaml):**
-   - Configures encrypted LUKS root filesystem with TPM2 unlock
-   - Sets up btrfs filesystem
-   - Configures SSH keys for 'core' user
-   - Sets hostname to 'nas'
+### Local Testing
+- `just cleanup-dry-run DAYS` - Test cleanup logic with configurable retention
 
-3. **Overlay filesystem (overlay-root/):**
-   - Tailscale repository configuration
-   - GPG key for package verification
-
-## Architecture (Planned)
+## Architecture (Production)
 
 **2-stage build process** consuming prebuilt ZFS RPMs:
 
-1. **Stage 1 (kernel-query)**: Validate CoreOS kernel version and compatibility
-2. **Stage 2 (final-image)**: Install prebuilt ZFS RPMs from `ghcr.io/samhclark/fedora-zfs-kmods`
+### Stage 1: Version Validation
+```dockerfile
+FROM quay.io/fedora/fedora-coreos:stable as kernel-query
+# Validates provided KERNEL_VERSION matches actual CoreOS kernel
+```
 
-**Integration Pattern:**
+### Stage 2: Final Image Assembly  
 ```dockerfile
 FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
 
 FROM quay.io/fedora/fedora-coreos:stable
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
-    rpm-ostree install -y \
-        tailscale \
+    rpm-ostree install -y tailscale \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm
 ```
 
-## Butane and Ignition Workflow
+## CI/CD Workflows
 
-**Critical Requirement**: CoreOS requires Ignition files for installation. This project must maintain:
+### Main Build (`.github/workflows/build.yaml`)
+- **Trigger**: Daily at 6 AM UTC + manual
+- **Jobs**: query-versions → build  
+- **Output**: `ghcr.io/samhclark/custom-coreos:stable`
+- **Features**: Version discovery, compatibility checking, build attestations
 
-1. **butane.yaml**: Human-readable CoreOS configuration
-2. **Ignition generation**: Convert Butane to Ignition JSON
-3. **HTTP serving**: Serve Ignition files via GitHub Pages for installation access
+### Ignition Files (`.github/workflows/pages.yaml`)
+- **Trigger**: Push to main (butane.yaml changes) + manual
+- **Output**: `https://samhclark.github.io/custom-coreos/ignition.json`
+- **Features**: Butane→Ignition conversion, GitHub Pages deployment
 
-**Installation Pattern**: CoreOS installer fetches Ignition file over HTTP during installation.
+### Container Cleanup (`.github/workflows/cleanup-images.yaml`)  
+- **Trigger**: Weekly Sundays 2 AM UTC + manual
+- **Retention**: 90 days
+- **Safety**: Manual triggers default to dry-run
 
-## Version Compatibility
+## Butane and Ignition Configuration
 
-**Compatibility Matrix**: ZFS versions have maximum supported kernel versions:
-- Must validate ZFS + kernel compatibility before builds
-- Fedora version is not a concern for this project
-- Build should fail if no suitable `fedora-zfs-kmods` image exists
+**Critical Requirement**: CoreOS requires Ignition files for installation.
 
-**Example Compatibility**:
-```bash
-declare -A compatibility_matrix=(
-    ["zfs-2.3.3"]="6.15"
-    ["zfs-2.3.2"]="6.14"
-    # ... additional mappings
-)
+### Current Configuration (`butane.yaml`)
+- **Encryption**: LUKS root filesystem with TPM2 unlock (PCR 7)
+- **Filesystem**: Btrfs on `/dev/mapper/root`
+- **Access**: SSH key for 'core' user
+- **Identity**: Hostname set to 'nas'
+
+### Installation URL
+```
+https://samhclark.github.io/custom-coreos/ignition.json
 ```
 
-## CI/CD Strategy (Planned)
+Use this URL during CoreOS installation to configure encrypted storage, SSH access, and system settings.
 
-**Single Tag Approach**: Maintain only `stable` tag (no versioned tags)
-- Daily builds at 6 AM UTC
-- Single `stable` tag overwrites on each successful build
-- Build attestations for security verification
-- 90-day image retention policy
+## Version Compatibility Strategy
 
-**Workflow Jobs**:
-1. **query-versions**: Discover current ZFS and kernel versions
-2. **build**: Build and push with single `stable` tag
+**Registry-Based Compatibility**: No manual compatibility matrix maintenance.
 
-## Deduplication Strategy
+- ✅ **If exists**: `ghcr.io/samhclark/fedora-zfs-kmods:zfs-X.X.X_kernel-Y.Y.Y` → Compatible
+- ❌ **If missing**: Build fails early with clear error pointing to fedora-zfs-kmods project
 
-**Current Plan**: No immediate deduplication (simplified initial implementation)
-**Future Enhancement**: Check CoreOS version + ZFS version combination
-- Extract CoreOS version from container labels (not tags)
-- Skip builds when identical combination already exists
-- Add container labeling to track parent image versions
+This eliminates duplicate compatibility tracking and provides automatic compatibility validation.
+
+## Container Labels
+
+Images include labels for future deduplication:
+- `custom-coreos.zfs-version` - ZFS version used
+- `custom-coreos.kernel-version` - Kernel version used
 
 ## Key Files
 
-### Current Files
-- `Containerfile` - Multi-stage build definition
-- `butane.yaml` - Fedora CoreOS configuration 
-- `Justfile` - Task runner configuration
-- `zfs-reproducible.patch` - Ensures reproducible ZFS builds (will be removed)
-- `overlay-root/` - Files to overlay onto the final image
+### Core Files
+- `Containerfile` - 2-stage build definition (61 lines, streamlined)
+- `butane.yaml` - Fedora CoreOS configuration with encryption
+- `Justfile` - Comprehensive development commands
+- `ignition.json` - Generated Ignition file (auto-updated)
 
-### Planned Files
-- `.github/workflows/build.yaml` - Main CI/CD workflow
-- `.github/workflows/pages.yaml` - Ignition file generation and serving
-- `.github/workflows/cleanup-images.yaml` - Container registry cleanup
-- `build-overhaul.md` - Detailed implementation plan
+### CI/CD Workflows
+- `.github/workflows/build.yaml` - Main container build
+- `.github/workflows/pages.yaml` - Ignition file serving
+- `.github/workflows/cleanup-images.yaml` - Registry maintenance
+
+### Documentation
+- `CLAUDE.md` - This file
+- `README.md` - User documentation
+- `build-overhaul.md` - Complete implementation plan
 
 ## Development Patterns
 
-**Local-First CI/CD Development**: Implement workflow logic in Justfile commands first, then port to GitHub Actions. This enables:
-- Fast iteration without expensive Actions runs
-- Local testing and debugging of complex logic
-- Immediate feedback on command syntax and API responses
+**Registry-First Compatibility**: Let the container registry be the source of truth for ZFS+kernel compatibility rather than maintaining duplicate matrices.
 
-## Build Performance Goals
+**Local-First CI/CD Development**: Implement workflow logic in Justfile commands first, then port to GitHub Actions for fast iteration and testing.
 
-- **Current**: 10+ minutes (ZFS compilation from source)
-- **Target**: 2-3 minutes (prebuilt RPM consumption)
+## Build Performance 
+
+- **Previous**: 10+ minutes (ZFS compilation from source)
+- **Current**: 2-3 minutes (prebuilt RPM consumption)  
 - **Improvement**: 70%+ reduction in build time
 
-## Security Considerations
+## Security Features
 
-- Build attestations with GitHub Actions
-- Container image signing and verification
-- Encrypted storage with TPM2 unlock
-- SSH key management for 'core' user access
+- **Encryption**: LUKS root filesystem with TPM2-based unlock
+- **Build Security**: Container image signing and attestations
+- **Access Control**: SSH key-based authentication
+- **Attestations**: Full build provenance tracking
 
 ## Project Status
 
-**Phase**: Planning and architectural overhaul
-**Documentation**: Complete implementation plan in `build-overhaul.md`
-**Dependencies**: Requires `fedora-zfs-kmods` project for prebuilt RPMs
-**Timeline**: 8-phase implementation plan with 25+ discrete steps
+**Implementation Status**: ✅ **COMPLETE** (Phases 1-5 implemented and tested)
+
+**Production Ready**:
+- ✅ Container builds and publishes successfully  
+- ✅ Ignition files generate and serve over HTTP
+- ✅ All workflows tested and functional
+- ✅ Local development workflow complete
+
+**Future Enhancements** (see Phases 7-9 in build-overhaul.md):
+- Advanced duplicate detection based on CoreOS+ZFS version labels
+- Additional testing and validation workflows
+- Documentation improvements
+
+## Quick Start
+
+1. **Build locally**: `just build`
+2. **Generate Ignition**: `just generate-ignition`  
+3. **Trigger CI build**: `just run-workflow`
+4. **Install CoreOS**: Use `https://samhclark.github.io/custom-coreos/ignition.json`
+
+## Troubleshooting
+
+**Build failures**: Check `just check-zfs-available` - likely no prebuilt ZFS kmods for current versions
+**Workflow failures**: Check `just all-workflows` for status
+**Ignition issues**: Verify with `just generate-ignition` locally first
