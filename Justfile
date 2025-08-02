@@ -113,9 +113,87 @@ generate-ignition:
 run-workflow:
     gh workflow run build.yaml
 
+# Trigger Ignition file generation and GitHub Pages deployment
+run-pages:
+    gh workflow run pages.yaml
+
+# Trigger container cleanup (dry run by default)
+run-cleanup:
+    gh workflow run cleanup-images.yaml
+
+# Trigger container cleanup (actual deletion)
+run-cleanup-force:
+    gh workflow run cleanup-images.yaml -f dry_run=false
+
 # Check status of GitHub Actions workflow runs  
 workflow-status:
     gh run list --workflow=build.yaml --limit=5
+
+# Check status of all workflows
+all-workflows:
+    #!/usr/bin/env bash
+    echo "🔧 Build Workflow:"
+    gh run list --workflow=build.yaml --limit=3
+    echo ""
+    echo "🗑️  Cleanup Workflow:"  
+    gh run list --workflow=cleanup-images.yaml --limit=3
+    echo ""
+    echo "📄 Pages Workflow:"
+    gh run list --workflow=pages.yaml --limit=3
+
+# Test cleanup logic locally with configurable retention period
+cleanup-dry-run RETENTION_DAYS:
+    #!/usr/bin/env bash
+    echo "🧪 Testing cleanup logic (DRY RUN)"
+    echo "📅 Retention period: {{RETENTION_DAYS}} days"
+    echo ""
+    
+    # Calculate cutoff date
+    cutoff_date=$(date -d "{{RETENTION_DAYS}} days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+    echo "📅 Cutoff date: $cutoff_date"
+    echo ""
+    
+    # Query all package versions
+    echo "🔍 Querying all package versions..."
+    versions_json=$(gh api "/user/packages/container/custom-coreos/versions" --paginate)
+    
+    if [[ -z "$versions_json" || "$versions_json" == "[]" ]]; then
+        echo "📦 No container images found"
+        exit 0
+    fi
+    
+    # Parse and display versions
+    total_versions=$(echo "$versions_json" | jq length)
+    echo "📦 Found $total_versions total versions:"
+    echo "$versions_json" | jq -r '.[] | "  \(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"' | sort
+    echo ""
+    
+    # Find versions older than cutoff
+    old_versions=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" '
+        .[] | select(.created_at < $cutoff) | "  \(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"'
+    )
+    
+    if [[ -z "$old_versions" ]]; then
+        echo "✅ No versions older than {{RETENTION_DAYS}} days found"
+        echo ""
+        echo "📊 Summary:"
+        echo "  - Total versions: $total_versions"
+        echo "  - Versions to delete: 0"
+        echo "  - Versions to keep: $total_versions"
+    else
+        deletion_count=$(echo "$old_versions" | wc -l)
+        remaining_count=$((total_versions - deletion_count))
+        
+        echo "🗑️  Versions that would be deleted (older than {{RETENTION_DAYS}} days):"
+        echo "$old_versions"
+        echo ""
+        echo "📊 Summary:"
+        echo "  - Total versions: $total_versions"
+        echo "  - Versions to delete: $deletion_count"
+        echo "  - Versions to keep: $remaining_count"
+        echo ""
+        echo "🔒 This was a dry run - no actual deletion performed"
+    fi
 
 @butane:
     podman run --rm --interactive         \

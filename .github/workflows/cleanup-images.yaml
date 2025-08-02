@@ -1,0 +1,126 @@
+name: Cleanup Container Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (true/false)'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+  schedule:
+    - cron: '0 2 * * 0'  # Weekly on Sundays at 2 AM UTC
+
+env:
+  RETENTION_DAYS: 90
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+      
+    steps:
+      - name: Get package versions
+        id: versions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🧹 Container image cleanup starting..."
+          echo "📅 Retention period: ${{ env.RETENTION_DAYS }} days"
+          echo "🔒 Dry run: ${{ inputs.dry_run || 'false' }}"
+          echo ""
+          
+          # Calculate cutoff date
+          cutoff_date=$(date -d "${{ env.RETENTION_DAYS }} days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "📅 Cutoff date: $cutoff_date"
+          echo ""
+          
+          # Get all package versions for custom-coreos
+          echo "🔍 Querying all package versions..."
+          versions_json=$(gh api "/user/packages/container/custom-coreos/versions" --paginate)
+          
+          if [[ -z "$versions_json" || "$versions_json" == "[]" ]]; then
+            echo "📦 No container images found"
+            echo "delete_versions=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Count total versions
+          total_versions=$(echo "$versions_json" | jq length)
+          echo "📦 Found $total_versions total versions"
+          
+          # Find version IDs older than cutoff date
+          delete_ids=$(echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" '
+            [.[] | select(.created_at < $cutoff) | .id] | join(",")'
+          )
+          
+          if [[ -z "$delete_ids" || "$delete_ids" == "" ]]; then
+            echo "✅ No versions older than ${{ env.RETENTION_DAYS }} days found"
+            echo ""
+            echo "📊 Summary:"
+            echo "  - Total versions: $total_versions"
+            echo "  - Versions to delete: 0"
+            echo "delete_versions=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          deletion_count=$(echo "$delete_ids" | tr ',' '\n' | wc -l)
+          remaining_count=$((total_versions - deletion_count))
+          
+          echo "🗑️  Versions older than ${{ env.RETENTION_DAYS }} days:"
+          echo "$versions_json" | jq -r --arg cutoff "$cutoff_date" '
+            .[] | select(.created_at < $cutoff) | "  \(.metadata.container.tags[]? // "<untagged>") - \(.created_at) - ID: \(.id)"'
+          echo ""
+          
+          echo "📊 Summary:"
+          echo "  - Total versions: $total_versions" 
+          echo "  - Versions to delete: $deletion_count"
+          echo "  - Versions to keep: $remaining_count"
+          
+          # Set output for deletion step
+          echo "delete_versions=$delete_ids" >> $GITHUB_OUTPUT
+          
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            echo ""
+            echo "🧪 DRY RUN - Would delete $deletion_count versions"
+          else
+            echo ""
+            echo "🗑️  Proceeding with deletion of $deletion_count versions"
+          fi
+
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v5
+        if: steps.versions.outputs.delete_versions != '' && inputs.dry_run != 'true'
+        with:
+          package-name: 'custom-coreos'
+          package-type: 'container'
+          package-version-ids: ${{ steps.versions.outputs.delete_versions }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dry run summary
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "🧪 DRY RUN COMPLETE"
+          echo "This was a dry run - no versions were actually deleted."
+          echo ""
+          if [[ -n "${{ steps.versions.outputs.delete_versions }}" ]]; then
+            echo "📋 Would delete these versions:"
+            echo "${{ steps.versions.outputs.delete_versions }}" | tr ',' '\n' | nl -w2 -s'. ID: '
+            echo ""
+            echo "To perform actual cleanup, run this workflow with dry_run=false"
+          else
+            echo "✅ No versions were eligible for deletion"
+            echo "All versions are within the ${{ env.RETENTION_DAYS }}-day retention window"
+          fi
+
+      - name: Cleanup completion summary
+        if: inputs.dry_run != 'true' && steps.versions.outputs.delete_versions != ''
+        run: |
+          echo "✅ CLEANUP COMPLETED"
+          echo "Successfully deleted older container versions"
+          echo "Retention policy: ${{ env.RETENTION_DAYS }} days"
