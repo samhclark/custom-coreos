@@ -110,8 +110,8 @@ just cleanup-dry-run 30  # 30-day retention test
 
 **2-stage container build** using prebuilt ZFS kernel modules:
 
-1. **Version Validation**: Verify provided versions match actual CoreOS
-2. **Assembly**: Install prebuilt ZFS RPMs + Tailscale into CoreOS image
+1. **Pull Prebuilt ZFS Modules**: Extract ZFS RPMs from fedora-zfs-kmods registry
+2. **Final Assembly**: Install ZFS + Tailscale with inline kernel validation and service setup
 
 ### Dependencies
 
@@ -260,7 +260,6 @@ sudo tailscale up
 │   ├── build.yaml          # Main container build
 │   ├── pages.yaml          # Ignition file serving  
 │   └── cleanup-images.yaml # Container registry cleanup
-├── overlay-root/           # Files overlaid onto image
 ├── .ai/                    # AI assistant resources
 │   ├── instructions/       # Agent instructions and guides
 │   ├── plans/             # Development and testing plans

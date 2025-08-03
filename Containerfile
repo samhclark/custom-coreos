@@ -1,32 +1,20 @@
 # Build arguments - all required, no defaults
-ARG ZFS_VERSION
 ARG KERNEL_VERSION
+ARG ZFS_VERSION
 
 #####
 # 
-#  Stage 1: Validate CoreOS kernel version
+#  Stage 1: Pull prebuilt ZFS kmods
 #
 #####
-FROM quay.io/fedora/fedora-coreos:stable as kernel-query
-ARG KERNEL_VERSION
-
-# Validate that provided kernel version matches actual CoreOS kernel
-RUN [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]]
-
-
-#####
-# 
-#  Stage 2: Pull prebuilt ZFS kmods
-#
-#####
-ARG ZFS_VERSION
-ARG KERNEL_VERSION
 FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
+ARG KERNEL_VERSION
+ARG ZFS_VERSION
 
 
 #####
 # 
-#  Stage 3: Final image
+#  Stage 2: Final image
 #
 #####
 FROM quay.io/fedora/fedora-coreos:stable
@@ -39,11 +27,10 @@ LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modu
 LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
 LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
-# Copy overlay files
-COPY overlay-root/ /
-
-# Install ZFS and Tailscale using prebuilt RPMs
+# First, validate that provided kernel version matches actual CoreOS kernel
+# Then, install ZFS and Tailscale using prebuilt RPMs
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
+    [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
     rpm-ostree install -y \
         tailscale \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \

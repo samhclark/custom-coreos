@@ -55,22 +55,28 @@ This project depends on `../fedora-zfs-kmods/` which builds and publishes prebui
 
 **2-stage build process** consuming prebuilt ZFS RPMs:
 
-### Stage 1: Version Validation
+### Stage 1: Pull Prebuilt ZFS Kernel Modules
 ```dockerfile
-FROM quay.io/fedora/fedora-coreos:stable as kernel-query
-# Validates provided KERNEL_VERSION matches actual CoreOS kernel
+FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
 ```
 
 ### Stage 2: Final Image Assembly  
 ```dockerfile
-FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
-
 FROM quay.io/fedora/fedora-coreos:stable
+# Inline kernel version validation
+RUN [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]]
+
+# Single RUN command for efficiency
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
-    rpm-ostree install -y tailscale \
+    rpm-ostree install -y \
+        tailscale \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
         /zfs-rpms/*.noarch.rpm \
-        /zfs-rpms/other/zfs-dracut-*.noarch.rpm
+        /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
+    depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
+    echo "zfs" > /etc/modules-load.d/zfs.conf && \
+    systemctl enable tailscaled && \
+    ostree container commit
 ```
 
 ## CI/CD Workflows
