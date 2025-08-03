@@ -27,10 +27,10 @@ LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modu
 LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
 LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
-# First, validate that provided kernel version matches actual CoreOS kernel
-# Then, install ZFS and Tailscale using prebuilt RPMs
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
+    # Validate that provided kernel version matches actual CoreOS kernel
     [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
+    # Install ZFS and Tailscale using prebuilt RPMs
     rpm-ostree install -y \
         tailscale \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
