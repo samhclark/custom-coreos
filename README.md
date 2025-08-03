@@ -261,9 +261,12 @@ sudo tailscale up
 │   ├── pages.yaml          # Ignition file serving  
 │   └── cleanup-images.yaml # Container registry cleanup
 ├── overlay-root/           # Files overlaid onto image
-├── CLAUDE.md              # AI assistant documentation
-├── README.md              # This file
-└── build-overhaul.md      # Implementation plan
+├── .ai/                    # AI assistant resources
+│   ├── instructions/       # Agent instructions and guides
+│   ├── plans/             # Development and testing plans
+│   └── vendored-docs/     # Cached external documentation
+├── CLAUDE.md → .ai/instructions/AGENTS.md  # AI assistant documentation (symlink)
+└── README.md              # This file
 ```
 
 ## Links
