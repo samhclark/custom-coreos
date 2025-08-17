@@ -37,6 +37,9 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
     # Install ZFS and Tailscale using prebuilt RPMs
     rpm-ostree install -y \
+        libnfsidmap \
+        sssd-nfs-idmap \
+        nfs-utils \
         tailscale \
         rbw \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
