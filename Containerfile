@@ -31,6 +31,7 @@ COPY cosign.pub /etc/pki/cosign/cosign.pub
 COPY 50-docker.yaml /etc/containers/registries.d/50-docker.yaml
 COPY policy.json /etc/containers/policy.json
 COPY tpm2.conf /etc/dracut.conf.d/tpm2.conf
+COPY chrony.conf /etc/chrony.conf
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel
