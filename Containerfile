@@ -22,8 +22,8 @@ ARG KERNEL_VERSION
 ARG ZFS_VERSION
 
 # Add container labels for future deduplication
-LABEL org.opencontainers.image.title="Custom CoreOS with ZFS and Tailscale"
-LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modules and Tailscale"
+LABEL org.opencontainers.image.title="Custom CoreOS with ZFS and Wireguard"
+LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modules and Wireguard"
 LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
 LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
@@ -33,13 +33,12 @@ RUN chmod 600 /etc/wireguard/wg0.conf.template
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel
     [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
-    # Install ZFS and Tailscale using prebuilt RPMs
     rpm-ostree install -y \
         libnfsidmap \
         sssd-nfs-idmap \
         nfs-utils \
-        tailscale \
         rbw \
+        wireguard-tools \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
@@ -49,6 +48,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Clean up unwanted files
     rm -rf /var/lib/pcp && \
     # Enable services
-    systemctl enable tailscaled && \
+    systemctl enable firewalld && \
     # Commit the changes
     ostree container commit

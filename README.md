@@ -1,6 +1,6 @@
 # custom-coreos
 
-A custom CoreOS container image with ZFS and Tailscale support, featuring automated CI/CD and encrypted storage configuration.
+A custom CoreOS container image with ZFS and Wireguard support, featuring automated CI/CD and encrypted storage configuration.
 
 **Note**: Also did this one with Claude Code. I'll add more deets later, but in short, this..whole? conversion from jankiness before to what I got now took $10 and 2 hours?
 
@@ -20,7 +20,7 @@ Might have taken me longer than 2 hours. Probably, tbh. I didn't do a lot of rew
 
 This project builds a production-ready CoreOS image with:
 - **ZFS filesystem support** via prebuilt kernel modules
-- **Tailscale VPN** for secure networking
+- **Wireguard VPN** for secure networking
 - **LUKS encryption** with TPM2-based unlock
 - **Automated CI/CD** with GitHub Actions
 - **HTTP-served Ignition files** for easy installation
@@ -49,7 +49,7 @@ The latest build is available at:
 ghcr.io/samhclark/custom-coreos:stable
 ```
 
-Updated daily with the latest CoreOS, ZFS, and Tailscale versions.
+Updated daily with the latest CoreOS, ZFS, and Wireguard versions.
 
 ## Development
 
@@ -111,7 +111,7 @@ just cleanup-dry-run 30  # 30-day retention test
 **2-stage container build** using prebuilt ZFS kernel modules:
 
 1. **Pull Prebuilt ZFS Modules**: Extract ZFS RPMs from fedora-zfs-kmods registry
-2. **Final Assembly**: Install ZFS + Tailscale with inline kernel validation and service setup
+2. **Final Assembly**: Install ZFS + Wireguard with inline kernel validation and service setup
 
 ### Dependencies
 
@@ -233,14 +233,14 @@ Built images include labels for version tracking:
 
 The system will boot with:
 - ✅ ZFS filesystem support loaded
-- ✅ Tailscale VPN installed (needs configuration)
+- ✅ Wireguard VPN installed (needs configuration)
 - ✅ LUKS encryption with TPM2 unlock
 - ✅ SSH access via provided key
 - ✅ Hostname set to 'nas'
 
-Configure Tailscale:
+Configure Wireguard:
 ```bash
-sudo tailscale up
+sudo systemctl enable --now wg-quick@wg0
 ```
 
 ## Troubleshooting

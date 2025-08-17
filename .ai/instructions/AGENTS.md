@@ -13,7 +13,7 @@ The root `CLAUDE.md` is a symlink to `.ai/instructions/AGENTS.md` for compatibil
 
 ## Overview
 
-This repository creates a custom CoreOS container image with ZFS and Tailscale support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
+This repository creates a custom CoreOS container image with ZFS and Wireguard support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
 
 **Status**: ✅ **PRODUCTION READY** - All core functionality implemented and tested
 **Build Time**: ~2-3 minutes (down from 10+ minutes)
@@ -69,13 +69,13 @@ RUN [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${K
 # Single RUN command for efficiency
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     rpm-ostree install -y \
-        tailscale \
+        wireguard-tools \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
     depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
     echo "zfs" > /etc/modules-load.d/zfs.conf && \
-    systemctl enable tailscaled && \
+    systemctl enable wg-quick@wg0 && \
     ostree container commit
 ```
 
@@ -105,7 +105,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 Use the `Containerfile` for configuration that adds **capabilities** to the system:
 - **Security**: Sigstore verification for `rpm-ostree upgrade` operations
 - **System Services**: NTP configuration, chronyd settings
-- **Package Installation**: ZFS modules, Tailscale, system utilities
+- **Package Installation**: ZFS modules, Wireguard, system utilities
 - **Service Enablement**: systemctl enable commands for system services
 
 ### Butane Configuration (Personal & Runtime)
