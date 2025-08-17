@@ -199,18 +199,11 @@ systemd:
         [Service]
         Type=oneshot
         RemainAfterExit=true
-        ExecStart=/bin/bash -c '
-          # Add custom Wireguard service to firewalld
-          firewall-cmd --permanent --new-service-from-file=/etc/firewalld/services/wireguard-nas.xml --name=wireguard-nas || true
-          
-          # Allow Wireguard service in default zone
-          firewall-cmd --permanent --add-service=wireguard-nas
-          
-          # Reload firewall
-          firewall-cmd --reload
-          
-          echo "Firewall configured for Wireguard"
-        '
+        ExecStart=/bin/bash -c 'firewall-cmd --permanent --new-service-from-file=/etc/firewalld/services/wireguard-nas.xml --name=wireguard-nas || true; \
+            firewall-cmd --permanent --add-service=wireguard-nas; \
+            firewall-cmd --reload; \
+            echo "Firewall configured for Wireguard"; \
+            '
         
         [Install]
         WantedBy=multi-user.target
