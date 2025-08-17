@@ -1,0 +1,11 @@
+[Unit]
+Description=Take ZFS snapshots of %I every 15 minutes, keep the last hour
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+RandomizedDelaySec=2min
+Unit=zfs-snapshots-frequently@%i.service
+
+[Install]
+WantedBy=timers.target

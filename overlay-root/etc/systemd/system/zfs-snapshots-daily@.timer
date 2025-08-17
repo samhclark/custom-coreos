@@ -1,0 +1,11 @@
+[Unit]
+Description=Take ZFS snapshots of %I every day, keep the last week
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=5min
+Unit=zfs-snapshots-daily@%i.service
+
+[Install]
+WantedBy=timers.target
