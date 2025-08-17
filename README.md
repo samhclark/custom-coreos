@@ -123,6 +123,33 @@ This project depends on [`fedora-zfs-kmods`](https://github.com/samhclark/fedora
 
 ## CI/CD Workflows
 
+### Cosign Signing Keys
+
+The resulting container images are signed by Cosign.
+The keys were generated with the following command:
+
+```
+$ GITHUB_TOKEN="$(gh auth token)" COSIGN_PASSWORD="$(head -c 33 /dev/urandom | base64)" cosign generate-key-pair github://samhclark/custom-silverblue --output-file cosign.pub
+Password written to COSIGN_PASSWORD github actions secret
+Private key written to COSIGN_PRIVATE_KEY github actions secret
+Public key written to COSIGN_PUBLIC_KEY github actions secret
+Public key also written to cosign.pub
+```
+
+The key is included in the image at `/etc/pki/cosign/cosign.pub`. 
+You can also download the key with:
+
+```
+wget https://raw.githubusercontent.com/samhclark/custom-coreos/refs/heads/main/cosign.pub
+```
+
+The SHA-256 checksum of the key that I originally created on August 16, 2025 is
+
+```
+$ sha256sum cosign.pub 
+7fdb3c2b8159178046596fb49a4e95d42538bb6864595f7a6d789d9bd8837d38  cosign.pub
+```
+
 ### Main Build (`build.yaml`)
 - **Schedule**: Daily at 6 AM UTC
 - **Trigger**: Manual via `just run-workflow` 
