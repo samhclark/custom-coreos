@@ -97,9 +97,23 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 - **Retention**: 90 days
 - **Safety**: Manual triggers default to dry-run
 
-## Butane and Ignition Configuration
+## Configuration Strategy
 
-**Critical Requirement**: CoreOS requires Ignition files for installation.
+**This is a hybrid bootc + CoreOS system requiring careful separation of configuration approaches.**
+
+### Containerfile Configuration (System Capabilities)
+Use the `Containerfile` for configuration that adds **capabilities** to the system:
+- **Security**: Sigstore verification for `rpm-ostree upgrade` operations
+- **System Services**: NTP configuration, chronyd settings
+- **Package Installation**: ZFS modules, Tailscale, system utilities
+- **Service Enablement**: systemctl enable commands for system services
+
+### Butane Configuration (Personal & Runtime)
+Use `butane.yaml` for configuration that is **personal** or **cannot be described declaratively**:
+- **Personal Settings**: SSH authorized keys, hostname, user accounts
+- **Runtime Configuration**: LUKS encryption with TPM2 binding (PCRs)
+- **Dynamic Filesystem**: Encrypted btrfs mounting, partition layouts
+- **Boot-time Decisions**: Anything requiring runtime system state
 
 ### Current Configuration (`butane.yaml`)
 - **Encryption**: LUKS root filesystem with TPM2 unlock (PCR 7)
