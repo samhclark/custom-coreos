@@ -34,6 +34,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel
     [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
     rpm-ostree install -y \
+        firewalld \
         libnfsidmap \
         sssd-nfs-idmap \
         nfs-utils \
@@ -48,6 +49,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Clean up unwanted files
     rm -rf /var/lib/pcp && \
     # Enable services
-    systemctl enable firewalld && \
+    systemctl unmask firewalld && \
+    systemctl enable firewalld.service && \
     # Commit the changes
     ostree container commit
