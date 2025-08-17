@@ -1,6 +1,6 @@
 [Unit]
-Description=Take ZFS snapshot of  %I every month, keep the last year
-Documentation=man:zfs-snapshot(8)
+Description=ZFS Pool Health Check
+Documentation=man:zpool(8)
 Requires=zfs.target
 After=zfs.target
 ConditionACPower=true
@@ -8,10 +8,11 @@ ConditionPathIsDirectory=/sys/module/zfs
 
 [Service]
 Type=oneshot
+ExecStart=/usr/local/bin/zfs-health-check.sh
 User=root
-ExecStart=/bin/sh /etc/systemd/system/zfs-snapshot-monthly.sh %I
 StandardOutput=journal
 StandardError=journal
 PrivateNetwork=yes
 ProtectSystem=strict
 ReadWritePaths=/dev /sys /proc
+RemainAfterExit=no

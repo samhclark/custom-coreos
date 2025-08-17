@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily ZFS Pool Health Check
+Requires=zfs-health-check.service
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

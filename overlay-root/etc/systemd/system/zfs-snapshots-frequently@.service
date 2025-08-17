@@ -7,4 +7,11 @@ ConditionACPower=true
 ConditionPathIsDirectory=/sys/module/zfs
 
 [Service]
-ExecStart=/bin/sh /etc/systemd/system/zfs-snapshots-frequently.sh %I
+Type=oneshot
+User=root
+ExecStart=/bin/sh /etc/systemd/system/zfs-snapshot-frequently.sh %I
+StandardOutput=journal
+StandardError=journal
+PrivateNetwork=yes
+ProtectSystem=strict
+ReadWritePaths=/dev /sys /proc

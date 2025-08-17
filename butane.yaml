@@ -221,3 +221,9 @@ systemd:
       enabled: true
     - name: zfs-snapshots-yearly@videos.timer
       enabled: true
+
+    # Enable ZFS health monitoring
+    - name: zfs-health-check.timer
+      enabled: true
+    - name: zfs-scrub.timer
+      enabled: true
