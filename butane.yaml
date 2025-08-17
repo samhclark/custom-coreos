@@ -15,7 +15,7 @@ storage:
         custom:
           needs_network: false
           pin: tpm2
-          config: '{"pcr_bank":"sha256","pcr_ids":"0,1,2,3,7,14"}'
+          config: '{"pcr_bank":"sha256","pcr_ids":"7"}'
       wipe_volume: true
 
   filesystems:
@@ -209,5 +209,15 @@ systemd:
         WantedBy=multi-user.target
 
     # Enable ZFS snapshots for datasets
-    - name: zfs-snapshots-frequently@videos.service
+    - name: zfs-snapshots-frequently@videos.timer
+      enabled: true
+    - name: zfs-snapshots-hourly@videos.timer
+      enabled: true
+    - name: zfs-snapshots-daily@videos.timer
+      enabled: true
+    - name: zfs-snapshots-weekly@videos.timer
+      enabled: true
+    - name: zfs-snapshots-monthly@videos.timer
+      enabled: true
+    - name: zfs-snapshots-yearly@videos.timer
       enabled: true
