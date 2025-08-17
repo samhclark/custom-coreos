@@ -207,3 +207,7 @@ systemd:
         
         [Install]
         WantedBy=multi-user.target
+
+    # Enable ZFS snapshots for datasets
+    - name: zfs-snapshots-frequently@videos.service
+      enabled: true
