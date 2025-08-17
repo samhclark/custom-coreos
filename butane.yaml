@@ -5,6 +5,7 @@ passwd:
     - name: core
       ssh_authorized_keys:
         - ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCXLMgaiwxwbRJPfOAqiZ1xdvxp8yprodU8mi72BUnqX62x1OFWKxTJf44Sej/Hm8JyOquVTtRXKiveJOSsV2Ws=
+
 storage:
   luks:
     - name: root
@@ -16,13 +17,200 @@ storage:
           pin: tpm2
           config: '{"pcr_bank":"sha256","pcr_ids":"0,1,2,3,7,14"}'
       wipe_volume: true
+
   filesystems:
     - device: /dev/mapper/root
       format: btrfs
       wipe_filesystem: true
       label: root
+
   files:
     - path: /etc/hostname
       mode: 0644
       contents:
         inline: nas
+
+    # Script to initialize Wireguard keys and config on first boot
+    - path: /var/home/core/.local/bin/init-wireguard
+      mode: 0755
+      user:
+        name: root
+      group:
+        name: root
+      contents:
+        inline: |
+          #!/bin/bash
+          # Initialize Wireguard configuration with generated keys
+          
+          set -euo pipefail
+          
+          PRIVATE_KEY_FILE="/etc/wireguard/private.key"
+          PUBLIC_KEY_FILE="/etc/wireguard/public.key"
+          CONFIG_FILE="/etc/wireguard/wg0.conf"
+          TEMPLATE_FILE="/etc/wireguard/wg0.conf.template"
+          
+          # Only generate keys if they don't exist
+          if [ ! -f "$PRIVATE_KEY_FILE" ]; then
+              echo "Generating Wireguard keys..."
+              
+              # Generate private key
+              wg genkey > "$PRIVATE_KEY_FILE"
+              chmod 600 "$PRIVATE_KEY_FILE"
+              
+              # Generate public key from private key
+              wg pubkey < "$PRIVATE_KEY_FILE" > "$PUBLIC_KEY_FILE"
+              chmod 644 "$PUBLIC_KEY_FILE"
+              
+              echo "Keys generated successfully"
+          else
+              echo "Wireguard keys already exist, skipping generation"
+          fi
+          
+          # Create config file if it doesn't exist
+          if [ ! -f "$CONFIG_FILE" ]; then
+              echo "Creating Wireguard configuration..."
+              
+              # Read the private key
+              PRIVATE_KEY=$(cat "$PRIVATE_KEY_FILE")
+              
+              # Create config from template with private key
+              {
+                  echo "[Interface]"
+                  echo "PrivateKey = $PRIVATE_KEY"
+                  tail -n +2 "$TEMPLATE_FILE"
+              } > "$CONFIG_FILE"
+              
+              chmod 600 "$CONFIG_FILE"
+              echo "Configuration created successfully"
+          else
+              echo "Wireguard configuration already exists, skipping creation"
+          fi
+          
+          # Display public key for adding to app servers
+          echo "=== NAS Wireguard Public Key ==="
+          cat "$PUBLIC_KEY_FILE"
+          echo "==============================="
+
+    # Simple script to add new peers (for when app servers are ready)
+    - path: /var/home/core/.local/bin/add-wg-peer
+      mode: 0755
+      user:
+        name: root
+      group:
+        name: root
+      contents:
+        inline: |
+          #!/bin/bash
+          # Usage: add-wg-peer <public_key> <allowed_ip>
+          # Example: add-wg-peer "APP_SERVER_PUBLIC_KEY" "10.100.0.2/32"
+          
+          set -euo pipefail
+          
+          if [ $# -ne 2 ]; then
+              echo "Usage: $0 <public_key> <allowed_ip>"
+              echo "Example: $0 'ABC123...' '10.100.0.2/32'"
+              exit 1
+          fi
+          
+          PUBLIC_KEY="$1"
+          ALLOWED_IP="$2"
+          
+          # Add peer to running interface
+          wg set wg0 peer "$PUBLIC_KEY" allowed-ips "$ALLOWED_IP"
+          
+          # Add peer to config file for persistence
+          cat >> /etc/wireguard/wg0.conf << EOF
+          
+          [Peer]
+          PublicKey = $PUBLIC_KEY
+          AllowedIPs = $ALLOWED_IP
+          EOF
+          
+          echo "Peer added successfully"
+          echo "Public key: $PUBLIC_KEY"
+          echo "Allowed IPs: $ALLOWED_IP"
+
+    # Script to display the NAS public key
+    - path: /var/home/core/.local/bin/show-wg-pubkey
+      mode: 0755
+      user:
+        name: root
+      group:
+        name: root
+      contents:
+        inline: |
+          #!/bin/bash
+          # Display the NAS Wireguard public key for app server configuration
+          
+          PUBLIC_KEY_FILE="/etc/wireguard/public.key"
+          
+          if [ -f "$PUBLIC_KEY_FILE" ]; then
+              echo "=== NAS Wireguard Public Key ==="
+              cat "$PUBLIC_KEY_FILE"
+              echo "==============================="
+              echo "Use this public key when configuring app servers"
+          else
+              echo "Error: Wireguard not initialized yet. Run 'sudo systemctl start wireguard-init.service'"
+              exit 1
+          fi
+
+    # Ensure the .local/bin directory exists and is owned correctly  
+    - path: /var/home/core/.local/bin/.keep
+      mode: 0755
+      user:
+        name: core
+      group:
+        name: core
+      contents:
+        inline: |
+          # Directory marker to ensure .local/bin exists
+
+systemd:
+  units:
+    # Initialize Wireguard keys and configuration on first boot
+    - name: wireguard-init.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Initialize Wireguard configuration and keys
+        Before=wg-quick@wg0.service
+        
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        ExecStart=/var/home/core/.local/bin/init-wireguard
+        
+        [Install]
+        WantedBy=multi-user.target
+
+    # Enable Wireguard interface on boot (after initialization)
+    - name: wg-quick@wg0.service
+      enabled: true
+
+    # Configure firewalld for Wireguard
+    - name: configure-wireguard-firewall.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Configure firewall for Wireguard NAS
+        After=firewalld.service
+        Requires=firewalld.service
+        
+        [Service]
+        Type=oneshot
+        RemainAfterExit=true
+        ExecStart=/bin/bash -c '
+          # Add custom Wireguard service to firewalld
+          firewall-cmd --permanent --new-service-from-file=/etc/firewalld/services/wireguard-nas.xml --name=wireguard-nas || true
+          
+          # Allow Wireguard service in default zone
+          firewall-cmd --permanent --add-service=wireguard-nas
+          
+          # Reload firewall
+          firewall-cmd --reload
+          
+          echo "Firewall configured for Wireguard"
+        '
+        
+        [Install]
+        WantedBy=multi-user.target

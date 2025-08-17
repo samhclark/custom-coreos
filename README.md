@@ -140,7 +140,7 @@ The key is included in the image at `/etc/pki/cosign/cosign.pub`.
 You can also download the key with:
 
 ```
-wget https://raw.githubusercontent.com/samhclark/custom-coreos/refs/heads/main/cosign.pub
+wget https://raw.githubusercontent.com/samhclark/custom-coreos/refs/heads/main/overlay-root/etc/pki/cosign/cosign.pub
 ```
 
 The SHA-256 checksum of the key that I originally created on August 16, 2025 is
