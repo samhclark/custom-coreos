@@ -33,6 +33,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Install ZFS and Tailscale using prebuilt RPMs
     rpm-ostree install -y \
         tailscale \
+        rbw \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
