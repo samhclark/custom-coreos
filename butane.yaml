@@ -14,7 +14,7 @@ storage:
         custom:
           needs_network: false
           pin: tpm2
-          config: '{"pcr_bank":"sha256","pcr_ids":"7"}'
+          config: '{"pcr_bank":"sha256","pcr_ids":"0,1,2,3,7,14"}'
       wipe_volume: true
   filesystems:
     - device: /dev/mapper/root
