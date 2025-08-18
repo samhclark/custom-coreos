@@ -22,8 +22,8 @@ ARG KERNEL_VERSION
 ARG ZFS_VERSION
 
 # Add container labels for future deduplication
-LABEL org.opencontainers.image.title="Custom CoreOS with ZFS and Wireguard"
-LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modules and Wireguard"
+LABEL org.opencontainers.image.title="Custom CoreOS with ZFS and Tailscale"
+LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modules and Tailscale"
 LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
 LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
@@ -34,12 +34,15 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel
     [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
     rpm-ostree install -y \
+        cockpit-ostree \
+        cockpit-podman \
+        cockpit-system \
         firewalld \
         libnfsidmap \
         sssd-nfs-idmap \
         nfs-utils \
         rbw \
-        wireguard-tools \
+        tailscale \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
@@ -51,5 +54,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Enable services
     systemctl unmask firewalld && \
     systemctl enable firewalld.service && \
+    systemctl enable tailscaled.service && \
     # Commit the changes
     ostree container commit

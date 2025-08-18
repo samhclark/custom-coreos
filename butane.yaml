@@ -3,6 +3,7 @@ version: 1.6.0
 passwd:
   users:
     - name: core
+      password_hash: $y$j9T$7GtjANV1qrO4LeF.nq64X0$1QXVMdBf5i45EykXQkj7yGxbX/NTrW4Fbqowj3XEtI6
       ssh_authorized_keys:
         - ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCXLMgaiwxwbRJPfOAqiZ1xdvxp8yprodU8mi72BUnqX62x1OFWKxTJf44Sej/Hm8JyOquVTtRXKiveJOSsV2Ws=
 
@@ -29,6 +30,28 @@ storage:
       mode: 0644
       contents:
         inline: nas
+    
+    # Rootful Cockpit Web Service Quadlet
+    - path: /etc/containers/systemd/cockpit-ws.container
+      contents:
+          inline: |
+            [Unit]
+            Description=Cockpit Web Service
+            Wants=network-online.target
+            After=network-online.target
+
+            [Container]
+            ContainerName=cockpit-ws
+            Image=quay.io/cockpit/ws:latest
+            AutoUpdate=registry
+            PublishPort=127.0.0.1:9090:9090
+            Pull=always
+
+            [Service]
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target default.target
 
     # Script to initialize Wireguard keys and config on first boot
     - path: /var/home/core/.local/bin/init-wireguard
