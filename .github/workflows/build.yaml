@@ -9,7 +9,7 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+    - cron: '18 9 * * *'  # Daily at 9:18 AM UTC
 
 env:
   REGISTRY: ghcr.io
