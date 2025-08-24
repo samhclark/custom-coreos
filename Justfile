@@ -7,9 +7,9 @@ _default:
 zfs-version:
     gh release list \
         --repo openzfs/zfs \
-        --json tagName \
-        -q '.[] | select(.tagName | startswith("zfs-2.3")) | .tagName' \
-        --limit 1
+        --json publishedAt,tagName \
+        --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
+        --limit 100
 
 # Get kernel version from Fedora CoreOS stable (super fast with remote inspection)
 kernel-version:
