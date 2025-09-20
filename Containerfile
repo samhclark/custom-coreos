@@ -33,16 +33,17 @@ RUN chmod 600 /etc/wireguard/wg0.conf.template
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel
     [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
-    rpm-ostree install -y \
-        cockpit-ostree \
-        cockpit-podman \
-        cockpit-system \
-        firewalld \
-        libnfsidmap \
-        sssd-nfs-idmap \
-        nfs-utils \
-        rbw \
-        tailscale \
+    rpm-ostree override remove nfs-utils-coreos \
+        --install=cockpit-ostree \
+        --install=cockpit-podman \
+        --install=cockpit-system \
+        --install=firewalld \
+        --install=libnfsidmap \
+        --install=sssd-nfs-idmap \
+        --install=nfs-utils \
+        --install=rbw \
+        --install=tailscale && \
+    rpm-ostree install \
         /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
