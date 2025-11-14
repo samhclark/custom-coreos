@@ -25,12 +25,15 @@ jobs:
       zfs-available: ${{ steps.check-zfs.outputs.available }}
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
       - name: Query kernel version from CoreOS container labels
         id: kernel-info
         run: |
-          # Get kernel version from remote container labels (no pull required!)
-          KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
-          
+          # Get kernel version from remote container, falling back to rpm query when labels are missing
+          KERNEL_VERSION=$(./scripts/query-coreos-kernel.sh)
+
           echo "kernel-version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
           echo "Found kernel version: $KERNEL_VERSION"
 
