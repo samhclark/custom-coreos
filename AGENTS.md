@@ -51,6 +51,7 @@ This project depends on `../fedora-zfs-kmods/` which builds and publishes prebui
 
 ### Verification
 - After changes, run `just generate-ignition` and `just test-build`.
+- `bootc container lint` warnings about `/var` cache artifacts are currently expected and can be ignored for now.
 
 ## Architecture (Production)
 
