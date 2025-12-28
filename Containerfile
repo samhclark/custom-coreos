@@ -28,7 +28,6 @@ LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
 LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
 COPY overlay-root/ /
-RUN chmod 600 /etc/wireguard/wg0.conf.template
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel

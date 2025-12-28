@@ -11,7 +11,7 @@ The `.ai/` directory contains AI-specific resources:
 
 ## Overview
 
-This repository creates a custom CoreOS container image with ZFS, Tailscale, Cockpit management tooling, and encrypted storage support. Wireguard scripts remain for legacy/manual use, but Tailscale is the primary VPN path. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
+This repository creates a custom CoreOS container image with ZFS, Tailscale, Cockpit management tooling, and encrypted storage support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
 
 **Status**: ✅ **PRODUCTION READY** - All core functionality implemented and tested
 **Build Time**: ~2-3 minutes (down from 10+ minutes)
@@ -123,7 +123,6 @@ Use `butane.yaml` for configuration that is **personal** or **cannot be describe
 - **Runtime Configuration**: LUKS encryption with TPM2 binding (PCRs)
 - **Dynamic Filesystem**: Encrypted btrfs mounting, partition layouts
 - **Boot-time Decisions**: Anything requiring runtime system state
-- **Networking**: Wireguard init scripts, firewall config, and interface enablement (legacy/optional)
 - **Management**: Cockpit web service Quadlet (localhost-only by default)
 - **Automation**: ZFS snapshot/health/scrub timers
 
@@ -133,7 +132,6 @@ Use `butane.yaml` for configuration that is **personal** or **cannot be describe
 - **Access**: SSH key and password hash for 'core' user
 - **Identity**: Hostname set to 'nas'
 - **Tailscale**: Daemon enabled for primary remote access
-- **Wireguard**: First-boot key/config init plus firewalld service (legacy/optional)
 - **Cockpit**: Rootful `quay.io/cockpit/ws` container bound to `127.0.0.1:9090` (intended for Tailscale access)
 - **ZFS**: Snapshot timers for `videos` dataset, health check + scrub timers enabled
 
@@ -166,7 +164,7 @@ Images include labels for future deduplication:
 - `butane.yaml` - Fedora CoreOS configuration with encryption and service setup
 - `Justfile` - Comprehensive development commands
 - `ignition.json` - Generated Ignition file (auto-updated)
-- `overlay-root/` - Systemd units, ZFS scripts, Wireguard templates, cosign policy files
+- `overlay-root/` - Systemd units, ZFS scripts, cosign policy files
 - `scripts/query-coreos-kernel.sh` - Kernel version discovery helper
 
 ### CI/CD Workflows
@@ -198,7 +196,6 @@ Images include labels for future deduplication:
 - **Encryption**: LUKS root filesystem with TPM2-based unlock
 - **Build Security**: Container image signing and attestations
 - **Access Control**: SSH key-based authentication
-- **Wireguard**: Automated key/config initialization (legacy/optional)
 - **Tailscale**: Daemon enabled (auth/config via runtime)
 
 ## Project Status

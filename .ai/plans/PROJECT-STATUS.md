@@ -20,7 +20,6 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 #### System Capabilities
 - **ZFS Automation**: Snapshot timers plus health check and scrub automation
 - **Tailscale**: Daemon enabled for primary VPN access
-- **Wireguard**: First-boot key/config initialization plus firewalld service configuration (legacy/optional)
 - **Cockpit**: Host packages installed; cockpit-ws runs via Quadlet (localhost-only, intended for Tailscale access)
 - **Security**: Cosign policy enforced via container policy files
 
@@ -42,7 +41,6 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 - **Filesystem**: Btrfs on `/dev/mapper/root`
 - **Access**: SSH key + password hash for `core` user
 - **Tailscale**: Daemon enabled
-- **Wireguard**: Init scripts and wg-quick unit enablement (legacy/optional)
 - **Cockpit**: Web service bound to `127.0.0.1:9090` via Quadlet (intended for Tailscale access)
 - **ZFS**: Snapshot timers enabled for `videos` dataset; health/scrub timers enabled
 
@@ -73,7 +71,6 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 - **Ignition Files**: HTTP-served configuration files for CoreOS installation
 - **ZFS Automation**: Snapshots, health checks, and scrub timers configured
 - **Tailscale**: Daemon enabled for primary access
-- **Wireguard**: First-boot key generation and firewall configuration (legacy/optional)
 - **Security**: LUKS encryption, TPM2 unlock, SSH key auth, cosign policy
 
 ### 🛠️ Development Tools
