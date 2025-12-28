@@ -11,14 +11,14 @@ zfs-version:
         --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
         --limit 100
 
-# Get kernel version from Fedora CoreOS stable (super fast with remote inspection)
+# Get kernel version from Fedora CoreOS stable with fallback when labels are missing
 kernel-version:
-    skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"'
+    ./scripts/query-coreos-kernel.sh
 
 # Get kernel major.minor version
 kernel-major-minor:
     #!/usr/bin/env bash
-    KERNEL_VERSION=$(skopeo inspect docker://quay.io/fedora/fedora-coreos:stable | jq -r '.Labels."ostree.linux"')
+    KERNEL_VERSION=$(just kernel-version)
     echo "$KERNEL_VERSION" | cut -d'.' -f1-2
 
 # Check if prebuilt ZFS kmods exist for current versions
