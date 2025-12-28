@@ -49,6 +49,9 @@ This project depends on `../fedora-zfs-kmods/` which builds and publishes prebui
 ### Local Testing
 - `just cleanup-dry-run DAYS` - Test cleanup logic with configurable retention
 
+### Verification
+- After changes, run `just generate-ignition` and `just test-build`.
+
 ## Architecture (Production)
 
 **2-stage build process** consuming prebuilt ZFS RPMs:
