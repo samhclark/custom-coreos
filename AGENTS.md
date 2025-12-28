@@ -113,7 +113,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 Use the `Containerfile` for configuration that adds **capabilities** to the system:
 - **Security**: Sigstore verification for container pulls via `/etc/containers/policy.json` (used by bootc)
 - **System Services**: NTP configuration, chronyd settings
-- **Package Installation**: ZFS modules, Cockpit tooling, firewalld, NFS utilities, Tailscale, RBW
+- **Package Installation**: ZFS modules, Cockpit tooling, firewalld, Tailscale
 - **Service Enablement**: systemd units (timers, cockpit-ws, tailscaled)
 
 ### Butane Configuration (Personal & Runtime)

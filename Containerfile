@@ -34,16 +34,11 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel \
     [[ "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")" == "${KERNEL_VERSION}" ]]; \
     arch="$(rpm -qa kernel --queryformat "%{ARCH}")"; \
-    dnf remove -y nfs-utils-coreos; \
     dnf install -y \
         cockpit-ostree \
         cockpit-podman \
         cockpit-system \
         firewalld \
-        libnfsidmap \
-        sssd-nfs-idmap \
-        nfs-utils \
-        rbw \
         tailscale \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
