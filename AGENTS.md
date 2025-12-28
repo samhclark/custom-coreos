@@ -66,26 +66,22 @@ RUN [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${K
 
 # Single RUN command for efficiency
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
-    rpm-ostree override remove nfs-utils-coreos \
-        --install=cockpit-ostree \
-        --install=cockpit-podman \
-        --install=cockpit-system \
-        --install=firewalld \
-        --install=libnfsidmap \
-        --install=sssd-nfs-idmap \
-        --install=nfs-utils \
-        --install=rbw \
-        --install=tailscale && \
-    rpm-ostree install \
-        /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
+    dnf install -y \
+        cockpit-ostree \
+        cockpit-podman \
+        cockpit-system \
+        firewalld \
+        libnfsidmap \
+        sssd-nfs-idmap \
+        nfs-utils \
+        rbw \
+        tailscale \
         /zfs-rpms/*.noarch.rpm \
-        /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
+        /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
+        /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm && \
     depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
     echo "zfs" > /etc/modules-load.d/zfs.conf && \
-    systemctl unmask firewalld && \
-    systemctl enable firewalld.service && \
-    systemctl enable tailscaled.service && \
-    ostree container commit
+    systemctl enable tailscaled.service
 ```
 
 ## CI/CD Workflows
@@ -108,14 +104,14 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 
 ## Configuration Strategy
 
-**This is a hybrid bootc + CoreOS system requiring careful separation of configuration approaches.**
+**This is a bootc-centric CoreOS system requiring careful separation of configuration approaches.**
 
 ### Containerfile Configuration (System Capabilities)
 Use the `Containerfile` for configuration that adds **capabilities** to the system:
-- **Security**: Sigstore verification for container pulls via `/etc/containers/policy.json` (used by rpm-ostree)
+- **Security**: Sigstore verification for container pulls via `/etc/containers/policy.json` (used by bootc)
 - **System Services**: NTP configuration, chronyd settings
 - **Package Installation**: ZFS modules, Cockpit tooling, firewalld, NFS utilities, Tailscale, RBW
-- **Service Enablement**: firewalld, tailscaled
+- **Service Enablement**: systemd units (timers, cockpit-ws, tailscaled)
 
 ### Butane Configuration (Personal & Runtime)
 Use `butane.yaml` for configuration that is **personal** or **cannot be described declaratively**:
@@ -123,17 +119,12 @@ Use `butane.yaml` for configuration that is **personal** or **cannot be describe
 - **Runtime Configuration**: LUKS encryption with TPM2 binding (PCRs)
 - **Dynamic Filesystem**: Encrypted btrfs mounting, partition layouts
 - **Boot-time Decisions**: Anything requiring runtime system state
-- **Management**: Cockpit web service Quadlet (localhost-only by default)
-- **Automation**: ZFS snapshot/health/scrub timers
 
 ### Current Configuration (`butane.yaml`)
 - **Encryption**: LUKS root filesystem with TPM2 unlock (PCR 7)
 - **Filesystem**: Btrfs on `/dev/mapper/root`
 - **Access**: SSH key and password hash for 'core' user
 - **Identity**: Hostname set to 'nas'
-- **Tailscale**: Daemon enabled for primary remote access
-- **Cockpit**: Rootful `quay.io/cockpit/ws` container bound to `127.0.0.1:9090` (intended for Tailscale access)
-- **ZFS**: Snapshot timers for `videos` dataset, health check + scrub timers enabled
 
 ### Installation URL
 ```
@@ -161,10 +152,10 @@ Images include labels for future deduplication:
 
 ### Core Files
 - `Containerfile` - 2-stage build definition
-- `butane.yaml` - Fedora CoreOS configuration with encryption and service setup
+- `butane.yaml` - Fedora CoreOS configuration with host identity + storage
 - `Justfile` - Comprehensive development commands
 - `ignition.json` - Generated Ignition file (auto-updated)
-- `overlay-root/` - Systemd units, ZFS scripts, cosign policy files
+- `overlay-root/` - Systemd units, ZFS scripts, cockpit Quadlet, cosign policy files
 - `scripts/query-coreos-kernel.sh` - Kernel version discovery helper
 
 ### CI/CD Workflows
@@ -184,6 +175,14 @@ Images include labels for future deduplication:
 **Registry-First Compatibility**: Let the container registry be the source of truth for ZFS+kernel compatibility rather than maintaining duplicate matrices.
 
 **Local-First CI/CD Development**: Implement workflow logic in Justfile commands first, then port to GitHub Actions for fast iteration and testing.
+
+## bootc Primer (Tips)
+
+- Treat `/usr` as immutable at runtime; bootc bind-mounts it read-only.
+- Only `/var` persists across upgrades; avoid relying on updates to existing `/var` files from new images.
+- Standard writable paths are symlinks into `/var` (e.g. `/home` -> `/var/home`, `/opt` -> `/var/opt`).
+- Use systemd `tmpfiles.d` or unit `StateDirectory=` to seed `/var` content on first boot.
+- Prefer packaging static content into `/usr`; avoid dropping mutable content into `/var` during image builds.
 
 ## Build Performance
 

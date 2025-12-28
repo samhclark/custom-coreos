@@ -30,30 +30,46 @@ LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 COPY overlay-root/ /
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
-    # Validate that provided kernel version matches actual CoreOS kernel
-    [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]] && \
-    rpm-ostree override remove nfs-utils-coreos \
-        --install=cockpit-ostree \
-        --install=cockpit-podman \
-        --install=cockpit-system \
-        --install=firewalld \
-        --install=libnfsidmap \
-        --install=sssd-nfs-idmap \
-        --install=nfs-utils \
-        --install=rbw \
-        --install=tailscale && \
-    rpm-ostree install \
-        /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm \
+    /bin/bash -c 'set -euo pipefail; \
+    # Validate that provided kernel version matches actual CoreOS kernel \
+    [[ "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")" == "${KERNEL_VERSION}" ]]; \
+    arch="$(rpm -qa kernel --queryformat "%{ARCH}")"; \
+    dnf install -y \
+        cockpit-ostree \
+        cockpit-podman \
+        cockpit-system \
+        firewalld \
+        libnfsidmap \
+        sssd-nfs-idmap \
+        nfs-utils \
+        rbw \
+        tailscale \
         /zfs-rpms/*.noarch.rpm \
-        /zfs-rpms/other/zfs-dracut-*.noarch.rpm && \
-    # Auto-load ZFS module
-    depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
-    echo "zfs" > /etc/modules-load.d/zfs.conf && \
-    # Clean up unwanted files
-    rm -rf /var/lib/pcp && \
-    # Enable services
-    systemctl unmask firewalld && \
-    systemctl enable firewalld.service && \
-    systemctl enable tailscaled.service && \
-    # Commit the changes
-    ostree container commit
+        /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
+        /zfs-rpms/*."${arch}".rpm; \
+    depmod -a "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")"; \
+    echo "zfs" > /etc/modules-load.d/zfs.conf; \
+    rm -rf /var/lib/pcp /var/cache/dnf; \
+    systemctl unmask firewalld; \
+    systemctl enable \
+        cockpit-ws.container \
+        firewalld.service \
+        tailscaled.service \
+        zfs-health-check.timer \
+        zfs-scrub.timer \
+        zfs-snapshots-frequently@videos.timer \
+        zfs-snapshots-hourly@videos.timer \
+        zfs-snapshots-daily@videos.timer \
+        zfs-snapshots-weekly@videos.timer \
+        zfs-snapshots-monthly@videos.timer \
+        zfs-snapshots-yearly@videos.timer; \
+    dnf clean all; \
+    rm -rf /var/log/dnf*'
+
+RUN ["bootc", "container", "lint"]
+
+LABEL containers.bootc=1
+LABEL ostree.bootable=1
+ENV container=oci
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

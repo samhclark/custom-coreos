@@ -91,7 +91,8 @@ overlay-root/
 │   │   └── zfs-snapshot-yearly.sh
 │   │   ├── smart-check.service          # planned
 │   │   └── smart-check.timer            # planned
-│   └── containers/systemd/      # Quadlet created by butane.yaml (not in overlay-root)
+│   └── containers/systemd/
+│       └── cockpit-ws.container
 └── usr/local/bin/
     ├── zfs-health-check.sh
     ├── zfs-scrub.sh

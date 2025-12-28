@@ -1,0 +1,17 @@
+[Unit]
+Description=Cockpit Web Service
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=cockpit-ws
+Image=quay.io/cockpit/ws:latest
+AutoUpdate=registry
+PublishPort=127.0.0.1:9090:9090
+Pull=always
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target default.target

@@ -170,7 +170,7 @@ $ sha256sum cosign.pub
 
 ### Butane Configuration (`butane.yaml`)
 
-The CoreOS configuration includes:
+The CoreOS configuration keeps host-specific settings and install-time storage setup. Service configuration is baked into the container image.
 
 ```yaml
 variant: fcos
