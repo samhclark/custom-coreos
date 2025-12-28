@@ -1,88 +1,80 @@
 # Custom CoreOS Project Status
 
-**Last Updated**: August 2, 2025  
+**Last Updated**: December 28, 2025
 **Status**: ✅ **PRODUCTION READY**
 
 ## Implementation Summary
 
 Successfully completed a major architectural overhaul of the custom CoreOS build system, transitioning from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
 
-### ✅ Completed Phases (1-5)
+### ✅ Completed Milestones
 
-#### Phase 1: Container Build Overhaul ✅
-- **Containerfile Architecture**: Replaced 3-stage build-from-source with streamlined 2-stage prebuilt RPM consumption
-- **Build Performance**: Reduced build time from 10+ minutes to 2-3 minutes (70%+ improvement)
-- **Build Arguments**: Clean ARG structure with only required parameters (ZFS_VERSION, KERNEL_VERSION)
-- **Container Labels**: Added version tracking labels for future deduplication
+#### Core Build + CI/CD
+- **Containerfile Architecture**: Streamlined 2-stage build that consumes prebuilt ZFS RPMs
+- **Build Performance**: Reduced build time from 10+ minutes to ~2-3 minutes
+- **Version Discovery**: Automated ZFS and kernel discovery with registry-based compatibility checks
+- **CI/CD Automation**: Daily builds, provenance attestations, and GHCR publishing
+- **Cleanup Workflow**: Weekly registry cleanup with 90-day retention
+- **Ignition Pages**: Automated GitHub Pages deployment for Ignition files
 
-#### Phase 2: Development Tooling ✅
-- **Version Discovery**: Comprehensive Justfile commands for ZFS, kernel, and compatibility checking
-- **Build Commands**: Local build, test-build, and force-build capabilities
-- **Ignition Management**: Butane to Ignition conversion with HTTP serving support
-- **CI/CD Integration**: Workflow trigger and status checking commands
+#### System Capabilities
+- **ZFS Automation**: Snapshot timers plus health check and scrub automation
+- **Tailscale**: Daemon enabled for primary VPN access
+- **Wireguard**: First-boot key/config initialization plus firewalld service configuration (legacy/optional)
+- **Cockpit**: Host packages installed; cockpit-ws runs via Quadlet (localhost-only, intended for Tailscale access)
+- **Security**: Cosign policy enforced via container policy files
 
-#### Phase 3: GitHub Actions CI/CD ✅  
-- **Build Workflow**: 2-job workflow with version discovery and container building
-- **Registry-Based Compatibility**: Eliminated manual compatibility matrices - uses fedora-zfs-kmods registry as source of truth
-- **Automated Builds**: Daily builds at 6 AM UTC with manual override capability
-- **Build Attestations**: Full container provenance tracking and signing
-
-#### Phase 4: Container Image Management ✅
-- **Cleanup Workflow**: 90-day retention policy with weekly automated cleanup
-- **Dry-Run Safety**: Manual triggers default to safe dry-run mode
-- **Ignition File Serving**: Automated GitHub Pages deployment with professional presentation
-- **Local Testing**: Comprehensive cleanup dry-run testing with configurable retention periods
-
-#### Phase 5: Ignition File Management ✅
-- **Butane Configuration**: Verified working configuration with LUKS encryption, TPM2 unlock, btrfs filesystem
-- **HTTP Serving**: Successfully tested end-to-end Ignition file serving at https://samhclark.github.io/custom-coreos/ignition.json
-- **File Verification**: Confirmed hosted Ignition file matches local generation (677 bytes, identical)
-
-### 🚀 Production Metrics
+## Production Metrics
 
 - **Build Time**: 2-3 minutes (previously 10+ minutes)
 - **Container Size**: ~1.9 GB
 - **Success Rate**: 100% (all workflows tested and functional)
-- **HTTP Availability**: 100% (Ignition file accessible and verified)
 
-### 🔧 Current Production URLs
+## Current Production URLs
 
 - **Container Image**: `ghcr.io/samhclark/custom-coreos:stable`
 - **Ignition File**: `https://samhclark.github.io/custom-coreos/ignition.json`
 - **GitHub Actions**: https://github.com/samhclark/custom-coreos/actions
 
-### 📋 Remaining Phases (6-9)
+## Active Configuration Highlights
 
-#### Phase 6: Documentation and Configuration ✅ 
-- **CLAUDE.md**: ✅ Updated with complete production architecture
-- **README.md**: ✅ Comprehensive user documentation with installation guide
-- **Status Documentation**: ✅ This file
+- **Encryption**: LUKS root filesystem with TPM2-based unlock (PCR 7)
+- **Filesystem**: Btrfs on `/dev/mapper/root`
+- **Access**: SSH key + password hash for `core` user
+- **Tailscale**: Daemon enabled
+- **Wireguard**: Init scripts and wg-quick unit enablement (legacy/optional)
+- **Cockpit**: Web service bound to `127.0.0.1:9090` via Quadlet (intended for Tailscale access)
+- **ZFS**: Snapshot timers enabled for `videos` dataset; health/scrub timers enabled
 
-#### Phase 7: Setup and Validation (Optional Future Work)
-- Dependencies verification scripts
-- Advanced compatibility matrix setup
-- Extended CI/CD testing capabilities
+## CI/CD Workflows
 
-#### Phase 8: Migration and Cleanup (Optional Future Work)
-- Remove obsolete files (zfs-reproducible.patch already cleaned up)
-- Additional validation of final build output
-- Performance optimization
+### Main Build (`build.yaml`)
+- **Schedule**: Daily at 9:18 AM UTC
+- **Trigger**: Manual via `just run-workflow`
+- **Output**: `ghcr.io/samhclark/custom-coreos:stable`
+- **Features**: Automatic version discovery, compatibility checking, build attestations
 
-#### Phase 9: Optional Enhancements (Future)
-- **Advanced Duplicate Detection**: CoreOS version + ZFS version based deduplication
-- **Enhanced Monitoring**: Workflow status notifications
-- **Extended Testing**: Additional validation workflows
+### Ignition Files (`pages.yaml`)
+- **Trigger**: Changes to `butane.yaml` + manual
+- **Output**: `https://samhclark.github.io/custom-coreos/ignition.json`
+- **Features**: Butane→Ignition conversion, GitHub Pages deployment
+
+### Container Cleanup (`cleanup-images.yaml`)
+- **Schedule**: Weekly on Sundays at 2 AM UTC
+- **Retention**: 90 days
+- **Safety**: Manual triggers default to dry-run mode
 
 ## Current Capabilities
 
 ### ✅ Working Features
-- **Container Building**: Local and CI/CD builds working perfectly
+- **Container Building**: Local and CI/CD builds working
 - **Version Management**: Automatic discovery of latest ZFS and CoreOS versions
 - **Compatibility Checking**: Registry-based validation (no manual matrices)
 - **Ignition Files**: HTTP-served configuration files for CoreOS installation
-- **Container Registry**: Automated publishing to GitHub Container Registry
-- **Security**: LUKS encryption, TPM2 unlock, SSH key configuration
-- **Cleanup**: Automated registry maintenance with safety features
+- **ZFS Automation**: Snapshots, health checks, and scrub timers configured
+- **Tailscale**: Daemon enabled for primary access
+- **Wireguard**: First-boot key generation and firewall configuration (legacy/optional)
+- **Security**: LUKS encryption, TPM2 unlock, SSH key auth, cosign policy
 
 ### 🛠️ Development Tools
 - **Local Building**: `just build`, `just test-build`
@@ -91,78 +83,50 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 - **Ignition Management**: `just generate-ignition`, `just run-pages`
 - **Testing**: `just cleanup-dry-run DAYS`
 
-## Technical Architecture
+## Open Items
 
-### Build Process
-1. **Version Discovery**: Query latest ZFS and CoreOS kernel versions
-2. **Compatibility Check**: Verify prebuilt ZFS kmods exist for version combination
-3. **Container Build**: 2-stage process consuming prebuilt RPMs
-4. **Registry Push**: Publish with `stable` tag and build attestations
-
-### Dependency Strategy  
-- **Primary Dependency**: `ghcr.io/samhclark/fedora-zfs-kmods` for prebuilt ZFS kernel modules
-- **Compatibility Method**: Registry-based (if image exists → compatible)
-- **Failure Mode**: Clear error messages pointing to dependency project
-
-### Security Features
-- **Encryption**: LUKS full disk encryption with TPM2-based unlock
-- **Build Security**: Container signing and attestations  
-- **Access Control**: SSH key-based authentication
-- **Network Security**: Tailscale VPN integration
+- **SMART Monitoring**: Add smartmontools + systemd timer (see `.ai/plans/final-touches.md`)
+- **Cockpit Access Model**: Decide localhost-only vs LAN exposure
+- **Optional Enhancements**: Advanced deduplication and notifications (see `.ai/plans/future-enhancements.md`)
 
 ## Future Work Priorities
 
 ### High Priority (When Resuming)
-1. **Test Production Installation**: Actually install CoreOS using the Ignition file on real hardware
-2. **Advanced Deduplication**: Implement Phase 9.1 for CoreOS+ZFS version based build skipping
-3. **Monitoring Improvements**: Add workflow failure notifications
+1. **Test production installation** on real hardware with the current Ignition
+2. **SMART monitoring** implementation and validation
+3. **Cockpit access decision** and documentation
 
 ### Medium Priority
-1. **Additional Testing**: Extended validation workflows
-2. **Performance Monitoring**: Build time and image size tracking
-3. **Documentation**: Video installation guides
+1. **Advanced deduplication** (CoreOS+ZFS label-based build skipping)
+2. **Monitoring improvements** (workflow failure notifications)
+3. **Extended validation** (additional testing workflows)
 
-### Low Priority  
-1. **Alternative Filesystems**: Support for other filesystems beyond ZFS+btrfs
-2. **Multi-Architecture**: ARM64 support
-3. **Alternative Cloud Providers**: Beyond GitHub
-
-## Key Learnings
-
-### What Worked Well
-1. **Registry-Based Compatibility**: Eliminated complex compatibility matrices
-2. **Local-First Development**: Justfile commands first, then GitHub Actions
-3. **Prebuilt Dependencies**: Massive build time improvements
-4. **Comprehensive Testing**: All components verified end-to-end
-
-### What Could Be Improved
-1. **Documentation**: Could use more troubleshooting scenarios
-2. **Testing**: Need real hardware installation testing
-3. **Monitoring**: Workflow failure notifications would be helpful
+### Low Priority
+1. **Multi-architecture** (ARM64 support)
+2. **Alternative filesystems** beyond ZFS+btrfs
+3. **Additional cloud/provider options**
 
 ## Handoff Notes
 
 ### For Next Session
-1. **All core functionality is working** - ready for production use
-2. **Documentation is complete** - CLAUDE.md and README.md are comprehensive
-3. **Optional enhancements remain** - see Phases 7-9 in build-overhaul.md
-4. **Test installation on real hardware** - the ultimate validation
+1. Core build pipeline and ZFS automation are stable
+2. Ignition publishing works end-to-end
+3. SMART monitoring and Cockpit exposure are the main gaps
 
 ### Quick Resume Commands
 ```bash
-# Check current status
+# Check workflow status
 just all-workflows
 
-# Verify everything works
+# Verify version compatibility
 just versions
-just check-zfs-available  
+just check-zfs-available
+
+# Generate Ignition
 just generate-ignition
 
 # Test build
 just test-build
-
-# Check HTTP serving
-curl -s https://samhclark.github.io/custom-coreos/ignition.json | jq .
 ```
 
-**Project is ready to shelf - all core objectives achieved!** 🎯
+**Project is ready to shelf - all core objectives achieved!**

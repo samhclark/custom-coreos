@@ -1,6 +1,6 @@
 # custom-coreos
 
-A custom CoreOS container image with ZFS and Wireguard support, featuring automated CI/CD and encrypted storage configuration.
+A custom CoreOS container image with ZFS and Tailscale support, featuring automated CI/CD and encrypted storage configuration.
 
 **Note**: Also did this one with Claude Code. I'll add more deets later, but in short, this..whole? conversion from jankiness before to what I got now took $10 and 2 hours?
 
@@ -20,7 +20,7 @@ Might have taken me longer than 2 hours. Probably, tbh. I didn't do a lot of rew
 
 This project builds a production-ready CoreOS image with:
 - **ZFS filesystem support** via prebuilt kernel modules
-- **Wireguard VPN** for secure networking
+- **Tailscale VPN** for secure networking
 - **LUKS encryption** with TPM2-based unlock
 - **Automated CI/CD** with GitHub Actions
 - **HTTP-served Ignition files** for easy installation
@@ -49,7 +49,7 @@ The latest build is available at:
 ghcr.io/samhclark/custom-coreos:stable
 ```
 
-Updated daily with the latest CoreOS, ZFS, and Wireguard versions.
+Updated daily with the latest CoreOS and ZFS versions.
 
 ## Development
 
@@ -111,7 +111,7 @@ just cleanup-dry-run 30  # 30-day retention test
 **2-stage container build** using prebuilt ZFS kernel modules:
 
 1. **Pull Prebuilt ZFS Modules**: Extract ZFS RPMs from fedora-zfs-kmods registry
-2. **Final Assembly**: Install ZFS + Wireguard with inline kernel validation and service setup
+2. **Final Assembly**: Install ZFS + Tailscale with inline kernel validation and service setup
 
 ### Dependencies
 
@@ -151,7 +151,7 @@ $ sha256sum cosign.pub
 ```
 
 ### Main Build (`build.yaml`)
-- **Schedule**: Daily at 6 AM UTC
+- **Schedule**: Daily at 9:18 AM UTC
 - **Trigger**: Manual via `just run-workflow` 
 - **Output**: `ghcr.io/samhclark/custom-coreos:stable`
 - **Features**: Automatic version discovery, compatibility checking, build attestations
@@ -233,14 +233,23 @@ Built images include labels for version tracking:
 
 The system will boot with:
 - ✅ ZFS filesystem support loaded
-- ✅ Wireguard VPN installed (needs configuration)
+- ✅ Tailscale daemon enabled (needs `tailscale up`)
 - ✅ LUKS encryption with TPM2 unlock
 - ✅ SSH access via provided key
 - ✅ Hostname set to 'nas'
 
-Configure Wireguard:
+Configure Tailscale:
 ```bash
-sudo systemctl enable --now wg-quick@wg0
+sudo tailscale up
+```
+
+Access Cockpit over Tailscale (localhost-only service):
+```bash
+# Option 1: SSH port-forward
+ssh -L 9090:127.0.0.1:9090 core@nas
+
+# Option 2: Tailscale serve (HTTPS on your tailnet)
+sudo tailscale serve https / http://127.0.0.1:9090
 ```
 
 ## Troubleshooting
@@ -291,7 +300,6 @@ sudo systemctl enable --now wg-quick@wg0
 │   ├── instructions/       # Agent instructions and guides
 │   ├── plans/             # Development and testing plans
 │   └── vendored-docs/     # Cached external documentation
-├── CLAUDE.md → .ai/instructions/AGENTS.md  # AI assistant documentation (symlink)
 └── README.md              # This file
 ```
 
