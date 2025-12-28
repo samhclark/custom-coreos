@@ -10,7 +10,7 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 ### ✅ Completed Milestones
 
 #### Core Build + CI/CD
-- **Containerfile Architecture**: Streamlined 2-stage build that consumes prebuilt ZFS RPMs
+- **Containerfile Architecture**: Bootc-centric 2-stage build that consumes prebuilt ZFS RPMs and uses `dnf` for installs
 - **Build Performance**: Reduced build time from 10+ minutes to ~2-3 minutes
 - **Version Discovery**: Automated ZFS and kernel discovery with registry-based compatibility checks
 - **CI/CD Automation**: Daily builds, provenance attestations, and GHCR publishing
@@ -18,9 +18,9 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 - **Ignition Pages**: Automated GitHub Pages deployment for Ignition files
 
 #### System Capabilities
-- **ZFS Automation**: Snapshot timers plus health check and scrub automation
+- **ZFS Automation**: Snapshot timers plus health check and scrub automation (enabled in image)
 - **Tailscale**: Daemon enabled for primary VPN access
-- **Cockpit**: Host packages installed; cockpit-ws runs via Quadlet (localhost-only, intended for Tailscale access)
+- **Cockpit**: Host packages installed; cockpit-ws runs via Quadlet in `overlay-root/` (localhost-only, intended for Tailscale access)
 - **Security**: Cosign policy enforced via container policy files
 
 ## Production Metrics
@@ -42,7 +42,7 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 - **Access**: SSH key + password hash for `core` user
 - **Tailscale**: Daemon enabled
 - **Cockpit**: Web service bound to `127.0.0.1:9090` via Quadlet (intended for Tailscale access)
-- **ZFS**: Snapshot timers enabled for `videos` dataset; health/scrub timers enabled
+- **ZFS**: Snapshot timers enabled for `videos` dataset; health/scrub timers enabled (image-level)
 
 ## CI/CD Workflows
 
@@ -68,8 +68,8 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 - **Container Building**: Local and CI/CD builds working
 - **Version Management**: Automatic discovery of latest ZFS and CoreOS versions
 - **Compatibility Checking**: Registry-based validation (no manual matrices)
-- **Ignition Files**: HTTP-served configuration files for CoreOS installation
-- **ZFS Automation**: Snapshots, health checks, and scrub timers configured
+- **Ignition Files**: Host-specific configuration only (identity + storage), served over HTTP for installation
+- **ZFS Automation**: Snapshots, health checks, and scrub timers configured and enabled in the image
 - **Tailscale**: Daemon enabled for primary access
 - **Security**: LUKS encryption, TPM2 unlock, SSH key auth, cosign policy
 
@@ -83,7 +83,7 @@ Successfully completed a major architectural overhaul of the custom CoreOS build
 ## Open Items
 
 - **SMART Monitoring**: Add smartmontools + systemd timer (see `.ai/plans/final-touches.md`)
-- **Cockpit Access Model**: Decide localhost-only vs LAN exposure
+- **Cockpit Access Model**: Keep localhost-only via Tailscale (current) or revisit LAN exposure
 - **Optional Enhancements**: Advanced deduplication and notifications (see `.ai/plans/future-enhancements.md`)
 
 ## Future Work Priorities
