@@ -112,7 +112,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 
 ### Containerfile Configuration (System Capabilities)
 Use the `Containerfile` for configuration that adds **capabilities** to the system:
-- **Security**: Sigstore verification for `rpm-ostree upgrade` operations
+- **Security**: Sigstore verification for container pulls via `/etc/containers/policy.json` (used by rpm-ostree)
 - **System Services**: NTP configuration, chronyd settings
 - **Package Installation**: ZFS modules, Cockpit tooling, firewalld, NFS utilities, Tailscale, RBW
 - **Service Enablement**: firewalld, tailscaled
@@ -160,7 +160,7 @@ Images include labels for future deduplication:
 ## Key Files
 
 ### Core Files
-- `Containerfile` - 2-stage build definition (60 lines, streamlined)
+- `Containerfile` - 2-stage build definition
 - `butane.yaml` - Fedora CoreOS configuration with encryption and service setup
 - `Justfile` - Comprehensive development commands
 - `ignition.json` - Generated Ignition file (auto-updated)

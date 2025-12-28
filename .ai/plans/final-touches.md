@@ -83,17 +83,16 @@ overlay-root/
 │   │   ├── zfs-health-check.timer
 │   │   ├── zfs-scrub.service
 │   │   ├── zfs-scrub.timer
+│   │   ├── zfs-snapshot-daily.sh
+│   │   ├── zfs-snapshot-frequently.sh
+│   │   ├── zfs-snapshot-hourly.sh
+│   │   ├── zfs-snapshot-weekly.sh
+│   │   ├── zfs-snapshot-monthly.sh
+│   │   └── zfs-snapshot-yearly.sh
 │   │   ├── smart-check.service          # planned
 │   │   └── smart-check.timer            # planned
-│   └── containers/systemd/
-│       └── cockpit-ws.container
+│   └── containers/systemd/      # Quadlet created by butane.yaml (not in overlay-root)
 └── usr/local/bin/
-    ├── zfs-snapshot-daily.sh
-    ├── zfs-snapshot-frequently.sh
-    ├── zfs-snapshot-hourly.sh
-    ├── zfs-snapshot-weekly.sh
-    ├── zfs-snapshot-monthly.sh
-    ├── zfs-snapshot-yearly.sh
     ├── zfs-health-check.sh
     ├── zfs-scrub.sh
     └── smart-check.sh                   # planned
