@@ -1,7 +1,7 @@
 [Unit]
 Description=Cockpit Web Service
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target
 
 [Container]
 ContainerName=cockpit-ws
@@ -12,6 +12,7 @@ Pull=always
 
 [Service]
 Restart=always
+RestartSec=30
 
 [Install]
 WantedBy=multi-user.target default.target
