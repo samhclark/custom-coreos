@@ -7,7 +7,7 @@
 
 set -eu
 
-DATASET="$1"
+DATASET="tank/$1"
 alias zfs="/usr/sbin/zfs"
 alias grep="/usr/bin/grep --quiet  --line-regexp --fixed-string"
 
