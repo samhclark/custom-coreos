@@ -1,8 +1,8 @@
 [Unit]
 Description=ZFS Pool Scrub Operation
 Documentation=man:zpool(8)
-Requires=zfs.target
-After=zfs.target
+Requires=zfs-import.target
+After=zfs-import.target
 ConditionACPower=true
 ConditionPathIsDirectory=/sys/module/zfs
 
