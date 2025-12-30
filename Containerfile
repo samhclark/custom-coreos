@@ -54,7 +54,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         firewalld.service \
         tailscaled.service \
         zfs-health-check.timer \
-        zfs-scrub.timer \
+        zfs-scrub-monthly@tank.timer \
         zfs-snapshots-frequently@videos.timer \
         zfs-snapshots-hourly@videos.timer \
         zfs-snapshots-daily@videos.timer \
