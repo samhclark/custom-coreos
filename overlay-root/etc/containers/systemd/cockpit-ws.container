@@ -4,13 +4,12 @@ Wants=network-online.target nss-lookup.target
 After=network-online.target nss-lookup.target
 
 [Container]
-ContainerName=ws
+ContainerName=cockpit-ws
 Image=quay.io/cockpit/ws:latest
 AutoUpdate=registry
-Privileged=true
-PIDNamespace=host
+PodmanArgs=--privileged --pid=host
 Volume=/:/host
-Environment=NAME=ws
+Environment=NAME=cockpit-ws
 Environment=IMAGE=quay.io/cockpit/ws:latest
 Exec=/container/label-run
 Pull=always
