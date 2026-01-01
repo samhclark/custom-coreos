@@ -51,6 +51,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     ln -sf /etc/containers/systemd/cockpit-ws.container /etc/systemd/system/multi-user.target.wants/cockpit-ws.container; \
     ln -sf /etc/containers/systemd/cockpit-ws.container /etc/systemd/system/default.target.wants/cockpit-ws.container; \
     systemctl enable \
+        bootc-fetch-apply-updates.service \
         firewalld.service \
         tailscaled.service \
         zfs-health-check.timer \
@@ -61,6 +62,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         zfs-snapshots-weekly@videos.timer \
         zfs-snapshots-monthly@videos.timer \
         zfs-snapshots-yearly@videos.timer; \
+    systemctl disable zincati.service; \
     dnf clean all; \
     rm -rf /var/log/dnf*'
 
