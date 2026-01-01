@@ -47,9 +47,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     systemctl unmask firewalld; \
-    mkdir -p /etc/systemd/system/{multi-user.target.wants,default.target.wants}; \
-    ln -sf /etc/containers/systemd/cockpit-ws.container /etc/systemd/system/multi-user.target.wants/cockpit-ws.container; \
-    ln -sf /etc/containers/systemd/cockpit-ws.container /etc/systemd/system/default.target.wants/cockpit-ws.container; \
     systemctl enable \
         bootc-fetch-apply-updates.service \
         firewalld.service \
