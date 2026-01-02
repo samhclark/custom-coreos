@@ -278,6 +278,27 @@ sudo tailscale serve https / http://127.0.0.1:9090
 **Problem**: Can't SSH to system
 **Solution**: Verify SSH key in `butane.yaml` matches your public key
 
+### SELinux Issues
+
+**Problem**: SELinux denies a service action (AVC in logs)
+**Solution**: Capture the AVC and add a minimal policy module to the image.
+
+Capture AVCs:
+```bash
+sudo ausearch -m avc -ts boot
+sudo journalctl -t setroubleshoot -b --no-pager
+```
+
+Optional (debug-only) policy generation:
+```bash
+sudo ausearch -m avc -ts boot | audit2allow -M local-selinux-fix
+```
+
+Apply fix declaratively:
+1. Add a CIL rule under `overlay-root/usr/share/selinux/targeted/`.
+2. Install it in `Containerfile` with `semodule -i /usr/share/selinux/targeted/<name>.cil`.
+3. Rebuild (`just test-build`) and redeploy.
+
 ## Contributing
 
 1. **Local development**: Use `just build` and `just test-build`
