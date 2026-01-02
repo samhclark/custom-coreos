@@ -38,7 +38,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         cockpit-ostree \
         cockpit-podman \
         cockpit-system \
-        firewalld \
+        nftables \
         tailscale \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
@@ -46,10 +46,9 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     depmod -a "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")"; \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
-    systemctl unmask firewalld; \
     systemctl enable \
         bootc-fetch-apply-updates.service \
-        firewalld.service \
+        nftables.service \
         tailscaled.service \
         zfs-health-check.timer \
         zfs-scrub-monthly@tank.timer \
