@@ -1,0 +1,21 @@
+[Unit]
+Description=Caddy Reverse Proxy
+Wants=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target
+
+[Container]
+ContainerName=caddy
+Image=docker.io/library/caddy:2
+AutoUpdate=registry
+Network=host
+Volume=/etc/caddy:/etc/caddy:ro,Z
+Volume=/var/lib/caddy:/data:Z
+Volume=/var/lib/caddy-config:/config:Z
+Pull=always
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target default.target

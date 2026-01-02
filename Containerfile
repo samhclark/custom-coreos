@@ -29,6 +29,12 @@ LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
 COPY overlay-root/ /
 
+RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
+      "d /var/lib/caddy 0755 root root -" \
+      "d /var/lib/caddy-config 0755 root root -" \
+      > /usr/lib/tmpfiles.d/caddy.conf'
+
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     /bin/bash -c 'set -euo pipefail; \
     # Validate that provided kernel version matches actual CoreOS kernel \
