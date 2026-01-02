@@ -35,8 +35,14 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     [[ "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")" == "${KERNEL_VERSION}" ]]; \
     arch="$(rpm -qa kernel --queryformat "%{ARCH}")"; \
     dnf install -y \
+        cockpit-bridge \
+        cockpit-kdump \
+        cockpit-machines \
+        cockpit-networkmanager \
         cockpit-ostree \
         cockpit-podman \
+        cockpit-selinux \
+        cockpit-storaged \
         cockpit-system \
         nftables \
         tailscale \
