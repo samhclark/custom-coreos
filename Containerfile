@@ -35,6 +35,9 @@ RUN /bin/bash -c 'set -euo pipefail; \
       "d /var/lib/caddy-config 0755 root root -" \
       > /usr/lib/tmpfiles.d/caddy.conf'
 
+RUN /bin/bash -c 'set -euo pipefail; \
+    semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
+
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     /bin/bash -c 'set -euo pipefail; \
     # Validate that provided kernel version matches actual CoreOS kernel \
