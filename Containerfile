@@ -62,7 +62,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     systemctl enable \
-        bootc-fetch-apply-updates.service \
+        bootc-fetch-apply-updates.timer \
         nftables.service \
         tailscaled.service \
         zfs-health-check.timer \
