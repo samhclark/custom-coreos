@@ -1,0 +1,3 @@
+[Build]
+ImageTag=localhost/caddy-cf-dns
+File=/usr/local/src/caddy-cf-dns.Containerfile
