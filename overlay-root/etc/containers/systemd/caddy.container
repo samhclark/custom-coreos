@@ -16,7 +16,7 @@ Pull=always
 [Service]
 Restart=always
 RestartSec=30
-LoadCredentialEncrypted=cf-api-token:/etc/caddy/cf_api_token.encrypted
+LoadCredentialEncrypted=cf-api-token:/etc/caddy/cf-api-token
 Environment=CF_API_TOKEN=%d/cf-api-token
 
 [Install]
