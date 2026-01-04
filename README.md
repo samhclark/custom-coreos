@@ -36,7 +36,7 @@ https://samhclark.github.io/custom-coreos/ignition.json
 ```
 
 This configures:
-- LUKS encrypted root filesystem with TPM2 unlock (PCR 7)
+- LUKS encrypted root filesystem with TPM2 unlock (though, not to any PCRs)
 - Btrfs filesystem on `/dev/mapper/root`
 - SSH access for 'core' user
 - Hostname set to 'nas'
@@ -50,6 +50,21 @@ ghcr.io/samhclark/custom-coreos:stable
 ```
 
 Updated daily with the latest CoreOS and ZFS versions.
+
+### Overall steps to install
+
+1. Install CoreOS on the machine (using the above Ignition file if you're me)
+2. Switch to Custom CoreOS: `sudo bootc switch ghcr.io/samhclark/custom-coreos:stable`
+3. Reboot
+4. Switch to _signed_ Custom CoreOS: `sudo bootc switch --enforce-container-sigpolicy ghcr.io/samhclark/custom-coreos:stable`
+5. Reboot
+6. Log in to Tailscale, set up SSH access: `sudo tailscale login` and `sudo tailscale set --ssh`
+7. Configure auto unlocking for the attached data drives
+  a. Set up TPM unlock: `sudo systemd-cryptenroll --tpm2-device=auto /dev/disk/by-id/wwn-0x5000c500c6ef9bbf`
+  b. Test if it worked: `sudo /usr/lib/systemd/systemd-cryptsetup attach ef9bbf_crypt /dev/disk/by-id/wwn-0x5000c500c6ef9bbf none tpm2-device=auto` 
+  c. If it worked, add that line to crypttab: `echo "ef9bbf_crypt /dev/disk/by-id/wwn-0x5000c500c6ef9bbf none tpm2-device=auto" | sudo tee -a /etc/crypttab`
+8. Reboot; Import the ZFS pool: `sudo zpool import tank` 
+
 
 ## Development
 
