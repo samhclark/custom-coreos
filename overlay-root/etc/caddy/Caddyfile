@@ -1,3 +1,9 @@
-http://cockpit.i.samhclark.com {
+{
+	acme_dns cloudflare {env.CF_API_TOKEN}
+	email no-reply@samhclark.com
+	acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+cockpit.i.samhclark.com {
 	reverse_proxy 127.0.0.1:9090
 }
