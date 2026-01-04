@@ -13,10 +13,7 @@ storage:
       label: luks-root
       device: /dev/disk/by-partlabel/root
       clevis:
-        custom:
-          needs_network: false
-          pin: tpm2
-          config: '{"pcr_bank":"sha256","pcr_ids":"7"}'
+        tpm2: true
       wipe_volume: true
 
   filesystems:
