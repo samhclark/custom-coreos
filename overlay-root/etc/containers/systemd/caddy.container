@@ -5,7 +5,7 @@ After=network-online.target nss-lookup.target
 
 [Container]
 ContainerName=caddy
-Image=caddy-cf-dns.build
+Image=ghcr.io/samhclark/lab-caddy:2.11-cf-0.2.2
 AutoUpdate=registry
 Network=host
 Volume=/etc/caddy:/etc/caddy:ro,Z
