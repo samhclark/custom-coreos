@@ -11,7 +11,7 @@ PodmanArgs=--privileged --pid=host
 Volume=/:/host
 Environment=NAME=cockpit-ws
 Environment=IMAGE=quay.io/cockpit/ws:latest
-Exec=/container/label-run
+Exec=/container/label-run --for-tls-proxy
 Pull=always
 
 [Service]
