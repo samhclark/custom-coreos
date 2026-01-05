@@ -1,5 +1,5 @@
 {
-	acme_dns cloudflare {env.CF_API_TOKEN}
+	acme_dns cloudflare {file./run/secrets/cf-api-token}
 	email no-reply@samhclark.com
 	acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
