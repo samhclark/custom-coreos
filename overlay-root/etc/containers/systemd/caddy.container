@@ -9,15 +9,14 @@ Image=ghcr.io/samhclark/lab-caddy:2.11-cf-0.2.2
 AutoUpdate=registry
 Network=host
 Volume=/etc/caddy:/etc/caddy:ro,Z
-Volume=%d/cf-api-token:/run/secrets/cf-api-token:ro
 Volume=/var/lib/caddy:/data:Z
 Volume=/var/lib/caddy-config:/config:Z
 Pull=always
+Secret=cf-api-token
 
 [Service]
 Restart=always
 RestartSec=30
-LoadCredentialEncrypted=cf-api-token:/etc/caddy/cf-api-token
 
 [Install]
 WantedBy=multi-user.target default.target

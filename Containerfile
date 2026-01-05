@@ -32,6 +32,7 @@ COPY overlay-root/ /
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
       "d /var/lib/caddy 0755 root root -" \
+      "d /var/lib/caddy/secrets 0700 root root -" \
       "d /var/lib/caddy-config 0755 root root -" \
       > /usr/lib/tmpfiles.d/caddy.conf'
 
