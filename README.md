@@ -2,23 +2,9 @@
 
 A custom CoreOS container image with ZFS and Tailscale support, featuring automated CI/CD and encrypted storage configuration.
 
-**Note**: Also did this one with Claude Code. I'll add more deets later, but in short, this..whole? conversion from jankiness before to what I got now took $10 and 2 hours?
-
-```
-Total cost:            $10.16
-Total duration (API):  29m 58.2s
-Total duration (wall): 1h 56m 42.8s
-Total code changes:    1716 lines added, 311 lines removed
-Usage by model:
-    claude-3-5-haiku:  82.6k input, 3.2k output, 0 cache read, 0 cache write
-       claude-sonnet:  866 input, 71.8k output, 18.4m cache read, 928.1k cache write
-```
-
-Might have taken me longer than 2 hours. Probably, tbh. I didn't do a lot of rework. Though, it also wasn't a ton of new lines, just a lot of copy-paste from the other repo. I betcha I would have burned too much time on the Pages setup, cause it's been so long.
-
 ## Overview
 
-This project builds a production-ready CoreOS image with:
+This project builds a CoreOS image with:
 - **ZFS filesystem support** via prebuilt kernel modules
 - **Tailscale VPN** for secure networking
 - **LUKS encryption** with TPM2-based unlock
@@ -258,15 +244,6 @@ Configure Tailscale:
 sudo tailscale up
 ```
 
-Access Cockpit over Tailscale (localhost-only service):
-```bash
-# Option 1: SSH port-forward
-ssh -L 9090:127.0.0.1:9090 core@nas
-
-# Option 2: Tailscale serve (HTTPS on your tailnet)
-sudo tailscale serve https / http://127.0.0.1:9090
-```
-
 ## Troubleshooting
 
 ### Build Issues
@@ -332,10 +309,7 @@ Apply fix declaratively:
 │   ├── build.yaml          # Main container build
 │   ├── pages.yaml          # Ignition file serving  
 │   └── cleanup-images.yaml # Container registry cleanup
-├── .ai/                    # AI assistant resources
-│   ├── instructions/       # Agent instructions and guides
-│   ├── plans/             # Development and testing plans
-│   └── vendored-docs/     # Cached external documentation
+├── vendored-docs/         # Cached external documentation
 └── README.md              # This file
 ```
 
