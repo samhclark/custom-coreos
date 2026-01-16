@@ -2,13 +2,6 @@
 
 This file provides guidance to AI coding agents when working with code in this repository.
 
-## AI Resource Directory Structure
-
-The `.ai/` directory contains AI-specific resources:
-- `.ai/instructions/` - Reserved for agent instructions (currently empty; canonical instructions live in `AGENTS.md` at repo root)
-- `.ai/plans/` - Development and testing plans (e.g., `butane-testing-plan.md`, `final-touches.md`, `future-enhancements.md`, `PROJECT-STATUS.md`)
-- `.ai/vendored-docs/` - Cached external documentation (e.g., `butane-1.6.0-docs.txt`)
-
 ## Overview
 
 This repository creates a custom CoreOS container image with ZFS, Tailscale, Cockpit management tooling, and encrypted storage support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
@@ -200,20 +193,6 @@ Images include labels for future deduplication:
 - **Build Security**: Container image signing and attestations
 - **Access Control**: SSH key-based authentication
 - **Tailscale**: Daemon enabled (auth/config via runtime)
-
-## Project Status
-
-**Implementation Status**: ✅ **COMPLETE** (core build + CI/CD)
-
-**Production Ready**:
-- ✅ Container builds and publishes successfully
-- ✅ Ignition files generate and serve over HTTP
-- ✅ ZFS snapshot + health automation enabled
-- ✅ Local development workflow complete
-
-**Open Items** (see `.ai/plans/final-touches.md`):
-- SMART monitoring (smartmontools + timers)
-- Decide Cockpit access model (localhost-only vs LAN exposure)
 
 ## Quick Start
 
