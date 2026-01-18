@@ -1,0 +1,19 @@
+[Unit]
+Description=Create ZFS datasets for Garage object storage
+Documentation=https://garagehq.deuxfleurs.fr/
+Requires=zfs.target
+After=zfs.target
+ConditionPathIsDirectory=/sys/module/zfs
+# Only run once - don't run if datasets already exist
+ConditionPathIsDirectory=!/tank/garage
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/zfs-create-garage-datasets.sh
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

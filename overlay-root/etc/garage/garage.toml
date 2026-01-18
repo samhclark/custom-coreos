@@ -1,0 +1,49 @@
+# Garage S3-compatible object storage configuration
+# Single-node deployment with no replication
+# Documentation: https://garagehq.deuxfleurs.fr/documentation/reference-manual/configuration/
+
+# Storage paths - mounted from ZFS datasets
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+
+# Database engine - SQLite is more robust than LMDB for single-node
+# (handles unclean shutdowns better)
+db_engine = "sqlite"
+
+# Single node: no replication
+# WARNING: Data is not redundant - use ZFS snapshots for backup
+replication_factor = 1
+
+# Block size for data storage (1 MiB)
+# This matches the ZFS recordsize on the data dataset
+block_size = 1048576
+
+# Compression level for stored blocks (zstd)
+# 1 = fast compression, good for media-heavy workloads
+# Set to 0 to let zstd choose default (level 3)
+compression_level = 1
+
+# RPC configuration (internal cluster communication)
+# For single-node, only localhost matters
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "119dff86bba7f4c48f2490cdaf209b3b2a2a9dc3309a43a52d66bb9bde76c66b"
+
+[s3_api]
+# S3 API endpoint
+api_bind_addr = "[::]:3900"
+s3_region = "garage"
+# Virtual-hosted style bucket addressing: <bucket>.s3.i.samhclark.com
+root_domain = ".s3.i.samhclark.com"
+
+[s3_web]
+# Static website hosting endpoint
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.i.samhclark.com"
+index = "index.html"
+
+[admin]
+# Admin API endpoint (for garage CLI and metrics)
+api_bind_addr = "[::]:3903"
+admin_token = "VjKRpN/XOKdC+2Rb2qcNAf7+J1v+Qs1R4r1CXWOqbME="
+metrics_token = "7J/Ek83uW56A2Mqd/by5WT3h03DThpgNOi46KGAFXhw="

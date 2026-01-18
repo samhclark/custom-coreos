@@ -1,0 +1,36 @@
+[Unit]
+Description=Garage S3-compatible Object Storage
+Documentation=https://garagehq.deuxfleurs.fr/
+Wants=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target zfs-create-garage-datasets.service
+Requires=zfs-create-garage-datasets.service
+
+[Container]
+ContainerName=garage
+Image=docker.io/dxflrs/garage:v2.1.0
+AutoUpdate=registry
+
+# Mount configuration (read-only)
+Volume=/etc/garage/garage.toml:/etc/garage.toml:ro,Z
+
+# Mount ZFS datasets for data storage
+Volume=/var/lib/garage/meta:/var/lib/garage/meta:Z
+Volume=/var/lib/garage/data:/var/lib/garage/data:Z
+
+# Expose ports
+# 3900: S3 API
+# 3901: RPC (not needed externally for single-node)
+# 3902: Web (static site hosting)
+# 3903: Admin API
+PublishPort=127.0.0.1:3900:3900
+PublishPort=127.0.0.1:3902:3902
+PublishPort=127.0.0.1:3903:3903
+
+Pull=always
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target default.target
