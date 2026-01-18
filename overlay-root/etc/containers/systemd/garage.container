@@ -1,0 +1,24 @@
+[Unit]
+Description=Garage S3-Compatible Object Storage
+Wants=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target garage-zfs-init.service
+Requires=garage-zfs-init.service
+
+[Container]
+ContainerName=garage
+Image=docker.io/dxflrs/garage:v1.0.1
+# Note: Check https://hub.docker.com/r/dxflrs/garage/tags for latest version
+# v2.1.0 may be available
+AutoUpdate=registry
+Network=host
+Volume=/etc/garage:/etc/garage:ro,Z
+Volume=/var/lib/garage/meta:/var/lib/garage/meta:Z
+Volume=/var/lib/garage/data:/var/lib/garage/data:Z
+Pull=newer
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target default.target

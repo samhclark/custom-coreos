@@ -1,0 +1,18 @@
+[Unit]
+Description=Initialize ZFS datasets for Garage object storage
+Documentation=man:zfs(8)
+Requires=zfs.target
+After=zfs.target
+Before=garage.service
+ConditionPathIsDirectory=/sys/module/zfs
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/garage-zfs-init.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

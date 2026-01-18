@@ -9,3 +9,13 @@
 cockpit.i.samhclark.com {
 	reverse_proxy 127.0.0.1:9090
 }
+
+# Garage S3 API endpoint
+s3.i.samhclark.com, *.s3.i.samhclark.com {
+	reverse_proxy 127.0.0.1:3900
+}
+
+# Garage Admin API endpoint
+garage.i.samhclark.com {
+	reverse_proxy 127.0.0.1:3903
+}

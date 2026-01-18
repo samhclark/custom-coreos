@@ -1,0 +1,33 @@
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+
+# Single node configuration - no replication
+replication_mode = "none"
+
+# RPC configuration for internal communication
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret_file = "/etc/garage/rpc-secret"
+
+# S3 API configuration
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.i.samhclark.com"
+
+# S3 website hosting configuration
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.i.samhclark.com"
+index = "index.html"
+
+# K2V API configuration (optional key-value store)
+[k2v_api]
+api_bind_addr = "[::]:3904"
+
+# Admin API configuration
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token_file = "/etc/garage/admin-token"
+metrics_token_file = "/etc/garage/metrics-token"

@@ -37,7 +37,22 @@ RUN /bin/bash -c 'set -euo pipefail; \
       > /usr/lib/tmpfiles.d/caddy.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
+      "d /var/lib/garage 0755 root root -" \
+      "d /var/lib/garage/meta 0755 root root -" \
+      "d /var/lib/garage/data 0755 root root -" \
+      > /usr/lib/tmpfiles.d/garage.conf'
+
+RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
+
+RUN /bin/bash -c 'set -euo pipefail; \
+    chmod +x /usr/local/bin/garage-zfs-init.sh; \
+    chmod +x /usr/local/bin/garage-init-cluster.sh; \
+    openssl rand -hex 32 > /etc/garage/rpc-secret; \
+    openssl rand -base64 32 > /etc/garage/admin-token; \
+    openssl rand -base64 32 > /etc/garage/metrics-token; \
+    chmod 600 /etc/garage/rpc-secret /etc/garage/admin-token /etc/garage/metrics-token'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     /bin/bash -c 'set -euo pipefail; \
@@ -64,6 +79,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     systemctl enable \
         bootc-fetch-apply-updates.timer \
+        garage-zfs-init.service \
         nftables.service \
         tailscaled.service \
         zfs-health-check.timer \
