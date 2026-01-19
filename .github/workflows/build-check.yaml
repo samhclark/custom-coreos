@@ -1,0 +1,86 @@
+# ABOUTME: CI workflow to validate container builds on PRs and pushes to main
+# Does not push to registry or sign - just validates the build succeeds
+
+name: Build Check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  query-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      kernel-version: ${{ steps.kernel-info.outputs.kernel-version }}
+      zfs-version: ${{ steps.zfs-version.outputs.zfs-version }}
+      zfs-available: ${{ steps.check-zfs.outputs.available }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Query kernel version from CoreOS container labels
+        id: kernel-info
+        run: |
+          KERNEL_VERSION=$(./scripts/query-coreos-kernel.sh)
+          echo "kernel-version=$KERNEL_VERSION" >> $GITHUB_OUTPUT
+          echo "Found kernel version: $KERNEL_VERSION"
+
+      - name: Find latest ZFS version
+        id: zfs-version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZFS_VERSION=$(gh release list \
+              --repo openzfs/zfs \
+              --json publishedAt,tagName \
+              --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
+              --limit 100)
+          ZFS_VERSION_CLEAN=${ZFS_VERSION#zfs-}
+          echo "zfs-version=$ZFS_VERSION_CLEAN" >> $GITHUB_OUTPUT
+          echo "Found ZFS version: $ZFS_VERSION"
+
+      - name: Check if prebuilt ZFS kmods are available
+        id: check-zfs
+        run: |
+          ZFS_VERSION="${{ steps.zfs-version.outputs.zfs-version }}"
+          KERNEL_VERSION="${{ steps.kernel-info.outputs.kernel-version }}"
+          IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION}"
+
+          echo "Checking availability: $IMAGE"
+
+          if skopeo inspect docker://$IMAGE >/dev/null 2>&1; then
+            echo "ZFS kmods available for ZFS $ZFS_VERSION + kernel $KERNEL_VERSION"
+            echo "available=true" >> $GITHUB_OUTPUT
+          else
+            echo "No prebuilt ZFS kmods found for this combination"
+            echo "available=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+  build:
+    needs: query-versions
+    if: needs.query-versions.outputs.zfs-available == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Build container image
+        uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
+        with:
+          image: ${{ env.IMAGE_NAME }}
+          tags: ci-check
+          containerfiles: |
+            ./Containerfile
+          build-args: |
+            ZFS_VERSION=${{ needs.query-versions.outputs.zfs-version }}
+            KERNEL_VERSION=${{ needs.query-versions.outputs.kernel-version }}
