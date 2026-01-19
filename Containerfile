@@ -37,6 +37,13 @@ RUN /bin/bash -c 'set -euo pipefail; \
       > /usr/lib/tmpfiles.d/caddy.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
+      "d /var/lib/garage 0755 root root -" \
+      "d /var/lib/garage/meta 0755 root root -" \
+      "d /var/lib/garage/data 0755 root root -" \
+      > /usr/lib/tmpfiles.d/garage.conf'
+
+RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
@@ -66,6 +73,8 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         bootc-fetch-apply-updates.timer \
         nftables.service \
         tailscaled.service \
+        garage-generate-secrets.service \
+        zfs-create-garage-datasets.service \
         zfs-health-check.timer \
         zfs-scrub-monthly@tank.timer \
         zfs-snapshots-frequently@videos.timer \

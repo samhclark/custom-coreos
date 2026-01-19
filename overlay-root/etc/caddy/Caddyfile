@@ -9,3 +9,16 @@
 cockpit.i.samhclark.com {
 	reverse_proxy 127.0.0.1:9090
 }
+
+# Garage S3-compatible object storage
+# Admin API - for garage CLI and metrics
+garage.i.samhclark.com {
+	reverse_proxy 127.0.0.1:3903
+}
+
+# S3 API - supports both path-style and virtual-hosted style
+# Path style: s3.i.samhclark.com/bucket/key
+# Virtual-hosted: bucket.s3.i.samhclark.com/key
+s3.i.samhclark.com, *.s3.i.samhclark.com {
+	reverse_proxy 127.0.0.1:3900
+}
