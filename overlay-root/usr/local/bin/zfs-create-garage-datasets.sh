@@ -1,8 +1,10 @@
 #!/bin/bash
 # Creates ZFS datasets for Garage object storage with optimized settings
 #
+# This script is idempotent - it only creates datasets that don't exist.
+#
 # Garage stores:
-# - Metadata: LMDB/SQLite database files (small random I/O, 4K pages)
+# - Metadata: SQLite database files (small random I/O, 4K pages)
 # - Data: Object blocks (default 1MiB chunks, already zstd compressed)
 #
 # ZFS tuning strategy:
@@ -19,44 +21,57 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
+dataset_exists() {
+    zfs list -H -o name "$1" &>/dev/null
+}
+
 # Check if pool exists
 if ! zpool list -H -o name | grep -q "^${POOL}$"; then
     log "ERROR: Pool '${POOL}' does not exist"
     exit 1
 fi
 
-log "Creating Garage ZFS datasets..."
-
 # Create parent dataset
-log "Creating ${BASE_DATASET}"
-zfs create -o mountpoint=/var/lib/garage "${BASE_DATASET}"
+if dataset_exists "${BASE_DATASET}"; then
+    log "Dataset ${BASE_DATASET} already exists, skipping"
+else
+    log "Creating ${BASE_DATASET}"
+    zfs create -o mountpoint=/var/lib/garage "${BASE_DATASET}"
+fi
 
-# Create metadata dataset - optimized for small random I/O (LMDB/SQLite)
-# - recordsize=4K: matches LMDB page size, reduces write amplification
+# Create metadata dataset - optimized for small random I/O (SQLite)
+# - recordsize=4K: matches SQLite page size, reduces write amplification
 # - compression=lz4: metadata is compressible text/indexes, lz4 is fast
 # - atime=off: no need to track access times
 # - primarycache=metadata: hint for caching
-log "Creating ${BASE_DATASET}/meta (optimized for database workload)"
-zfs create \
-    -o mountpoint=/var/lib/garage/meta \
-    -o recordsize=4K \
-    -o compression=lz4 \
-    -o atime=off \
-    -o primarycache=metadata \
-    "${BASE_DATASET}/meta"
+if dataset_exists "${BASE_DATASET}/meta"; then
+    log "Dataset ${BASE_DATASET}/meta already exists, skipping"
+else
+    log "Creating ${BASE_DATASET}/meta (optimized for database workload)"
+    zfs create \
+        -o mountpoint=/var/lib/garage/meta \
+        -o recordsize=4K \
+        -o compression=lz4 \
+        -o atime=off \
+        -o primarycache=metadata \
+        "${BASE_DATASET}/meta"
+fi
 
 # Create data dataset - optimized for large sequential I/O (object blocks)
 # - recordsize=1M: matches Garage's default block_size (1MiB)
 # - compression=off: Garage already uses zstd compression, avoid double compression
 # - atime=off: no need to track access times
-log "Creating ${BASE_DATASET}/data (optimized for object storage)"
-zfs create \
-    -o mountpoint=/var/lib/garage/data \
-    -o recordsize=1M \
-    -o compression=off \
-    -o atime=off \
-    "${BASE_DATASET}/data"
+if dataset_exists "${BASE_DATASET}/data"; then
+    log "Dataset ${BASE_DATASET}/data already exists, skipping"
+else
+    log "Creating ${BASE_DATASET}/data (optimized for object storage)"
+    zfs create \
+        -o mountpoint=/var/lib/garage/data \
+        -o recordsize=1M \
+        -o compression=off \
+        -o atime=off \
+        "${BASE_DATASET}/data"
+fi
 
-log "Garage ZFS datasets created successfully"
-log "Dataset properties:"
+log "Garage ZFS datasets ready"
 zfs get recordsize,compression,atime,mountpoint "${BASE_DATASET}" "${BASE_DATASET}/meta" "${BASE_DATASET}/data"
