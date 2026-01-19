@@ -2,8 +2,8 @@
 Description=Garage S3-compatible Object Storage
 Documentation=https://garagehq.deuxfleurs.fr/
 Wants=network-online.target nss-lookup.target
-After=network-online.target nss-lookup.target zfs-create-garage-datasets.service
-Requires=zfs-create-garage-datasets.service
+After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-garage-datasets.service
+Requires=garage-generate-secrets.service zfs-create-garage-datasets.service
 
 [Container]
 ContainerName=garage
@@ -12,6 +12,11 @@ AutoUpdate=registry
 
 # Mount configuration (read-only)
 Volume=/etc/garage/garage.toml:/etc/garage.toml:ro,Z
+
+# Mount secrets (read-only, on root filesystem)
+Volume=/var/lib/garage/rpc_secret:/var/lib/garage/rpc_secret:ro,Z
+Volume=/var/lib/garage/admin_token:/var/lib/garage/admin_token:ro,Z
+Volume=/var/lib/garage/metrics_token:/var/lib/garage/metrics_token:ro,Z
 
 # Mount ZFS datasets for data storage
 Volume=/var/lib/garage/meta:/var/lib/garage/meta:Z

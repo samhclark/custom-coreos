@@ -73,6 +73,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         bootc-fetch-apply-updates.timer \
         nftables.service \
         tailscaled.service \
+        garage-generate-secrets.service \
         zfs-create-garage-datasets.service \
         zfs-health-check.timer \
         zfs-scrub-monthly@tank.timer \

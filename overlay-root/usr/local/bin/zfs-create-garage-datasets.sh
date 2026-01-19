@@ -31,12 +31,13 @@ if ! zpool list -H -o name | grep -q "^${POOL}$"; then
     exit 1
 fi
 
-# Create parent dataset
+# Create parent dataset (not mounted - just a container for child datasets)
+# Secrets live in /var/lib/garage/ on the root filesystem (via tmpfiles)
 if dataset_exists "${BASE_DATASET}"; then
     log "Dataset ${BASE_DATASET} already exists, skipping"
 else
-    log "Creating ${BASE_DATASET}"
-    zfs create -o mountpoint=/var/lib/garage "${BASE_DATASET}"
+    log "Creating ${BASE_DATASET} (unmounted parent)"
+    zfs create -o mountpoint=none "${BASE_DATASET}"
 fi
 
 # Create metadata dataset - optimized for small random I/O (SQLite)
