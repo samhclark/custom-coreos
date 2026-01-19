@@ -5,7 +5,8 @@ Requires=zfs.target
 After=zfs.target
 ConditionPathIsDirectory=/sys/module/zfs
 # Only run once - don't run if datasets already exist
-ConditionPathIsDirectory=!/tank/garage
+# Check mountpoint, not ZFS dataset name
+ConditionPathIsDirectory=!/var/lib/garage/meta
 
 [Service]
 Type=oneshot

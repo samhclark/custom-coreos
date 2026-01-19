@@ -16,7 +16,7 @@ replication_factor = 1
 
 # Block size for data storage (1 MiB)
 # This matches the ZFS recordsize on the data dataset
-block_size = 1048576
+block_size = "1M"
 
 # Compression level for stored blocks (zstd)
 # 1 = fast compression, good for media-heavy workloads
