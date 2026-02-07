@@ -42,11 +42,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Get the latest ZFS 2.3.x release
+          # Get the latest ZFS 2.4.x release
           ZFS_VERSION=$(gh release list \
               --repo openzfs/zfs \
               --json publishedAt,tagName \
-              --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
+              --jq '[.[] | select(.tagName | startswith("zfs-2.4"))] | sort_by(.publishedAt) | last | .tagName' \
               --limit 100)
           
           # Extract just the version part for container tag

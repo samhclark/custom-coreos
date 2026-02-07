@@ -19,7 +19,7 @@ This project depends on `../fedora-zfs-kmods/` which builds and publishes prebui
 
 ### Version Discovery & Compatibility
 - `just versions` - Show ZFS, kernel versions and compatibility status
-- `just zfs-version` - Get latest ZFS 2.3.x release
+- `just zfs-version` - Get latest ZFS 2.4.x release
 - `just kernel-version` - Get current CoreOS kernel version (script-based fallback if labels are missing)
 - `just check-zfs-available` - Verify prebuilt ZFS kmods exist for current versions
 

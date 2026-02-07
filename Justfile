@@ -3,12 +3,12 @@
 _default:
     @just --list
 
-# Get the latest ZFS 2.3.x version tag
+# Get the latest ZFS 2.4.x version tag
 zfs-version:
     gh release list \
         --repo openzfs/zfs \
         --json publishedAt,tagName \
-        --jq '[.[] | select(.tagName | startswith("zfs-2.3"))] | sort_by(.publishedAt) | last | .tagName' \
+        --jq '[.[] | select(.tagName | startswith("zfs-2.4"))] | sort_by(.publishedAt) | last | .tagName' \
         --limit 100
 
 # Get kernel version from Fedora CoreOS stable with fallback when labels are missing
