@@ -97,7 +97,7 @@ just all-workflows     # All workflows
 just check-zfs-available
 
 # View version information
-just zfs-version         # Latest ZFS 2.3.x
+just zfs-version         # Latest ZFS 2.4.x
 just kernel-version      # Current CoreOS kernel (script-based fallback if labels are missing)
 just versions           # All versions + compatibility
 
