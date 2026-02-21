@@ -51,6 +51,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     # Validate that provided kernel version matches actual CoreOS kernel \
     [[ "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")" == "${KERNEL_VERSION}" ]]; \
     arch="$(rpm -qa kernel --queryformat "%{ARCH}")"; \
+    rpm -e --nodeps nfs-utils-coreos; \
     dnf install -y \
         cockpit-bridge \
         cockpit-kdump \
