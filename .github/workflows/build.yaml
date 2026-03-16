@@ -91,10 +91,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install Cosign
-        shell: bash
-        run: ./install-cosign.sh "${{ runner.arch }}" "$RUNNER_TEMP"
-
       - name: Build container image
         id: build
         uses: redhat-actions/buildah-build@7a95fa7ee0f02d552a32753e7414641a04307056 # v2.13
@@ -131,12 +127,11 @@ jobs:
 
       - name: Sign the published OCI image
         if: ${{ github.event_name != 'pull_request' }}
+        uses: samhclark/cosign-exec-action@v1.0.13
         env:
-          digest: ${{ steps.push.outputs.digest }}
-          fully_qualified_image_names_json: ${{ steps.push.outputs.registry-paths }} 
           COSIGN_PASSWORD: ${{ secrets.cosign_password }}
           COSIGN_PRIVATE_KEY: ${{ secrets.cosign_private_key }}
-        run: >
-          echo "${fully_qualified_image_names_json}" 
-          | jq -r '.[]' 
-          | xargs -I {} cosign sign --yes --key=env://COSIGN_PRIVATE_KEY "{}@${digest}"
+        with:
+          args: >-
+            sign --yes --key=env://COSIGN_PRIVATE_KEY
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
