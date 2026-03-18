@@ -135,5 +135,5 @@ jobs:
         with:
           registry-token: ${{ secrets.GITHUB_TOKEN }}
           args: >-
-            sign --yes --key=env://COSIGN_PRIVATE_KEY
+            sign --yes --key=env://COSIGN_PRIVATE_KEY --new-bundle-format=false 
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
