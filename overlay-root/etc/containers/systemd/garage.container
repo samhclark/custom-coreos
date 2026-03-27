@@ -7,7 +7,7 @@ Requires=garage-generate-secrets.service zfs-create-garage-datasets.service
 
 [Container]
 ContainerName=garage
-Image=docker.io/dxflrs/garage:v2.1.0
+Image=docker.io/dxflrs/garage:v2.2.0
 AutoUpdate=registry
 
 # Mount configuration (read-only)
