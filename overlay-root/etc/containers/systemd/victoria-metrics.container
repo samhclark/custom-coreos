@@ -1,0 +1,31 @@
+[Unit]
+Description=VictoriaMetrics Time Series Database
+Documentation=https://docs.victoriametrics.com/
+Wants=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-victoria-metrics-dataset.service
+Requires=zfs-create-victoria-metrics-dataset.service garage-generate-secrets.service
+
+[Container]
+ContainerName=victoria-metrics
+Image=docker.io/victoriametrics/victoria-metrics:v1.139.0@sha256:67c689e152183138ff68eb237ca53d236e92bbef314545733dcb40324829b7c4
+Network=host
+
+# Mount configuration (read-only)
+Volume=/etc/victoria-metrics/promscrape.yml:/etc/victoria-metrics/promscrape.yml:ro,Z
+
+# Mount Garage metrics token for scraping (read-only)
+Volume=/var/lib/garage/metrics_token:/var/lib/garage/metrics_token:ro,Z
+
+# Mount ZFS dataset for data storage
+Volume=/var/lib/victoria-metrics:/victoria-metrics-data:Z
+
+Exec=-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=127.0.0.1:8428
+
+Pull=always
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target default.target

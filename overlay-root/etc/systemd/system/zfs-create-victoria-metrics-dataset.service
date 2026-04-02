@@ -1,0 +1,17 @@
+[Unit]
+Description=Create ZFS datasets for VictoriaMetrics time series storage
+Documentation=https://docs.victoriametrics.com/
+Requires=zfs.target
+After=zfs.target
+ConditionPathIsDirectory=/sys/module/zfs
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/zfs-create-victoria-metrics-dataset.sh
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

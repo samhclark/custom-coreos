@@ -2,6 +2,10 @@
 	acme_dns cloudflare {file./run/secrets/cf-api-token}
 	email no-reply@samhclark.com
 
+	metrics {
+		per_host
+	}
+
 	# Let's Encrypt Staging Endpoint, for testing
 	#acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
@@ -21,4 +25,9 @@ garage.i.samhclark.com {
 # Virtual-hosted: bucket.s3.i.samhclark.com/key
 s3.i.samhclark.com, *.s3.i.samhclark.com {
 	reverse_proxy 127.0.0.1:3900
+}
+
+# VictoriaMetrics - time series database and web UI
+metrics.i.samhclark.com {
+	reverse_proxy 127.0.0.1:8428
 }

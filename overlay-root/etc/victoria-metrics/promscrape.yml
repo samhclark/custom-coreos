@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'victoriametrics'
+    static_configs:
+      - targets: ['127.0.0.1:8428']
+
+  - job_name: 'garage'
+    bearer_token_file: /var/lib/garage/metrics_token
+    static_configs:
+      - targets: ['127.0.0.1:3903']
+
+  - job_name: 'caddy'
+    static_configs:
+      - targets: ['127.0.0.1:2019']

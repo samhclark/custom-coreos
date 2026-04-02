@@ -44,6 +44,11 @@ RUN /bin/bash -c 'set -euo pipefail; \
       > /usr/lib/tmpfiles.d/garage.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
+      "d /var/lib/victoria-metrics 0755 root root -" \
+      > /usr/lib/tmpfiles.d/victoria-metrics.conf'
+
+RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
@@ -76,6 +81,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         tailscaled.service \
         garage-generate-secrets.service \
         zfs-create-garage-datasets.service \
+        zfs-create-victoria-metrics-dataset.service \
         zfs-health-check.timer \
         zfs-scrub-monthly@tank.timer \
         zfs-snapshots-frequently@videos.timer \
