@@ -66,6 +66,8 @@ needs_relabel() {
 
 if needs_relabel /var/lib/victoria-metrics; then
     log "SELinux labels incorrect in /var/lib/victoria-metrics, relabeling..."
+    # -F forces full context reset including the MCS range (e.g. s0:c148,c350 -> s0).
+    # Without -F, restorecon only resets the type — it won't clear MCS categories.
     restorecon -F -R /var/lib/victoria-metrics
 fi
 

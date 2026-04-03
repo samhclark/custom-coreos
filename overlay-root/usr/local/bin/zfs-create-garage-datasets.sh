@@ -93,6 +93,8 @@ needs_relabel() {
 
 if needs_relabel /var/lib/garage/meta; then
     log "SELinux labels incorrect in /var/lib/garage/meta, relabeling..."
+    # -F forces full context reset including the MCS range (e.g. s0:c709,c748 -> s0).
+    # Without -F, restorecon only resets the type — it won't clear MCS categories.
     restorecon -F -R /var/lib/garage/meta
 fi
 if needs_relabel /var/lib/garage/data; then
