@@ -32,7 +32,7 @@ PublishPort=127.0.0.1:3900:3900
 PublishPort=127.0.0.1:3902:3902
 PublishPort=127.0.0.1:3903:3903
 
-Pull=always
+Pull=newer
 
 [Service]
 Restart=always

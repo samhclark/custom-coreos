@@ -47,7 +47,15 @@ else
         -o compression=lz4 \
         -o atime=off \
         "${BASE_DATASET}/data"
-    semanage fcontext -a -t container_file_t "/var/lib/victoria-metrics(/.*)?"
+fi
+
+# Ensure SELinux policy rule exists (idempotent — errors if already present)
+semanage fcontext -a -t container_file_t -r s0 "/var/lib/victoria-metrics(/.*)?" 2>/dev/null || true
+
+# Only run restorecon if labels are wrong (checking mountpoint is sufficient)
+expected_label="system_u:object_r:container_file_t:s0"
+if [ "$(stat -c '%C' /var/lib/victoria-metrics)" != "$expected_label" ]; then
+    log "SELinux labels incorrect on /var/lib/victoria-metrics, relabeling..."
     restorecon -R /var/lib/victoria-metrics
 fi
 

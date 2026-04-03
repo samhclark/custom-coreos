@@ -56,8 +56,6 @@ else
         -o atime=off \
         -o primarycache=metadata \
         "${BASE_DATASET}/meta"
-    semanage fcontext -a -t container_file_t "/var/lib/garage/meta(/.*)?"
-    restorecon -R /var/lib/garage/meta
 fi
 
 # Create data dataset - optimized for large sequential I/O (object blocks)
@@ -74,7 +72,21 @@ else
         -o compression=off \
         -o atime=off \
         "${BASE_DATASET}/data"
-    semanage fcontext -a -t container_file_t "/var/lib/garage/data(/.*)?"
+fi
+
+# Ensure SELinux policy rules exist (idempotent — errors if already present)
+semanage fcontext -a -t container_file_t -r s0 "/var/lib/garage/meta(/.*)?" 2>/dev/null || true
+semanage fcontext -a -t container_file_t -r s0 "/var/lib/garage/data(/.*)?" 2>/dev/null || true
+
+# Only run restorecon if labels are wrong (checking mountpoint is sufficient)
+# Full recursive relabel on /var/lib/garage/data can take 30+ minutes
+expected_label="system_u:object_r:container_file_t:s0"
+if [ "$(stat -c '%C' /var/lib/garage/meta)" != "$expected_label" ]; then
+    log "SELinux labels incorrect on /var/lib/garage/meta, relabeling..."
+    restorecon -R /var/lib/garage/meta
+fi
+if [ "$(stat -c '%C' /var/lib/garage/data)" != "$expected_label" ]; then
+    log "SELinux labels incorrect on /var/lib/garage/data, relabeling..."
     restorecon -R /var/lib/garage/data
 fi
 

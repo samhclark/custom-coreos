@@ -22,7 +22,7 @@ Volume=/var/lib/victoria-metrics:/victoria-metrics-data
 
 Exec=-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=127.0.0.1:8428
 
-Pull=always
+Pull=newer
 
 [Service]
 Restart=always
