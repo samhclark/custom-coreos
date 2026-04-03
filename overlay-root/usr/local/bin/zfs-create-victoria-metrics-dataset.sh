@@ -47,6 +47,8 @@ else
         -o compression=lz4 \
         -o atime=off \
         "${BASE_DATASET}/data"
+    semanage fcontext -a -t container_file_t "/var/lib/victoria-metrics(/.*)?"
+    restorecon -R /var/lib/victoria-metrics
 fi
 
 log "VictoriaMetrics ZFS datasets ready"

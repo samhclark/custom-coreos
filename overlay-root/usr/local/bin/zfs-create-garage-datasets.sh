@@ -56,6 +56,8 @@ else
         -o atime=off \
         -o primarycache=metadata \
         "${BASE_DATASET}/meta"
+    semanage fcontext -a -t container_file_t "/var/lib/garage/meta(/.*)?"
+    restorecon -R /var/lib/garage/meta
 fi
 
 # Create data dataset - optimized for large sequential I/O (object blocks)
@@ -72,6 +74,8 @@ else
         -o compression=off \
         -o atime=off \
         "${BASE_DATASET}/data"
+    semanage fcontext -a -t container_file_t "/var/lib/garage/data(/.*)?"
+    restorecon -R /var/lib/garage/data
 fi
 
 log "Garage ZFS datasets ready"

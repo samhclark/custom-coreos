@@ -18,9 +18,10 @@ Volume=/var/lib/garage/rpc_secret:/var/lib/garage/rpc_secret:ro,Z
 Volume=/var/lib/garage/admin_token:/var/lib/garage/admin_token:ro,Z
 Volume=/var/lib/garage/metrics_token:/var/lib/garage/metrics_token:ro,z
 
-# Mount ZFS datasets for data storage
-Volume=/var/lib/garage/meta:/var/lib/garage/meta:Z
-Volume=/var/lib/garage/data:/var/lib/garage/data:Z
+# Mount ZFS datasets for data storage (no :Z — datasets are too large for
+# recursive SELinux relabeling on every start; labeled at creation time instead)
+Volume=/var/lib/garage/meta:/var/lib/garage/meta
+Volume=/var/lib/garage/data:/var/lib/garage/data
 
 # Expose ports
 # 3900: S3 API

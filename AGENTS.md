@@ -194,6 +194,28 @@ Images include labels for future deduplication:
 - **Access Control**: SSH key-based authentication
 - **Tailscale**: Daemon enabled (auth/config via runtime)
 
+### Threat Model
+
+This is a single-admin homelab NAS. The primary threats are:
+- A malicious or compromised container image (e.g. a supply chain attack on Garage or VictoriaMetrics)
+- Malware running on the host as an unprivileged user
+
+We are **not** defending against: an attacker with root on the host (game over regardless) or a compromised container reading its own data (unavoidable).
+
+### SELinux and Quadlet Containers
+
+SELinux runs in enforcing mode (Fedora default). The main value for containers is **type enforcement**: files labeled `container_file_t` are only accessible to processes in the `container_t` domain, so host-level malware running as an unprivileged user cannot read container data. Mount namespaces provide the primary isolation between containers — each container only sees its explicitly declared volume mounts.
+
+#### Volume labeling strategy
+
+- **Small files on the root filesystem** (configs, secrets): use `:Z` (private MCS label) or `:z` (shared label) on the volume mount. Podman relabels these on every start, which is fine because they're tiny.
+- **Files shared between containers** (e.g. `metrics_token` mounted by both Garage and VictoriaMetrics): use `:z` (shared). Using `:Z` causes the last container to start to steal the private label, breaking the other container.
+- **Large ZFS-backed data directories**: do **not** use `:Z` or `:z` on the volume mount. Podman's recursive SELinux relabeling runs on every container start and will hang or timeout on large directories. Instead, label these at dataset creation time using `semanage fcontext` to set a persistent policy rule, then `restorecon -R` (which is only slow the first time; subsequent runs are fast since files already match).
+
+#### ZFS snapshots and SELinux
+
+SELinux labels are stored as xattrs on files. ZFS snapshots capture xattrs. Rolling back a snapshot restores old labels, which may not match the current policy. After any ZFS rollback, run `restorecon -R` on the affected mountpoints to reapply the `semanage fcontext` policy. The policy itself lives in the SELinux policy store on the root filesystem, not on the ZFS dataset, so it survives rollbacks. Same applies to `zfs send/receive` — the receiving machine needs its own `semanage fcontext` rules.
+
 ## Quick Start
 
 1. **Build locally**: `just build`
