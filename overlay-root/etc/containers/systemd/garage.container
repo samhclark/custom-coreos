@@ -16,7 +16,7 @@ Volume=/etc/garage/garage.toml:/etc/garage.toml:ro,Z
 # Mount secrets (read-only, on root filesystem)
 Volume=/var/lib/garage/rpc_secret:/var/lib/garage/rpc_secret:ro,Z
 Volume=/var/lib/garage/admin_token:/var/lib/garage/admin_token:ro,Z
-Volume=/var/lib/garage/metrics_token:/var/lib/garage/metrics_token:ro,Z
+Volume=/var/lib/garage/metrics_token:/var/lib/garage/metrics_token:ro,z
 
 # Mount ZFS datasets for data storage
 Volume=/var/lib/garage/meta:/var/lib/garage/meta:Z
