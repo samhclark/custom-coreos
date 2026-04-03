@@ -66,7 +66,7 @@ needs_relabel() {
 
 if needs_relabel /var/lib/victoria-metrics; then
     log "SELinux labels incorrect in /var/lib/victoria-metrics, relabeling..."
-    restorecon -R /var/lib/victoria-metrics
+    restorecon -F -R /var/lib/victoria-metrics
 fi
 
 log "VictoriaMetrics ZFS datasets ready"

@@ -93,11 +93,11 @@ needs_relabel() {
 
 if needs_relabel /var/lib/garage/meta; then
     log "SELinux labels incorrect in /var/lib/garage/meta, relabeling..."
-    restorecon -R /var/lib/garage/meta
+    restorecon -F -R /var/lib/garage/meta
 fi
 if needs_relabel /var/lib/garage/data; then
     log "SELinux labels incorrect in /var/lib/garage/data, relabeling..."
-    restorecon -R /var/lib/garage/data
+    restorecon -F -R /var/lib/garage/data
 fi
 
 log "Garage ZFS datasets ready"
