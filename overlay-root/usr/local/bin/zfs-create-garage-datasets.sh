@@ -78,15 +78,25 @@ fi
 semanage fcontext -a -t container_file_t -r s0 "/var/lib/garage/meta(/.*)?" 2>/dev/null || true
 semanage fcontext -a -t container_file_t -r s0 "/var/lib/garage/data(/.*)?" 2>/dev/null || true
 
-# Only run restorecon if labels are wrong (checking mountpoint is sufficient)
-# Full recursive relabel on /var/lib/garage/data can take 30+ minutes
+# Only run restorecon if labels are wrong inside the directory.
+# The mountpoint itself may have the correct label while files inside retain
+# stale MCS categories from a previous podman :Z relabel. Sample a file inside
+# to detect this. Full recursive relabel on /var/lib/garage/data can take 30+
+# minutes, so we only do it when actually needed.
 expected_label="system_u:object_r:container_file_t:s0"
-if [ "$(stat -c '%C' /var/lib/garage/meta)" != "$expected_label" ]; then
-    log "SELinux labels incorrect on /var/lib/garage/meta, relabeling..."
+needs_relabel() {
+    local sample
+    sample=$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)
+    [ -z "$sample" ] && return 1  # empty dir, nothing to fix
+    [ "$(stat -c '%C' "$sample")" != "$expected_label" ]
+}
+
+if needs_relabel /var/lib/garage/meta; then
+    log "SELinux labels incorrect in /var/lib/garage/meta, relabeling..."
     restorecon -R /var/lib/garage/meta
 fi
-if [ "$(stat -c '%C' /var/lib/garage/data)" != "$expected_label" ]; then
-    log "SELinux labels incorrect on /var/lib/garage/data, relabeling..."
+if needs_relabel /var/lib/garage/data; then
+    log "SELinux labels incorrect in /var/lib/garage/data, relabeling..."
     restorecon -R /var/lib/garage/data
 fi
 

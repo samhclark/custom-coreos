@@ -52,10 +52,20 @@ fi
 # Ensure SELinux policy rule exists (idempotent — errors if already present)
 semanage fcontext -a -t container_file_t -r s0 "/var/lib/victoria-metrics(/.*)?" 2>/dev/null || true
 
-# Only run restorecon if labels are wrong (checking mountpoint is sufficient)
+# Only run restorecon if labels are wrong inside the directory.
+# The mountpoint itself may have the correct label while files inside retain
+# stale MCS categories from a previous podman :Z relabel. Sample a file inside
+# to detect this.
 expected_label="system_u:object_r:container_file_t:s0"
-if [ "$(stat -c '%C' /var/lib/victoria-metrics)" != "$expected_label" ]; then
-    log "SELinux labels incorrect on /var/lib/victoria-metrics, relabeling..."
+needs_relabel() {
+    local sample
+    sample=$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)
+    [ -z "$sample" ] && return 1  # empty dir, nothing to fix
+    [ "$(stat -c '%C' "$sample")" != "$expected_label" ]
+}
+
+if needs_relabel /var/lib/victoria-metrics; then
+    log "SELinux labels incorrect in /var/lib/victoria-metrics, relabeling..."
     restorecon -R /var/lib/victoria-metrics
 fi
 
