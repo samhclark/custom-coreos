@@ -10,6 +10,11 @@ ContainerName=garage
 Image=docker.io/dxflrs/garage:v2.2.0
 AutoUpdate=registry
 
+Environment=GARAGE_LOG_TO_JOURNALD=1
+
+# Mount journald socket for logs
+Volume=/run/systemd/journal/socket:/run/systemd/journal/socket
+
 # Mount configuration (read-only)
 Volume=/etc/garage/garage.toml:/etc/garage.toml:ro,Z
 
