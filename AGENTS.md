@@ -71,7 +71,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         libnfsidmap \
         sssd-nfs-idmap \
         nfs-utils \
-        rbw \
         tailscale \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm \

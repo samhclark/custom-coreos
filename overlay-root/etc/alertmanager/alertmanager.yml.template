@@ -1,5 +1,5 @@
 # ABOUTME: Alertmanager config template. The generate-config script substitutes
-# Pushover secrets from /var/lib/alertmanager/ into this template.
+# Pushover secrets from podman secrets (age + TPM encrypted) into this template.
 
 route:
   receiver: pushover

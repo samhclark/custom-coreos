@@ -1,0 +1,10 @@
+[Unit]
+Description=Ensure age-plugin-tpm identity exists
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/age-tpm-setup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

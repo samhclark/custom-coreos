@@ -1,5 +1,7 @@
 [Unit]
 Description=Generate Alertmanager config from template with Pushover secrets
+After=age-tpm-identity.service
+Requires=age-tpm-identity.service
 Before=alertmanager.service
 
 [Service]

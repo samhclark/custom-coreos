@@ -2,8 +2,8 @@
 Description=VictoriaMetrics Time Series Database
 Documentation=https://docs.victoriametrics.com/
 Wants=network-online.target nss-lookup.target
-After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-victoria-metrics-dataset.service
-Requires=zfs-create-victoria-metrics-dataset.service garage-generate-secrets.service
+After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-victoria-metrics-dataset.service age-tpm-identity.service
+Requires=zfs-create-victoria-metrics-dataset.service garage-generate-secrets.service age-tpm-identity.service
 
 [Container]
 ContainerName=victoria-metrics
@@ -13,8 +13,8 @@ Network=host
 # Mount configuration (read-only)
 Volume=/etc/victoria-metrics/promscrape.yml:/etc/victoria-metrics/promscrape.yml:ro,Z
 
-# Mount Garage metrics token for scraping (read-only)
-Volume=/var/lib/garage/metrics_token:/var/lib/garage/metrics_token:ro,z
+# Garage metrics token for scraping (injected via podman secret)
+Secret=garage-metrics-token
 
 # Mount ZFS dataset for data storage (no :Z — dataset is too large for
 # recursive SELinux relabeling on every start; labeled at creation time instead)

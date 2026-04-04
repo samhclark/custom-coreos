@@ -1,7 +1,8 @@
 [Unit]
 Description=Caddy Reverse Proxy
 Wants=network-online.target nss-lookup.target
-After=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target age-tpm-identity.service
+Requires=age-tpm-identity.service
 
 [Container]
 ContainerName=caddy

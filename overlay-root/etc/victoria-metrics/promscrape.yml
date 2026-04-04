@@ -7,7 +7,7 @@ scrape_configs:
       - targets: ['127.0.0.1:8428']
 
   - job_name: 'garage'
-    bearer_token_file: /var/lib/garage/metrics_token
+    bearer_token_file: /run/secrets/garage-metrics-token
     static_configs:
       - targets: ['127.0.0.1:3903']
 

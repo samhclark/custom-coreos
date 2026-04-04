@@ -1,35 +1,22 @@
 #!/bin/bash
 # ABOUTME: Generates Alertmanager config by substituting Pushover secrets into the template.
-# Reads secrets from /var/lib/alertmanager/ and writes the final config there.
+# Reads secrets from the podman secret shell driver (age + TPM encrypted).
 
 set -euo pipefail
 
-SECRETS_DIR="/var/lib/alertmanager"
+LOOKUP="/usr/local/lib/podman-secret-driver/lookup.sh"
 TEMPLATE="/etc/alertmanager/alertmanager.yml.template"
-OUTPUT="${SECRETS_DIR}/alertmanager.yml"
-
-USER_KEY_FILE="${SECRETS_DIR}/pushover_user_key"
-API_TOKEN_FILE="${SECRETS_DIR}/pushover_api_token"
+OUTPUT="/var/lib/alertmanager/alertmanager.yml"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
-if [[ ! -f "${USER_KEY_FILE}" ]]; then
-    log "ERROR: ${USER_KEY_FILE} not found. Create this file with your Pushover user key."
-    exit 1
-fi
-
-if [[ ! -f "${API_TOKEN_FILE}" ]]; then
-    log "ERROR: ${API_TOKEN_FILE} not found. Create this file with your Pushover API token."
-    exit 1
-fi
-
-user_key="$(cat "${USER_KEY_FILE}" | tr -d '[:space:]')"
-api_token="$(cat "${API_TOKEN_FILE}" | tr -d '[:space:]')"
+user_key="$(SECRET_ID=pushover-user-key "$LOOKUP" | tr -d '[:space:]')"
+api_token="$(SECRET_ID=pushover-api-token "$LOOKUP" | tr -d '[:space:]')"
 
 if [[ -z "${user_key}" || -z "${api_token}" ]]; then
-    log "ERROR: Pushover secrets are empty"
+    log "ERROR: Pushover secrets are empty or missing"
     exit 1
 fi
 
