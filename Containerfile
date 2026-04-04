@@ -90,7 +90,8 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         zfs-snapshots-daily@videos.timer \
         zfs-snapshots-weekly@videos.timer \
         zfs-snapshots-monthly@videos.timer \
-        zfs-snapshots-yearly@videos.timer; \
+        zfs-snapshots-yearly@videos.timer \
+        node_exporter.service; \
     systemctl disable zincati.service; \
     dnf clean all; \
     rm -rf /var/log/dnf*'
