@@ -68,6 +68,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         cockpit-storaged \
         cockpit-system \
         nftables \
+        node-exporter \
         tailscale \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
