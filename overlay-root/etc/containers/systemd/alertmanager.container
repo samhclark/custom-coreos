@@ -9,6 +9,7 @@ Requires=alertmanager-generate-config.service
 ContainerName=alertmanager
 Image=docker.io/prom/alertmanager:v0.28.1
 Network=host
+User=0
 
 # Mount generated config (contains Pushover secrets, so lives in /var)
 Volume=/var/lib/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro,Z
