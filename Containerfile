@@ -55,6 +55,12 @@ RUN /bin/bash -c 'set -euo pipefail; \
       > /usr/lib/tmpfiles.d/alertmanager.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
+      "d /var/lib/prometheus 0755 prometheus prometheus -" \
+      "d /var/lib/prometheus/node-exporter 0755 prometheus prometheus -" \
+      > /usr/lib/tmpfiles.d/prometheus-node-exporter.conf'
+
+RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
@@ -73,8 +79,10 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         cockpit-selinux \
         cockpit-storaged \
         cockpit-system \
+        jq \
         nftables \
         node-exporter \
+        smartmontools \
         tailscale \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
@@ -98,6 +106,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         zfs-snapshots-monthly@videos.timer \
         zfs-snapshots-yearly@videos.timer \
         alertmanager-generate-config.service \
+        disk-health-metrics.timer \
         node_exporter.service; \
     systemctl disable zincati.service; \
     dnf clean all; \

@@ -32,3 +32,41 @@ groups:
         annotations:
           summary: "ZFS filesystem {{ $labels.mountpoint }} is almost full"
           description: "ZFS dataset mounted at {{ $labels.mountpoint }} has less than 10% space remaining ({{ $value | humanizePercentage }} free)."
+
+  - name: disk-health
+    rules:
+      - alert: DiskSmartUnhealthy
+        expr: smartctl_device_smart_healthy == 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SMART health check FAILED on {{ $labels.device }}"
+          description: "Disk {{ $labels.device }} ({{ $labels.model }}, serial {{ $labels.serial }}) has failed its SMART health assessment. Replace this drive."
+
+      - alert: DiskPrefailAttribute
+        expr: smartctl_device_reallocated_sector_ct > 0 or smartctl_device_current_pending_sector_ct > 0 or smartctl_device_offline_uncorrectable_ct > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk {{ $labels.device }} has prefail SMART attributes"
+          description: "Disk {{ $labels.device }} ({{ $labels.model }}, serial {{ $labels.serial }}) has reallocated, pending, or uncorrectable sectors. This drive may be failing."
+
+      - alert: DiskHighTemperature
+        expr: smartctl_device_temperature_celsius > 55
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk {{ $labels.device }} temperature is {{ $value }}°C"
+          description: "Disk {{ $labels.device }} ({{ $labels.model }}) has been above 55°C for 15 minutes. Check cooling."
+
+      - alert: ZpoolDegraded
+        expr: zpool_healthy == 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ZFS pool {{ $labels.pool }} is not healthy"
+          description: "ZFS pool {{ $labels.pool }} is in a degraded, faulted, or otherwise unhealthy state. Check `zpool status` immediately."

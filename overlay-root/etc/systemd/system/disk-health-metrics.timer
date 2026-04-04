@@ -1,0 +1,10 @@
+[Unit]
+Description=Collect SMART and ZFS health metrics every 5 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+
+[Install]
+WantedBy=timers.target

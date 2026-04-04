@@ -1,0 +1,12 @@
+[Unit]
+Description=Collect SMART and ZFS health metrics for Prometheus
+Documentation=man:smartctl(8) man:zpool(8)
+ConditionPathIsDirectory=/sys/block
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/disk-health-metrics.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=no
