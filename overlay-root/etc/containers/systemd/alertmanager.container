@@ -1,0 +1,28 @@
+[Unit]
+Description=Prometheus Alertmanager
+Documentation=https://prometheus.io/docs/alerting/latest/alertmanager/
+Wants=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target alertmanager-generate-config.service
+Requires=alertmanager-generate-config.service
+
+[Container]
+ContainerName=alertmanager
+Image=docker.io/prom/alertmanager:v0.28.1
+Network=host
+
+# Mount generated config (contains Pushover secrets, so lives in /var)
+Volume=/var/lib/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro,Z
+
+# Persistent storage for silences and notification log
+Volume=/var/lib/alertmanager/data:/alertmanager:Z
+
+Exec=--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
+
+Pull=newer
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target default.target

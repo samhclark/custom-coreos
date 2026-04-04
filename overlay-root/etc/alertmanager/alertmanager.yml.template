@@ -1,0 +1,18 @@
+# ABOUTME: Alertmanager config template. The generate-config script substitutes
+# Pushover secrets from /var/lib/alertmanager/ into this template.
+
+route:
+  receiver: pushover
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: pushover
+    pushover_configs:
+      - user_key: __PUSHOVER_USER_KEY__
+        token: __PUSHOVER_API_TOKEN__
+        priority: '0'
+        title: 'NAS Alert: {{ .GroupLabels.alertname }}'
+        message: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ end }}'

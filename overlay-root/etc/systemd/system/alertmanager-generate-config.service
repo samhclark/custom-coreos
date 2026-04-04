@@ -1,0 +1,11 @@
+[Unit]
+Description=Generate Alertmanager config from template with Pushover secrets
+Before=alertmanager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/alertmanager-generate-config.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

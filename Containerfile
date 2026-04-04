@@ -49,6 +49,12 @@ RUN /bin/bash -c 'set -euo pipefail; \
       > /usr/lib/tmpfiles.d/victoria-metrics.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
+      "d /var/lib/alertmanager 0755 root root -" \
+      "d /var/lib/alertmanager/data 0755 root root -" \
+      > /usr/lib/tmpfiles.d/alertmanager.conf'
+
+RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
@@ -91,6 +97,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         zfs-snapshots-weekly@videos.timer \
         zfs-snapshots-monthly@videos.timer \
         zfs-snapshots-yearly@videos.timer \
+        alertmanager-generate-config.service \
         node_exporter.service; \
     systemctl disable zincati.service; \
     dnf clean all; \

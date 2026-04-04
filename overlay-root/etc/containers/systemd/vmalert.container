@@ -1,0 +1,25 @@
+[Unit]
+Description=VictoriaMetrics vmalert - Alerting Rules Evaluator
+Documentation=https://docs.victoriametrics.com/vmalert/
+Wants=network-online.target nss-lookup.target
+After=network-online.target nss-lookup.target victoria-metrics.service alertmanager.service
+Requires=victoria-metrics.service alertmanager.service
+
+[Container]
+ContainerName=vmalert
+Image=docker.io/victoriametrics/vmalert:v1.139.0
+Network=host
+
+# Mount alerting rules (read-only)
+Volume=/etc/victoria-metrics/alert-rules.yml:/etc/victoria-metrics/alert-rules.yml:ro,Z
+
+Exec=-datasource.url=http://127.0.0.1:8428 -remoteWrite.url=http://127.0.0.1:8428 -remoteRead.url=http://127.0.0.1:8428 -notifier.url=http://127.0.0.1:9093 -rule=/etc/victoria-metrics/alert-rules.yml -httpListenAddr=127.0.0.1:8880
+
+Pull=newer
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target default.target
