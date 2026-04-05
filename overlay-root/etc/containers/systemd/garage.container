@@ -19,9 +19,9 @@ Volume=/run/systemd/journal/socket:/run/systemd/journal/socket
 Volume=/etc/garage/garage.toml:/etc/garage.toml:ro,Z
 
 # Secrets injected via podman secrets (encrypted at rest with age + TPM)
-Secret=garage-rpc-secret
-Secret=garage-admin-token
-Secret=garage-metrics-token
+Secret=garage-rpc-secret,mode=0400
+Secret=garage-admin-token,mode=0400
+Secret=garage-metrics-token,mode=0400
 
 # Mount ZFS datasets for data storage (no :Z — datasets are too large for
 # recursive SELinux relabeling on every start; labeled at creation time instead)
