@@ -1,0 +1,400 @@
+{
+  "uid": "zfs-disk-health",
+  "id": null,
+  "title": "ZFS & Disk Health",
+  "description": "ZFS pool status and SMART disk health metrics",
+  "tags": ["zfs", "disk", "smart"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "title": "ZFS Pool Status",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "title": "Pool Health",
+      "description": "1 = healthy, 0 = degraded/faulted",
+      "type": "stat",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "HEALTHY", "color": "green" }, "0": { "text": "UNHEALTHY", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "red" },
+              { "value": 1, "color": "green" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "zpool_healthy",
+          "legendFormat": "{{pool}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Pool State",
+      "description": "Current ZFS pool state",
+      "type": "stat",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "ACTIVE", "color": "green" }, "0": { "text": "-", "color": "transparent" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "text" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "zpool_state == 1",
+          "legendFormat": "{{pool}}: {{state}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "ZFS Filesystem Usage",
+      "description": "Space used on ZFS-backed filesystems (from node_exporter)",
+      "type": "bargauge",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 0.7, "color": "yellow" },
+              { "value": 0.85, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "minVizWidth": 8,
+        "minVizHeight": 16,
+        "valueMode": "text"
+      },
+      "targets": [
+        {
+          "expr": "1 - (node_filesystem_avail_bytes{fstype=\"zfs\"} / node_filesystem_size_bytes{fstype=\"zfs\"})",
+          "legendFormat": "{{mountpoint}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Disk Health",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false
+    },
+    {
+      "title": "SMART Health",
+      "description": "Overall SMART assessment per drive (1 = passed)",
+      "type": "stat",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "1": { "text": "PASSED", "color": "green" }, "0": { "text": "FAILED", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "red" },
+              { "value": 1, "color": "green" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "smartctl_device_smart_healthy",
+          "legendFormat": "{{device}} ({{model}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Drive Temperature",
+      "description": "Current disk temperature in Celsius",
+      "type": "gauge",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "min": 0,
+          "max": 70,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 40, "color": "yellow" },
+              { "value": 55, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "smartctl_device_temperature_celsius",
+          "legendFormat": "{{device}} ({{model}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Temperature Over Time",
+      "description": "Drive temperature history",
+      "type": "timeseries",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 40, "color": "yellow" },
+              { "value": 55, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "smartctl_device_temperature_celsius",
+          "legendFormat": "{{device}} ({{model}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Prefail Indicators",
+      "type": "row",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "collapsed": false
+    },
+    {
+      "title": "Reallocated Sectors",
+      "description": "Count of reallocated sectors — any value > 0 indicates potential drive failure",
+      "type": "stat",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 19 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "smartctl_device_reallocated_sector_ct",
+          "legendFormat": "{{device}} ({{model}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Pending Sectors",
+      "description": "Count of current pending sectors",
+      "type": "stat",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 19 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "smartctl_device_current_pending_sector_ct",
+          "legendFormat": "{{device}} ({{model}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Offline Uncorrectable",
+      "description": "Count of offline uncorrectable sectors",
+      "type": "stat",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 19 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "green" },
+              { "value": 1, "color": "red" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "smartctl_device_offline_uncorrectable_ct",
+          "legendFormat": "{{device}} ({{model}})",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Power-On Time",
+      "description": "Total drive power-on time",
+      "type": "stat",
+      "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 23 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "blue" }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "expr": "smartctl_device_power_on_seconds",
+          "legendFormat": "{{device}} ({{model}})",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

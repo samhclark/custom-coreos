@@ -31,3 +31,8 @@ s3.i.samhclark.com, *.s3.i.samhclark.com {
 metrics.i.samhclark.com {
 	reverse_proxy 127.0.0.1:8428
 }
+
+# Grafana - dashboards and visualization
+visualize.i.samhclark.com {
+	reverse_proxy 127.0.0.1:3000
+}

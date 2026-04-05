@@ -66,6 +66,11 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
+      "d /var/lib/grafana 0755 root root -" \
+      > /usr/lib/tmpfiles.d/grafana.conf'
+
+RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
       "d /var/lib/age-tpm 0700 root root -" \
       "d /var/lib/podman-secrets 0700 root root -" \
       > /usr/lib/tmpfiles.d/podman-secret-driver.conf'
