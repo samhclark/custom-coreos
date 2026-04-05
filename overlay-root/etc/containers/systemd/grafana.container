@@ -9,6 +9,7 @@ Requires=victoria-metrics.service
 ContainerName=grafana
 Image=docker.io/grafana/grafana-oss:12.1.1
 Network=host
+User=0
 
 # Install VictoriaMetrics datasource plugin on first start
 Environment=GF_INSTALL_PLUGINS=victoriametrics-metrics-datasource
