@@ -4,7 +4,6 @@
 
 set -euo pipefail
 
-LOOKUP="/usr/local/lib/podman-secret-driver/lookup.sh"
 TEMPLATE="/etc/alertmanager/alertmanager.yml.template"
 OUTPUT="/var/lib/alertmanager/alertmanager.yml"
 
@@ -12,8 +11,8 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
-user_key="$(SECRET_ID=pushover-user-key "$LOOKUP" | tr -d '[:space:]')"
-api_token="$(SECRET_ID=pushover-api-token "$LOOKUP" | tr -d '[:space:]')"
+user_key="$(nas-secrets show pushover-user-key | tr -d '[:space:]')"
+api_token="$(nas-secrets show pushover-api-token | tr -d '[:space:]')"
 
 if [[ -z "${user_key}" || -z "${api_token}" ]]; then
     log "ERROR: Pushover secrets are empty or missing"
