@@ -1,6 +1,6 @@
 # custom-coreos
 
-A custom CoreOS container image with ZFS and Tailscale support, featuring automated CI/CD and encrypted storage configuration.
+A custom CoreOS container image for my personal NAS, open sourced as a reference project rather than a general-purpose distribution.
 
 ## Overview
 
@@ -10,6 +10,8 @@ This project builds a CoreOS image with:
 - **LUKS encryption** with TPM2-based unlock
 - **Automated CI/CD** with GitHub Actions
 - **HTTP-served Ignition files** for easy installation
+
+This repository is primarily a record of one working system design. It is useful as a reference, but the checked-in configuration is intentionally machine-specific and not meant to be drop-in for other people.
 
 ## Quick Start
 
@@ -22,10 +24,12 @@ https://samhclark.github.io/custom-coreos/ignition.json
 ```
 
 This configures:
-- LUKS encrypted root filesystem with TPM2 unlock (though, not to any PCRs)
+- LUKS encrypted root filesystem with TPM2 unlock, without PCR binding
 - Btrfs filesystem on `/dev/mapper/root`
 - SSH access for 'core' user
 - Hostname set to 'nas'
+
+The published Ignition file and the checked-in [`butane.yaml`](/var/home/sam/Code/github.com/samhclark/custom-coreos/butane.yaml) are personal configuration for one machine, not a generic installer profile.
 
 ### Container Image
 
@@ -50,6 +54,10 @@ Updated daily with the latest CoreOS and ZFS versions.
   b. Test if it worked: `sudo /usr/lib/systemd/systemd-cryptsetup attach ef9bbf_crypt /dev/disk/by-id/wwn-0x5000c500c6ef9bbf none tpm2-device=auto` 
   c. If it worked, add that line to crypttab: `echo "ef9bbf_crypt /dev/disk/by-id/wwn-0x5000c500c6ef9bbf none tpm2-device=auto" | sudo tee -a /etc/crypttab`
 8. Reboot; Import the ZFS pool: `sudo zpool import tank` 
+
+### Scope
+
+This is not intended to be a polished appliance for other people. It is my own NAS image, with my own service mix, hostname, and operational assumptions, published mainly so the approach and implementation details are visible.
 
 
 ## Development
@@ -184,19 +192,33 @@ passwd:
 storage:
   luks:
     - name: root
+      label: luks-root
       device: /dev/disk/by-partlabel/root
       clevis:
-        custom:
-          pin: tpm2
-          config: '{"pcr_bank":"sha256","pcr_ids":"7"}'
+        tpm2: true
+      wipe_volume: true
   filesystems:
     - device: /dev/mapper/root
       format: btrfs
+      wipe_filesystem: true
+      label: root
   files:
     - path: /etc/hostname
+      mode: 0644
       contents:
         inline: nas
 ```
+
+Root unlock is TPM-backed but deliberately not bound to PCR values. Binding only some PCRs turned out to be operationally painful after updates and did not match the actual threat model for this machine.
+
+### Manual Bootstrap
+
+Some parts of the system are still intentionally bootstrapped by hand after installation:
+- Additional encrypted data volumes are enrolled with TPM manually.
+- Some Podman secrets are created manually over SSH on the NAS.
+- Garage secrets are auto-generated on first boot, but service-specific secrets such as Cloudflare and Pushover are not yet provisioned declaratively.
+
+That bootstrap path is not especially elegant, but it is acceptable for a single-user personal system.
 
 ### Container Labels
 
@@ -212,7 +234,7 @@ Built images include labels for version tracking:
 
 ## Security Features
 
-- **LUKS Encryption**: Full disk encryption with TPM2-based unlock
+- **LUKS Encryption**: Full disk encryption with TPM2-based unlock, without PCR binding
 - **SSH Access**: Key-based authentication only
 - **Build Attestations**: Container provenance tracking
 - **Signed Images**: Container image signing (sigstore)
@@ -243,6 +265,11 @@ Configure Tailscale:
 ```bash
 sudo tailscale up
 ```
+
+Additional post-install steps still happen manually over SSH:
+- Create non-generated Podman secrets such as `cf-api-token`, `pushover-user-key`, and `pushover-api-token`
+- Enroll any non-root LUKS volumes with TPM and add them to `crypttab`
+- Import the ZFS pool if it is not imported automatically
 
 ## Troubleshooting
 

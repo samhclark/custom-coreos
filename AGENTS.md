@@ -6,10 +6,12 @@ This file provides guidance to AI coding agents when working with code in this r
 
 This repository creates a custom CoreOS container image with ZFS, Tailscale, Cockpit management tooling, and encrypted storage support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
 
-**Status**: ✅ **PRODUCTION READY** - All core functionality implemented and tested
+**Status**: In production for one personal NAS
 **Build Time**: ~2-3 minutes (down from 10+ minutes)
 **Container Registry**: `ghcr.io/samhclark/custom-coreos:stable`
 **Ignition File**: `https://samhclark.github.io/custom-coreos/ignition.json`
+
+This is an open source reference project, not a general-purpose appliance. The intended deployment is one machine for one user.
 
 ## Project Relationship
 
@@ -112,15 +114,22 @@ Use the `Containerfile` for configuration that adds **capabilities** to the syst
 ### Butane Configuration (Personal & Runtime)
 Use `butane.yaml` for configuration that is **personal** or **cannot be described declaratively**:
 - **Personal Settings**: SSH authorized keys, user password hash, hostname
-- **Runtime Configuration**: LUKS encryption with TPM2 binding (PCRs)
+- **Runtime Configuration**: LUKS encryption with TPM2 unlock
 - **Dynamic Filesystem**: Encrypted btrfs mounting, partition layouts
 - **Boot-time Decisions**: Anything requiring runtime system state
 
 ### Current Configuration (`butane.yaml`)
-- **Encryption**: LUKS root filesystem with TPM2 unlock (PCR 7)
+- **Encryption**: LUKS root filesystem with TPM2 unlock, without PCR binding
 - **Filesystem**: Btrfs on `/dev/mapper/root`
 - **Access**: SSH key and password hash for 'core' user
 - **Identity**: Hostname set to 'nas'
+
+### Manual Bootstrap Reality
+
+Some host setup is still manual and that is acceptable for this repository:
+- Non-root LUKS volumes are enrolled with TPM manually after install
+- Some Podman secrets are created manually over SSH
+- Migration scripts may remain in-tree even if they are one-time tools
 
 ### Installation URL
 ```
@@ -188,7 +197,7 @@ Images include labels for future deduplication:
 
 ## Security Features
 
-- **Encryption**: LUKS root filesystem with TPM2-based unlock
+- **Encryption**: LUKS root filesystem with TPM2-based unlock, without PCR binding
 - **Build Security**: Container image signing and attestations
 - **Access Control**: SSH key-based authentication
 - **Tailscale**: Daemon enabled (auth/config via runtime)
