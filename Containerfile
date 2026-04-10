@@ -81,11 +81,6 @@ RUN /bin/bash -c 'set -euo pipefail; \
 RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
 
-RUN /bin/bash -c 'set -euo pipefail; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R /usr/share/custom-coreos/grafana'
-
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     /bin/bash -c 'set -euo pipefail; \
     # Validate that provided kernel version matches actual CoreOS kernel \
@@ -136,6 +131,11 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     systemctl disable zincati.service; \
     dnf clean all; \
     rm -rf /var/log/dnf*'
+
+RUN /bin/bash -c 'set -euo pipefail; \
+    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
+    semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
+    restorecon -F -R /usr/share/custom-coreos/grafana'
 
 RUN ["bootc", "container", "lint"]
 
