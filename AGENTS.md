@@ -41,7 +41,7 @@ These are considered active and in use on the real machine unless explicitly sta
 - `victoria-metrics.container` - metrics storage
 - `vmalert.container` - alert rule evaluation
 - `alertmanager.container` - notification fanout
-- `grafana.container` - dashboards
+- `grafana.container` - dashboards; currently the first rootless Quadlet experiment, shipped under `usr/share/containers/systemd/users/51210/`
 
 ### Supporting Host Units
 
@@ -232,6 +232,7 @@ Images include labels for future deduplication:
 ### Documentation
 - `AGENTS.md` - This file
 - `README.md` - User documentation
+- `docs/rootless-grafana-checklist.md` - Post-boot validation and troubleshooting checklist for the first rootless Quadlet rollout
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
@@ -249,16 +250,30 @@ Images include labels for future deduplication:
 - Use systemd `tmpfiles.d` or unit `StateDirectory=` to seed `/var` content on first boot.
 - Prefer packaging static content into `/usr`; avoid dropping mutable content into `/var` during image builds.
 
+## Host Service Identity Scheme
+
+- Rootless service accounts should use namespaced host usernames such as `_nas_grafana` rather than upstream/vendor defaults like `grafana`
+- Reserve `51000-51999` for image-managed service accounts in this repo
+- Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
+- Current allocation: `_nas_grafana` uses host UID/GID `51210`
+- Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
+
 ## Rootless Quadlet Note
 
 Current state:
-- All active Quadlets in this repo are rootful system units under `overlay-root/etc/containers/systemd/`
+- Most active Quadlets in this repo are rootful system units under `overlay-root/etc/containers/systemd/`
+- Grafana is the exception: it is defined as a rootless distribution-managed user Quadlet under `overlay-root/usr/share/containers/systemd/users/51210/grafana.container`
 
 Useful reference points for future rootless work:
-- The vendored `podman-systemd.unit.5.md` in this repo documents rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
-- The same vendored doc lists `/usr/share/containers/systemd/` as the distribution path for rootful system units, not for rootless user units
+- The vendored `podman-systemd.unit.5.md` in this repo is older than current upstream docs: it documents rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`, but newer official docs also include `/usr/share/containers/systemd/users/${UID}` and `/usr/share/containers/systemd/users/`
+- On this development system, `podman-5.8.1` accepts `/usr/share/containers/systemd/users/51210/` when verified via `podman-system-generator --user --dryrun`
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
+- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana` ranges in `/etc/subuid` and `/etc/subgid`
+- If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
+- Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently
+- Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
+- For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance
 

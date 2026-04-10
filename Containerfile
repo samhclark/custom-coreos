@@ -66,11 +66,6 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
-      "d /var/lib/grafana 0755 root root -" \
-      > /usr/lib/tmpfiles.d/grafana.conf'
-
-RUN /bin/bash -c 'set -euo pipefail; \
-    printf "%s\n" \
       "d /var/lib/age-tpm 0700 root root -" \
       "d /var/lib/podman-secrets 0700 root root -" \
       > /usr/lib/tmpfiles.d/podman-secret-driver.conf'
@@ -85,6 +80,11 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
+
+RUN /bin/bash -c 'set -euo pipefail; \
+    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
+    semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
+    restorecon -F -R /usr/share/custom-coreos/grafana'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     /bin/bash -c 'set -euo pipefail; \

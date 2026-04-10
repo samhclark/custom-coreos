@@ -218,6 +218,15 @@ Some parts of the system are still intentionally bootstrapped by hand after inst
 - Some Podman secrets are created manually over SSH on the NAS.
 - Garage secrets are auto-generated on first boot, but service-specific secrets such as Cloudflare and Pushover are not yet provisioned declaratively.
 
+### Host Service UIDs
+
+Rootless service accounts use namespaced host usernames and a reserved high UID range so they are easy to recognize and unlikely to collide with random software defaults.
+
+- Reserve `51000-51999` for image-managed service accounts.
+- Use `511xx` for storage, `512xx` for observability, and `513xx` for ingress/edge.
+- Prefer names such as `_nas_grafana` over upstream defaults such as `grafana`.
+- Current example: Grafana uses `_nas_grafana` with host UID/GID `51210`.
+
 That bootstrap path is not especially elegant, but it is acceptable for a single-user personal system.
 
 ### Container Labels

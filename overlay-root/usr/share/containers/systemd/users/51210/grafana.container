@@ -1,9 +1,6 @@
 [Unit]
 Description=Grafana Dashboard
 Documentation=https://grafana.com/docs/grafana/latest/
-Wants=network-online.target nss-lookup.target
-After=network-online.target nss-lookup.target victoria-metrics.service
-Requires=victoria-metrics.service
 
 [Container]
 ContainerName=grafana
@@ -19,20 +16,21 @@ Environment=GF_AUTH_ANONYMOUS_ENABLED=true
 Environment=GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
 Environment=GF_AUTH_DISABLE_LOGIN_FORM=true
 
-# Provisioning configs (read-only)
-Volume=/etc/grafana/provisioning:/etc/grafana/provisioning:ro,Z
+# Image-controlled provisioning configs (read-only)
+Volume=/usr/share/custom-coreos/grafana/provisioning:/etc/grafana/provisioning:ro
 
-# Vendored dashboards (read-only)
-Volume=/etc/grafana/dashboards:/etc/grafana/dashboards:ro,Z
+# Image-controlled dashboards (read-only)
+Volume=/usr/share/custom-coreos/grafana/dashboards:/etc/grafana/dashboards:ro
 
 # Persistent storage for Grafana SQLite DB and plugins
-Volume=/var/lib/grafana:/var/lib/grafana:Z
+Volume=/var/lib/grafana:/var/lib/grafana
 
 Pull=newer
 
 [Service]
 Restart=always
 RestartSec=30
+TimeoutStartSec=900
 
 [Install]
-WantedBy=multi-user.target default.target
+WantedBy=default.target
