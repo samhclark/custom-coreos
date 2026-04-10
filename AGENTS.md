@@ -17,6 +17,74 @@ This is an open source reference project, not a general-purpose appliance. The i
 
 This project depends on `../fedora-zfs-kmods/` which builds and publishes prebuilt ZFS kernel modules as container images. The architecture uses registry-based compatibility checking - if a ZFS+kernel combination exists in the fedora-zfs-kmods registry, it's compatible.
 
+## Fast Orientation
+
+The quickest accurate mental model is:
+
+1. `Justfile` and `.github/workflows/` decide **what versions to build**
+2. `Containerfile` decides **what goes into the bootc image**
+3. `overlay-root/` decides **how the installed machine behaves at runtime**
+4. `butane.yaml` is intentionally narrow and personal: it handles host identity and root storage setup, not service orchestration
+
+If you need to understand real behavior, prioritize `Containerfile`, `overlay-root/`, and `butane.yaml` over prose docs.
+
+## Runtime Topology
+
+This repo is not just "CoreOS with ZFS". It currently defines a full single-node NAS host profile.
+
+### Active Quadlet Containers
+
+These are considered active and in use on the real machine unless explicitly stated otherwise:
+- `caddy.container` - reverse proxy / TLS termination for the user-facing services
+- `cockpit-ws.container` - privileged Cockpit web service proxy
+- `garage.container` - S3-compatible object storage on ZFS
+- `victoria-metrics.container` - metrics storage
+- `vmalert.container` - alert rule evaluation
+- `alertmanager.container` - notification fanout
+- `grafana.container` - dashboards
+
+### Supporting Host Units
+
+Important non-container units:
+- `age-tpm-identity.service` - creates the TPM-sealed age identity used by the Podman shell secret driver
+- `garage-generate-secrets.service` - auto-generates Garage secrets on first boot
+- `alertmanager-generate-config.service` - renders Alertmanager config from stored secrets
+- `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
+- `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
+- `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
+- `zfs-health-check.timer` - periodic pool health checks
+- `zfs-snapshots-*@.timer` - rolling snapshot retention for selected datasets
+
+### Storage Layout Assumptions
+
+- Root filesystem is LUKS + btrfs, unlocked by TPM, without PCR binding
+- The main data pool is expected to be `tank`
+- Garage datasets live under `tank/garage/{meta,data}`
+- VictoriaMetrics data lives under `tank/victoria-metrics/data`
+- Large ZFS-backed container data paths are labeled persistently with `semanage fcontext` + `restorecon -F -R`; do not casually switch them to Podman `:Z` / `:z`
+
+### Secrets Model
+
+- Podman is configured to use the shell secret driver
+- Secret material is encrypted at rest with `age`, using a TPM-sealed `age-plugin-tpm` identity stored in `/var/lib/age-tpm`
+- Garage secrets are generated automatically if missing
+- Other service secrets are still manual
+- Migration scripts may remain in-tree even if they were only needed once
+
+### Manual Bootstrap Reality
+
+This repository intentionally still has some manual host bootstrap:
+- non-root LUKS volumes are enrolled with TPM manually after install
+- some Podman secrets are created manually over SSH
+- `tank` may still need to be imported manually depending on system state
+
+Specifically, expect manual creation/management of secrets such as:
+- `cf-api-token`
+- `pushover-user-key`
+- `pushover-api-token`
+
+This is acceptable because the system has one real user and is published as a reference project, not as a turnkey product.
+
 ## Key Commands
 
 ### Version Discovery & Compatibility
@@ -124,13 +192,6 @@ Use `butane.yaml` for configuration that is **personal** or **cannot be describe
 - **Access**: SSH key and password hash for 'core' user
 - **Identity**: Hostname set to 'nas'
 
-### Manual Bootstrap Reality
-
-Some host setup is still manual and that is acceptable for this repository:
-- Non-root LUKS volumes are enrolled with TPM manually after install
-- Some Podman secrets are created manually over SSH
-- Migration scripts may remain in-tree even if they are one-time tools
-
 ### Installation URL
 ```
 https://samhclark.github.io/custom-coreos/ignition.json
@@ -171,9 +232,8 @@ Images include labels for future deduplication:
 ### Documentation
 - `AGENTS.md` - This file
 - `README.md` - User documentation
-- `.ai/plans/PROJECT-STATUS.md` - Current project status
-- `.ai/plans/final-touches.md` - Remaining NAS/monitoring items
-- `.ai/plans/future-enhancements.md` - Optional future work
+- `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
+- `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
 ## Development Patterns
 
@@ -188,6 +248,17 @@ Images include labels for future deduplication:
 - Standard writable paths are symlinks into `/var` (e.g. `/home` -> `/var/home`, `/opt` -> `/var/opt`).
 - Use systemd `tmpfiles.d` or unit `StateDirectory=` to seed `/var` content on first boot.
 - Prefer packaging static content into `/usr`; avoid dropping mutable content into `/var` during image builds.
+
+## Rootless Quadlet Note
+
+Current state:
+- All active Quadlets in this repo are rootful system units under `overlay-root/etc/containers/systemd/`
+
+Useful reference points for future rootless work:
+- The vendored `podman-systemd.unit.5.md` in this repo documents rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
+- The same vendored doc lists `/usr/share/containers/systemd/` as the distribution path for rootful system units, not for rootless user units
+- `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
+- linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
 
 ## Build Performance
 
