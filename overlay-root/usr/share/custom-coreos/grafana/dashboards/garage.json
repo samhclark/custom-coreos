@@ -2,11 +2,11 @@
   "uid": "garage",
   "id": null,
   "title": "Garage S3 Storage",
-  "description": "Garage S3-compatible object storage metrics",
+  "description": "Garage S3-compatible object storage metrics. Availability uses a fast /health probe via blackbox exporter. Internal Garage metrics panels use the last successful /metrics sample over 15m because that endpoint can respond slowly even when the service is healthy.",
   "tags": ["garage", "s3", "storage"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 3,
   "refresh": "1m",
   "time": {
     "from": "now-6h",
@@ -24,7 +24,7 @@
     },
     {
       "title": "Cluster Healthy",
-      "description": "All storage nodes connected and available",
+      "description": "Cluster health from the last successful metrics sample in the past 15 minutes",
       "type": "stat",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
@@ -53,22 +53,22 @@
       },
       "targets": [
         {
-          "expr": "cluster_healthy{job=\"garage\"}",
+          "expr": "last_over_time(cluster_healthy{job=\"garage\"}[15m])",
           "legendFormat": "Healthy",
           "refId": "A"
         }
       ]
     },
     {
-      "title": "Cluster Available",
-      "description": "All requests can be served",
+      "title": "Health Endpoint",
+      "description": "Fast /health probe via blackbox exporter. This is the authoritative Garage availability signal.",
       "type": "stat",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
       "fieldConfig": {
         "defaults": {
           "mappings": [
-            { "type": "value", "options": { "1": { "text": "AVAILABLE", "color": "green" }, "0": { "text": "UNAVAILABLE", "color": "red" } } }
+            { "type": "value", "options": { "1": { "text": "HEALTHY", "color": "green" }, "0": { "text": "DOWN", "color": "red" } } }
           ],
           "thresholds": {
             "mode": "absolute",
@@ -90,15 +90,15 @@
       },
       "targets": [
         {
-          "expr": "cluster_available{job=\"garage\"}",
-          "legendFormat": "Available",
+          "expr": "last_over_time(probe_success{job=\"garage-health\",service=\"garage\"}[5m]) or on() vector(0)",
+          "legendFormat": "Health",
           "refId": "A"
         }
       ]
     },
     {
       "title": "Garage Disk Available",
-      "description": "Available disk space reported by Garage per volume",
+      "description": "Available disk space from the last successful metrics sample in the past 15 minutes",
       "type": "stat",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
@@ -126,7 +126,7 @@
       },
       "targets": [
         {
-          "expr": "garage_local_disk_avail{job=\"garage\"}",
+          "expr": "last_over_time(garage_local_disk_avail{job=\"garage\"}[15m])",
           "legendFormat": "{{volume}}",
           "refId": "A"
         }
@@ -134,7 +134,7 @@
     },
     {
       "title": "Garage Build Info",
-      "description": "Current Garage version",
+      "description": "Garage version from the last successful metrics sample in the past 15 minutes",
       "type": "stat",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
@@ -160,7 +160,7 @@
       },
       "targets": [
         {
-          "expr": "garage_build_info{job=\"garage\"}",
+          "expr": "max_over_time(garage_build_info{job=\"garage\"}[15m])",
           "legendFormat": "{{version}}",
           "refId": "A"
         }
@@ -174,7 +174,7 @@
     },
     {
       "title": "S3 Request Rate",
-      "description": "S3 API requests per second by endpoint",
+      "description": "S3 API requests per second by endpoint, smoothed over 15 minutes to tolerate slow metrics scrapes",
       "type": "timeseries",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
@@ -200,7 +200,7 @@
       },
       "targets": [
         {
-          "expr": "rate(api_s3_request_counter{job=\"garage\"}[5m])",
+      "expr": "rate(api_s3_request_counter{job=\"garage\"}[15m])",
           "legendFormat": "{{api_endpoint}}",
           "refId": "A"
         }
@@ -208,7 +208,7 @@
     },
     {
       "title": "S3 Error Rate",
-      "description": "S3 API errors per second by endpoint",
+      "description": "S3 API errors per second by endpoint, smoothed over 15 minutes to tolerate slow metrics scrapes",
       "type": "timeseries",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
@@ -240,7 +240,7 @@
       },
       "targets": [
         {
-          "expr": "rate(api_s3_error_counter{job=\"garage\"}[5m])",
+      "expr": "rate(api_s3_error_counter{job=\"garage\"}[15m])",
           "legendFormat": "{{api_endpoint}} {{status_code}}",
           "refId": "A"
         }
@@ -248,7 +248,7 @@
     },
     {
       "title": "S3 Request Duration (p50 / p95 / p99)",
-      "description": "S3 API call latency percentiles",
+      "description": "S3 API call latency percentiles, smoothed over 15 minutes to tolerate slow metrics scrapes",
       "type": "timeseries",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
@@ -273,17 +273,17 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.50, rate(api_s3_request_duration_bucket{job=\"garage\"}[5m]))",
+      "expr": "histogram_quantile(0.50, rate(api_s3_request_duration_bucket{job=\"garage\"}[15m]))",
           "legendFormat": "p50",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.95, rate(api_s3_request_duration_bucket{job=\"garage\"}[5m]))",
+      "expr": "histogram_quantile(0.95, rate(api_s3_request_duration_bucket{job=\"garage\"}[15m]))",
           "legendFormat": "p95",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.99, rate(api_s3_request_duration_bucket{job=\"garage\"}[5m]))",
+      "expr": "histogram_quantile(0.99, rate(api_s3_request_duration_bucket{job=\"garage\"}[15m]))",
           "legendFormat": "p99",
           "refId": "C"
         }
@@ -297,7 +297,7 @@
     },
     {
       "title": "Block I/O Throughput",
-      "description": "Bytes read/written to data directory",
+      "description": "Bytes read/written to data directory, smoothed over 15 minutes to tolerate slow metrics scrapes",
       "type": "timeseries",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
@@ -329,12 +329,12 @@
       },
       "targets": [
         {
-          "expr": "rate(block_bytes_read{job=\"garage\"}[5m])",
+      "expr": "rate(block_bytes_read{job=\"garage\"}[15m])",
           "legendFormat": "Read",
           "refId": "A"
         },
         {
-          "expr": "rate(block_bytes_written{job=\"garage\"}[5m])",
+      "expr": "rate(block_bytes_written{job=\"garage\"}[15m])",
           "legendFormat": "Written",
           "refId": "B"
         }
@@ -342,7 +342,7 @@
     },
     {
       "title": "Block Resync Queue",
-      "description": "Blocks queued for resync — should converge to 0 under normal operation",
+      "description": "Blocks queued for resync from the last successful metrics sample in the past 15 minutes",
       "type": "timeseries",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
@@ -374,12 +374,12 @@
       },
       "targets": [
         {
-          "expr": "block_resync_queue_length{job=\"garage\"}",
+      "expr": "last_over_time(block_resync_queue_length{job=\"garage\"}[15m])",
           "legendFormat": "Queue Length",
           "refId": "A"
         },
         {
-          "expr": "block_resync_errored_blocks{job=\"garage\"}",
+      "expr": "last_over_time(block_resync_errored_blocks{job=\"garage\"}[15m])",
           "legendFormat": "Errored Blocks",
           "refId": "B"
         }
@@ -393,7 +393,7 @@
     },
     {
       "title": "Merkle Updater Queue",
-      "description": "Merkle tree updater TODO queue per table — should converge to 0",
+      "description": "Merkle tree updater TODO queue per table from the last successful metrics sample in the past 15 minutes",
       "type": "timeseries",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
@@ -417,7 +417,7 @@
       },
       "targets": [
         {
-          "expr": "table_merkle_updater_todo_queue_length{job=\"garage\"}",
+      "expr": "last_over_time(table_merkle_updater_todo_queue_length{job=\"garage\"}[15m])",
           "legendFormat": "{{table_name}}",
           "refId": "A"
         }
@@ -425,7 +425,7 @@
     },
     {
       "title": "Table GC Queue",
-      "description": "Garbage collection TODO queue length per table",
+      "description": "Garbage collection TODO queue length per table from the last successful metrics sample in the past 15 minutes",
       "type": "timeseries",
       "datasource": { "type": "victoriametrics-metrics-datasource", "uid": "" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
@@ -449,7 +449,7 @@
       },
       "targets": [
         {
-          "expr": "table_gc_todo_queue_length{job=\"garage\"}",
+      "expr": "last_over_time(table_gc_todo_queue_length{job=\"garage\"}[15m])",
           "legendFormat": "{{table_name}}",
           "refId": "A"
         }

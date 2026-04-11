@@ -35,6 +35,7 @@ This repo is not just "CoreOS with ZFS". It currently defines a full single-node
 ### Active Quadlet Containers
 
 These are considered active and in use on the real machine unless explicitly stated otherwise:
+- `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services
 - `cockpit-ws.container` - privileged Cockpit web service proxy
 - `garage.container` - S3-compatible object storage on ZFS
@@ -54,6 +55,11 @@ Important non-container units:
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
 - `zfs-health-check.timer` - periodic pool health checks
 - `zfs-snapshots-*@.timer` - rolling snapshot retention for selected datasets
+
+### Monitoring Notes
+
+- Garage service availability should be based on the blackbox-exporter probe of `http://127.0.0.1:3903/health`, not on `up{job="garage"}` from the admin `/metrics` scrape
+- Garage's `/metrics` endpoint is still useful for internal/storage metrics, but it can respond slowly enough to create false `up == 0` results even when the service is healthy
 
 ### Storage Layout Assumptions
 
@@ -256,20 +262,20 @@ Images include labels for future deduplication:
 - Rootless service accounts should use namespaced host usernames such as `_nas_grafana` rather than upstream/vendor defaults like `grafana`
 - Reserve `51000-51999` for image-managed service accounts in this repo
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
-- Current allocation: `_nas_grafana` uses host UID/GID `51210`; `_nas_vmalert` uses host UID/GID `51220`
+- Current allocation: `_nas_grafana` uses host UID/GID `51210`; `_nas_vmalert` uses host UID/GID `51220`; `_nas_blackbox` uses host UID/GID `51230`
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
 
 ## Rootless Quadlet Note
 
 Current state:
 - Most active Quadlets in this repo are rootful system units under `overlay-root/etc/containers/systemd/`
-- Grafana and vmalert are the current exceptions: they are defined as rootless admin-managed user Quadlets under `overlay-root/etc/containers/systemd/users/51210/grafana.container` and `overlay-root/etc/containers/systemd/users/51220/vmalert.container`
+- Grafana, vmalert, and blackbox exporter are the current exceptions: they are defined as rootless admin-managed user Quadlets under `overlay-root/etc/containers/systemd/users/51210/grafana.container`, `overlay-root/etc/containers/systemd/users/51220/vmalert.container`, and `overlay-root/etc/containers/systemd/users/51230/blackbox-exporter.container`
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
 - In practice, placing a user Quadlet under `/usr/share/containers/systemd/users/${UID}/` caused Fedora 43 with Podman 5.8.1 to generate a system unit in `system.slice`, because that path is still underneath the rootful `/usr/share/containers/systemd/` tree. Use `/etc/containers/systemd/users/${UID}/` for rootless service users in this repo.
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
-- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana` and `_nas_vmalert` ranges in `/etc/subuid` and `/etc/subgid`
+- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana`, `_nas_vmalert`, and `_nas_blackbox` ranges in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
 - Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently, or use a bounded `ExecStartPre=` readiness loop when startup requires a local dependency to answer first

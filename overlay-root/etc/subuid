@@ -1,2 +1,3 @@
 _nas_grafana:512100000:65536
 _nas_vmalert:512200000:65536
+_nas_blackbox:512300000:65536

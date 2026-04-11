@@ -7,9 +7,34 @@ scrape_configs:
       - targets: ['127.0.0.1:8428']
 
   - job_name: 'garage'
+    # Garage's admin/metrics endpoint can respond slowly under load.
+    # Give it a longer timeout and a less aggressive scrape cadence.
+    scrape_interval: 1m
+    scrape_timeout: 30s
     bearer_token_file: /run/secrets/garage-metrics-token
     static_configs:
       - targets: ['127.0.0.1:3903']
+
+  - job_name: 'garage-health'
+    # Garage's /health endpoint is fast and is the authoritative availability
+    # signal. Probe it via blackbox_exporter rather than inferring health from
+    # the slow on-demand /metrics endpoint.
+    metrics_path: /probe
+    scrape_interval: 1m
+    scrape_timeout: 10s
+    params:
+      module: ['http_2xx']
+    static_configs:
+      - targets: ['http://127.0.0.1:3903/health']
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: service
+        replacement: garage
+      - target_label: __address__
+        replacement: 127.0.0.1:9115
 
   - job_name: 'caddy'
     static_configs:

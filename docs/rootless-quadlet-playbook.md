@@ -13,7 +13,7 @@ persists across upgrades.
 
 ## Reference Implementation
 
-The repo now has two concrete rootless examples:
+The repo now has three concrete rootless examples:
 
 - Grafana is the fuller migration example with persistent service data:
   - `overlay-root/etc/containers/systemd/users/51210/grafana.container`
@@ -31,6 +31,14 @@ The repo now has two concrete rootless examples:
   - `overlay-root/usr/lib/tmpfiles.d/nas-vmalert-rootless.conf`
   - `overlay-root/usr/local/bin/ensure-nas-vmalert-account.sh`
   - `overlay-root/etc/systemd/system/ensure-nas-vmalert-account.service`
+
+- blackbox exporter is the stateless monitoring example with image-controlled config:
+  - `overlay-root/etc/containers/systemd/users/51230/blackbox-exporter.container`
+  - `overlay-root/usr/share/custom-coreos/blackbox-exporter/blackbox.yml`
+  - `overlay-root/usr/lib/sysusers.d/nas-blackbox.conf`
+  - `overlay-root/usr/lib/tmpfiles.d/nas-blackbox-rootless.conf`
+  - `overlay-root/usr/local/bin/ensure-nas-blackbox-account.sh`
+  - `overlay-root/etc/systemd/system/ensure-nas-blackbox-account.service`
 
 Read those first if you want the exact concrete implementation.
 
@@ -123,7 +131,10 @@ every start. Use:
 That avoids recursive relabel work on each start and survives container restarts
 cleanly.
 
-For small config mounts, `:Z` or `:z` can still be fine.
+For small config mounts in rootful containers, `:Z` or `:z` can still be fine.
+For rootless services in this repo, prefer image-controlled config under
+`/usr/share/custom-coreos/<service>` with persistent `container_file_t`
+labeling rather than relying on rootless Podman to relabel root-owned files.
 
 ### 7. Treat cross-manager dependencies as fragile
 

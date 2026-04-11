@@ -110,6 +110,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     systemctl enable \
+        ensure-nas-blackbox-account.service \
         ensure-nas-grafana-account.service \
         ensure-nas-vmalert-account.service \
         age-tpm-identity.service \
@@ -135,10 +136,11 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     rm -rf /var/log/dnf*'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/blackbox-exporter(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/vmalert(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R /usr/share/custom-coreos/grafana /usr/share/custom-coreos/vmalert'
+    restorecon -F -R /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/grafana /usr/share/custom-coreos/vmalert'
 
 RUN ["bootc", "container", "lint"]
 

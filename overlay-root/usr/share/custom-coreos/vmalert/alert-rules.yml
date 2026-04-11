@@ -5,13 +5,31 @@ groups:
   - name: service-health
     rules:
       - alert: ServiceDown
-        expr: up == 0
+        expr: up{job!~"garage|garage-health"} == 0
         for: 1h
         labels:
           severity: critical
         annotations:
-          summary: "{{ $labels.job }} has been down for over an hour"
-          description: "The {{ $labels.job }} service ({{ $labels.instance }}) has been unreachable for more than 1 hour."
+          summary: "{{ $labels.job }} is unreachable"
+          description: "The {{ $labels.job }} service ({{ $labels.instance }}) is not responding to Prometheus scrapes. This alert fires after 1 hour of continuous failure."
+
+      - alert: GarageHealthDown
+        expr: probe_success{job="garage-health",service="garage"} == 0
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "garage health endpoint is unreachable"
+          description: "Garage health endpoint {{ $labels.instance }} is failing local HTTP probes. This alert fires after 1 hour of continuous failure."
+
+      - alert: GarageHealthProbeBroken
+        expr: up{job="garage-health"} == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "garage health probe is broken"
+          description: "VictoriaMetrics cannot scrape the blackbox exporter probe for Garage. This is a monitoring failure, not proof that Garage itself is down."
 
   - name: filesystem-health
     rules:
