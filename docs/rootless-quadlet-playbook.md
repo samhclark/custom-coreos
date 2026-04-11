@@ -13,14 +13,24 @@ persists across upgrades.
 
 ## Reference Implementation
 
-The current example lives in these files:
-- `overlay-root/etc/containers/systemd/users/51210/grafana.container`
-- `overlay-root/usr/lib/sysusers.d/nas-grafana.conf`
-- `overlay-root/usr/lib/tmpfiles.d/nas-grafana-rootless.conf`
-- `overlay-root/etc/subuid`
-- `overlay-root/etc/subgid`
-- `overlay-root/usr/local/bin/ensure-nas-grafana-account.sh`
-- `overlay-root/etc/systemd/system/ensure-nas-grafana-account.service`
+The repo now has two concrete rootless examples:
+
+- Grafana is the fuller migration example with persistent service data:
+  - `overlay-root/etc/containers/systemd/users/51210/grafana.container`
+  - `overlay-root/usr/lib/sysusers.d/nas-grafana.conf`
+  - `overlay-root/usr/lib/tmpfiles.d/nas-grafana-rootless.conf`
+  - `overlay-root/etc/subuid`
+  - `overlay-root/etc/subgid`
+  - `overlay-root/usr/local/bin/ensure-nas-grafana-account.sh`
+  - `overlay-root/etc/systemd/system/ensure-nas-grafana-account.service`
+
+- vmalert is the lower-state example with only image-controlled rules:
+  - `overlay-root/etc/containers/systemd/users/51220/vmalert.container`
+  - `overlay-root/usr/share/custom-coreos/vmalert/alert-rules.yml`
+  - `overlay-root/usr/lib/sysusers.d/nas-vmalert.conf`
+  - `overlay-root/usr/lib/tmpfiles.d/nas-vmalert-rootless.conf`
+  - `overlay-root/usr/local/bin/ensure-nas-vmalert-account.sh`
+  - `overlay-root/etc/systemd/system/ensure-nas-vmalert-account.service`
 
 Read those first if you want the exact concrete implementation.
 

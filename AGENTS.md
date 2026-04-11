@@ -39,9 +39,9 @@ These are considered active and in use on the real machine unless explicitly sta
 - `cockpit-ws.container` - privileged Cockpit web service proxy
 - `garage.container` - S3-compatible object storage on ZFS
 - `victoria-metrics.container` - metrics storage
-- `vmalert.container` - alert rule evaluation
+- `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
 - `alertmanager.container` - notification fanout
-- `grafana.container` - dashboards; currently the first rootless Quadlet experiment, shipped under `etc/containers/systemd/users/51210/`
+- `grafana.container` - dashboards; rootless under `etc/containers/systemd/users/51210/`
 
 ### Supporting Host Units
 
@@ -256,24 +256,25 @@ Images include labels for future deduplication:
 - Rootless service accounts should use namespaced host usernames such as `_nas_grafana` rather than upstream/vendor defaults like `grafana`
 - Reserve `51000-51999` for image-managed service accounts in this repo
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
-- Current allocation: `_nas_grafana` uses host UID/GID `51210`
+- Current allocation: `_nas_grafana` uses host UID/GID `51210`; `_nas_vmalert` uses host UID/GID `51220`
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
 
 ## Rootless Quadlet Note
 
 Current state:
 - Most active Quadlets in this repo are rootful system units under `overlay-root/etc/containers/systemd/`
-- Grafana is the exception: it is defined as a rootless admin-managed user Quadlet under `overlay-root/etc/containers/systemd/users/51210/grafana.container`
+- Grafana and vmalert are the current exceptions: they are defined as rootless admin-managed user Quadlets under `overlay-root/etc/containers/systemd/users/51210/grafana.container` and `overlay-root/etc/containers/systemd/users/51220/vmalert.container`
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
 - In practice, placing a user Quadlet under `/usr/share/containers/systemd/users/${UID}/` caused Fedora 43 with Podman 5.8.1 to generate a system unit in `system.slice`, because that path is still underneath the rootful `/usr/share/containers/systemd/` tree. Use `/etc/containers/systemd/users/${UID}/` for rootless service users in this repo.
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
-- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana` ranges in `/etc/subuid` and `/etc/subgid`
+- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana` and `_nas_vmalert` ranges in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
 - Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently
 - Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
+- vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance
