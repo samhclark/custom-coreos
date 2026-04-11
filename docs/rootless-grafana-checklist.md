@@ -184,6 +184,19 @@ curl -v http://127.0.0.1:3000/api/datasources
 
 ## Common Failure Patterns
 
+### Fully locked service account
+
+Symptoms:
+- `user@51210.service` fails with `status=224/PAM`
+- journal mentions `_nas_grafana has expired` or `User account has expired`
+
+Check:
+
+```bash
+sudo passwd -S _nas_grafana
+sudo chage -l _nas_grafana
+```
+
 ### Missing subordinate IDs
 
 Symptoms:

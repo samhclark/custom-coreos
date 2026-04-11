@@ -110,6 +110,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     systemctl enable \
+        ensure-nas-grafana-account.service \
         age-tpm-identity.service \
         bootc-fetch-apply-updates.timer \
         nftables.service \
