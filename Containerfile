@@ -111,6 +111,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     systemctl enable \
         ensure-nas-grafana-account.service \
+        ensure-nas-vmalert-account.service \
         age-tpm-identity.service \
         bootc-fetch-apply-updates.timer \
         nftables.service \
@@ -135,8 +136,9 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
+    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/vmalert(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R /usr/share/custom-coreos/grafana'
+    restorecon -F -R /usr/share/custom-coreos/grafana /usr/share/custom-coreos/vmalert'
 
 RUN ["bootc", "container", "lint"]
 

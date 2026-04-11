@@ -1,0 +1,14 @@
+[Unit]
+Description=Ensure _nas_vmalert can run a lingering user manager
+DefaultDependencies=no
+After=local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
+Before=sysinit.target systemd-logind.service user@51220.service
+ConditionPathExists=/etc/passwd
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ensure-nas-vmalert-account.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
