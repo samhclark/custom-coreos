@@ -226,6 +226,7 @@ Rootless service accounts use namespaced host usernames and a reserved high UID 
 - Use `511xx` for storage, `512xx` for observability, and `513xx` for ingress/edge.
 - Prefer names such as `_nas_grafana` over upstream defaults such as `grafana`.
 - Current example: Grafana uses `_nas_grafana` with host UID/GID `51210`.
+- Rootless Quadlets for image-managed service users belong under `/etc/containers/systemd/users/$UID/`, not under `/usr/share/containers/systemd/users/$UID/`.
 
 That bootstrap path is not especially elegant, but it is acceptable for a single-user personal system.
 

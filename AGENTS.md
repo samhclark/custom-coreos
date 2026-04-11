@@ -41,7 +41,7 @@ These are considered active and in use on the real machine unless explicitly sta
 - `victoria-metrics.container` - metrics storage
 - `vmalert.container` - alert rule evaluation
 - `alertmanager.container` - notification fanout
-- `grafana.container` - dashboards; currently the first rootless Quadlet experiment, shipped under `usr/share/containers/systemd/users/51210/`
+- `grafana.container` - dashboards; currently the first rootless Quadlet experiment, shipped under `etc/containers/systemd/users/51210/`
 
 ### Supporting Host Units
 
@@ -262,11 +262,11 @@ Images include labels for future deduplication:
 
 Current state:
 - Most active Quadlets in this repo are rootful system units under `overlay-root/etc/containers/systemd/`
-- Grafana is the exception: it is defined as a rootless distribution-managed user Quadlet under `overlay-root/usr/share/containers/systemd/users/51210/grafana.container`
+- Grafana is the exception: it is defined as a rootless admin-managed user Quadlet under `overlay-root/etc/containers/systemd/users/51210/grafana.container`
 
 Useful reference points for future rootless work:
-- The vendored `podman-systemd.unit.5.md` in this repo is older than current upstream docs: it documents rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`, but newer official docs also include `/usr/share/containers/systemd/users/${UID}` and `/usr/share/containers/systemd/users/`
-- On this development system, `podman-5.8.1` accepts `/usr/share/containers/systemd/users/51210/` when verified via `podman-system-generator --user --dryrun`
+- The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
+- In practice, placing a user Quadlet under `/usr/share/containers/systemd/users/${UID}/` caused Fedora 43 with Podman 5.8.1 to generate a system unit in `system.slice`, because that path is still underneath the rootful `/usr/share/containers/systemd/` tree. Use `/etc/containers/systemd/users/${UID}/` for rootless service users in this repo.
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
 - Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana` ranges in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources

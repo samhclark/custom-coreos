@@ -6,7 +6,7 @@ machine boots into an image containing these changes.
 Assumptions:
 - the host account is `_nas_grafana`
 - the host UID/GID is `51210`
-- the rootless Quadlet path is `/usr/share/containers/systemd/users/51210/grafana.container`
+- the rootless Quadlet path is `/etc/containers/systemd/users/51210/grafana.container`
 - Grafana mutable state is `/var/lib/grafana`
 - Grafana home for rootless Podman state is `/var/home/_nas_grafana`
 - image-controlled Grafana provisioning lives under `/usr/share/custom-coreos/grafana`
@@ -197,6 +197,20 @@ sudo passwd -S _nas_grafana
 sudo chage -l _nas_grafana
 ```
 
+### Quadlet installed in a rootful search path
+
+Symptoms:
+- `grafana.service` is active, but it runs in `system.slice`
+- `sudo -u _nas_grafana ... podman ps` shows no Grafana container
+- `systemctl --user list-unit-files` for `_nas_grafana` does not include `grafana.service`
+
+Check:
+
+```bash
+sudo systemctl status grafana.service --no-pager
+sudo ls -l /etc/containers/systemd/users/51210/grafana.container /usr/share/containers/systemd/users/51210/grafana.container 2>/dev/null
+```
+
 ### Missing subordinate IDs
 
 Symptoms:
@@ -257,10 +271,10 @@ getent passwd _nas_grafana
 grep '^_nas_grafana:' /etc/subuid /etc/subgid
 loginctl show-user _nas_grafana -p Linger -p State
 systemctl status user@51210.service
-systemctl --machine _nas_grafana@ --user status grafana.service
+sudo systemctl --machine _nas_grafana@ --user status grafana.service
 journalctl -b -u user@51210.service
 journalctl --machine _nas_grafana@ --user -u grafana.service -b
-sudo -u _nas_grafana HOME=/var/home/_nas_grafana XDG_RUNTIME_DIR=/run/user/51210 podman ps -a --no-trunc
-sudo -u _nas_grafana HOME=/var/home/_nas_grafana XDG_RUNTIME_DIR=/run/user/51210 podman logs grafana
+sudo -u _nas_grafana env HOME=/var/home/_nas_grafana XDG_RUNTIME_DIR=/run/user/51210 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/51210/bus bash -lc 'cd / && podman ps -a --no-trunc'
+sudo -u _nas_grafana env HOME=/var/home/_nas_grafana XDG_RUNTIME_DIR=/run/user/51210 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/51210/bus bash -lc 'cd / && podman logs grafana'
 ls -Zd /usr/share/custom-coreos/grafana /var/lib/grafana
 ```
