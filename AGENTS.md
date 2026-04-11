@@ -272,7 +272,7 @@ Useful reference points for future rootless work:
 - Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana` and `_nas_vmalert` ranges in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
-- Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently
+- Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently, or use a bounded `ExecStartPre=` readiness loop when startup requires a local dependency to answer first
 - Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
 - vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`

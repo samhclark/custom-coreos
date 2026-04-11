@@ -131,6 +131,11 @@ A rootless user unit should not directly depend on system units like
 `victoria-metrics.service`. Keep the user service able to start independently
 and let the application retry if its upstream is not ready yet.
 
+If startup still needs a local system-managed dependency to be reachable first,
+prefer a bounded `ExecStartPre=` readiness loop over cross-manager `Requires=`
+and `After=` edges. That keeps the ownership boundary clear while avoiding
+noisy early failures during boot.
+
 ### 8. Boot-time repair may be necessary on upgrades
 
 bootc upgrades preserve `/var`, which means old account metadata, missing

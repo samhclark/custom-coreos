@@ -15,8 +15,10 @@ Exec=-datasource.url=http://127.0.0.1:8428 -remoteWrite.url=http://127.0.0.1:842
 Pull=newer
 
 [Service]
+ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do /usr/bin/curl -fsS http://127.0.0.1:8428/-/healthy >/dev/null 2>&1 && exit 0; sleep 2; done; echo "VictoriaMetrics did not become ready on 127.0.0.1:8428 within 300 seconds" >&2; exit 1'
 Restart=always
 RestartSec=30
+TimeoutStartSec=330
 
 [Install]
 WantedBy=default.target
