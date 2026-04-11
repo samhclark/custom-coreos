@@ -1,0 +1,29 @@
+[Unit]
+Description=SERVICE_DESCRIPTION
+Documentation=SERVICE_DOCUMENTATION_URL
+
+[Container]
+ContainerName=SERVICE_NAME
+Image=IMAGE_REF
+
+# Keep this only if the service genuinely needs host networking.
+Network=host
+
+# Rootless on the host does not require a non-root UID inside the container.
+# Keep or change this based on image behavior.
+User=0
+
+# Read-only image-controlled assets. Remove if the service does not need them.
+Volume=ASSET_PATH:/etc/SERVICE_NAME:ro
+
+# Persistent mutable state.
+Volume=DATA_PATH:DATA_PATH
+
+Pull=newer
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target

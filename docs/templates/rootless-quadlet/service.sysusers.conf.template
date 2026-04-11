@@ -1,0 +1,4 @@
+# Host account for the rootless SERVICE_NAME Quadlet. Use "u", not "u!",
+# so the lingering user manager can still start through PAM.
+g HOST_USER HOST_UID
+u HOST_USER HOST_UID:HOST_UID "SERVICE_DESCRIPTION service user" /var/home/HOST_USER /sbin/nologin

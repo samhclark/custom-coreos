@@ -3,6 +3,9 @@
 This checklist is for validating the first rootless Quadlet conversion after the
 machine boots into an image containing these changes.
 
+For the design decisions and the reusable pattern behind this rollout, start
+with `docs/rootless-quadlet-playbook.md`.
+
 Assumptions:
 - the host account is `_nas_grafana`
 - the host UID/GID is `51210`

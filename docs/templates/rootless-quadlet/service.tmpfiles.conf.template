@@ -1,0 +1,17 @@
+# Mutable service data
+d DATA_PATH 0750 HOST_USER HOST_USER -
+Z DATA_PATH 0750 HOST_USER HOST_USER -
+
+# Rootless Podman home and state
+d /var/home/HOST_USER 0750 HOST_USER HOST_USER -
+d /var/home/HOST_USER/.config 0750 HOST_USER HOST_USER -
+d /var/home/HOST_USER/.config/containers 0750 HOST_USER HOST_USER -
+d /var/home/HOST_USER/.local 0750 HOST_USER HOST_USER -
+d /var/home/HOST_USER/.local/share 0750 HOST_USER HOST_USER -
+d /var/home/HOST_USER/.local/share/containers 0750 HOST_USER HOST_USER -
+d /var/home/HOST_USER/.cache 0750 HOST_USER HOST_USER -
+
+# Declarative linger marker. The interactive equivalent is
+# `loginctl enable-linger HOST_USER`.
+d /var/lib/systemd/linger 0755 root root -
+f /var/lib/systemd/linger/HOST_USER 0644 root root -
