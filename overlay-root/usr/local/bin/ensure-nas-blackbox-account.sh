@@ -82,11 +82,6 @@ ensure_subid_entry /etc/subuid
 ensure_subid_entry /etc/subgid
 ensure_fcontext_rule "${BLACKBOX_CONFIG_FCONTEXT}"
 
-if [[ -e /usr/share/custom-coreos/blackbox-exporter ]]; then
-    log "Restoring SELinux labels for /usr/share/custom-coreos/blackbox-exporter"
-    restorecon -F -R /usr/share/custom-coreos/blackbox-exporter
-fi
-
 if systemctl is-failed --quiet "user@${USER_UID}.service"; then
     log "Retrying user@${USER_UID}.service after account repair"
     systemctl reset-failed "user@${USER_UID}.service"
