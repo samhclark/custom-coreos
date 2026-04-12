@@ -1,10 +1,9 @@
 #!/bin/bash
-# ABOUTME: Podman shell driver lookup script. Decrypts the named secret
-# using the TPM-sealed age identity and writes plaintext to stdout.
+# ABOUTME: Podman shell driver lookup script. Decrypts the named secret using
+# systemd-creds and writes plaintext to stdout.
 
 set -euo pipefail
 
-IDENTITY_FILE="/var/lib/age-tpm/identity.txt"
 STORE_DIR="/var/lib/podman-secrets"
 
 if [[ -z "${SECRET_ID:-}" ]]; then
@@ -12,11 +11,11 @@ if [[ -z "${SECRET_ID:-}" ]]; then
     exit 1
 fi
 
-SECRET_FILE="${STORE_DIR}/${SECRET_ID}.age"
+SECRET_FILE="${STORE_DIR}/${SECRET_ID}.cred"
 
-if [[ ! -f "$SECRET_FILE" ]]; then
+if [[ ! -f "${SECRET_FILE}" ]]; then
     echo "ERROR: Secret not found: ${SECRET_ID}" >&2
     exit 1
 fi
 
-age -d -i "$IDENTITY_FILE" "$SECRET_FILE"
+systemd-creds decrypt "${SECRET_FILE}" -

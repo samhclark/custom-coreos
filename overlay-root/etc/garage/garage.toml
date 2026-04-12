@@ -25,6 +25,7 @@ compression_level = 1
 
 # RPC configuration (internal cluster communication)
 # For single-node, only localhost matters. RPC is not exposed externally.
+# Secrets are injected by Podman as files under /run/secrets.
 rpc_bind_addr = "[::]:3901"
 rpc_public_addr = "127.0.0.1:3901"
 rpc_secret_file = "/run/secrets/garage-rpc-secret"
@@ -44,7 +45,8 @@ index = "index.html"
 
 [admin]
 # Admin API endpoint (for garage CLI and metrics)
-# Tokens are generated on first boot and stored as podman secrets
+# Tokens are generated on first boot and stored as Podman secrets backed by
+# systemd-creds-encrypted files on the host.
 api_bind_addr = "[::]:3903"
 admin_token_file = "/run/secrets/garage-admin-token"
 metrics_token_file = "/run/secrets/garage-metrics-token"

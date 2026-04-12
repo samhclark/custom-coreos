@@ -47,7 +47,6 @@ These are considered active and in use on the real machine unless explicitly sta
 ### Supporting Host Units
 
 Important non-container units:
-- `age-tpm-identity.service` - creates the TPM-sealed age identity used by the Podman shell secret driver
 - `garage-generate-secrets.service` - auto-generates Garage secrets on first boot
 - `alertmanager-generate-config.service` - renders Alertmanager config from stored secrets
 - `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
@@ -72,10 +71,11 @@ Important non-container units:
 ### Secrets Model
 
 - Podman is configured to use the shell secret driver
-- Secret material is encrypted at rest with `age`, using a TPM-sealed `age-plugin-tpm` identity stored in `/var/lib/age-tpm`
+- Secret material is encrypted at rest with `systemd-creds` in `/var/lib/podman-secrets/*.cred`
+- `nas-secrets` is the admin-facing wrapper for creating, rotating, showing, and deleting those Podman secrets
+- `test-podman-secret-driver.sh` is the host-level smoke test for `podman secret create/show/run/rm`; it requires a live TPM-backed host and is not part of CI
 - Garage secrets are generated automatically if missing
 - Other service secrets are still manual
-- Migration scripts may remain in-tree even if they were only needed once
 
 ### Manual Bootstrap Reality
 

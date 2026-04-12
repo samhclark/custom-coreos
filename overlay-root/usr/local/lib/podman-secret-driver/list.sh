@@ -6,6 +6,6 @@ set -euo pipefail
 STORE_DIR="/var/lib/podman-secrets"
 
 shopt -s nullglob
-for f in "${STORE_DIR}"/*.age; do
-    basename "$f" .age
+for f in "${STORE_DIR}"/*.cred; do
+    basename "${f}" .cred
 done

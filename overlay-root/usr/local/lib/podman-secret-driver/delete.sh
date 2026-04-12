@@ -10,11 +10,11 @@ if [[ -z "${SECRET_ID:-}" ]]; then
     exit 1
 fi
 
-SECRET_FILE="${STORE_DIR}/${SECRET_ID}.age"
+SECRET_FILE="${STORE_DIR}/${SECRET_ID}.cred"
 
-if [[ ! -f "$SECRET_FILE" ]]; then
+if [[ ! -f "${SECRET_FILE}" ]]; then
     echo "ERROR: Secret not found: ${SECRET_ID}" >&2
     exit 1
 fi
 
-rm -f "$SECRET_FILE"
+rm -f "${SECRET_FILE}"

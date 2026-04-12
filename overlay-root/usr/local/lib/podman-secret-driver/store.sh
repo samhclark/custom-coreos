@@ -1,10 +1,9 @@
 #!/bin/bash
 # ABOUTME: Podman shell driver store script. Encrypts secret data from stdin
-# with age using the TPM-sealed identity's recipient and writes to the store.
+# with systemd-creds and writes it to the backing store.
 
 set -euo pipefail
 
-IDENTITY_FILE="/var/lib/age-tpm/identity.txt"
 STORE_DIR="/var/lib/podman-secrets"
 
 if [[ -z "${SECRET_ID:-}" ]]; then
@@ -12,10 +11,14 @@ if [[ -z "${SECRET_ID:-}" ]]; then
     exit 1
 fi
 
-RECIPIENT="$(age-plugin-tpm -y "$IDENTITY_FILE")"
-if [[ -z "$RECIPIENT" ]]; then
-    echo "ERROR: Could not extract recipient from $IDENTITY_FILE" >&2
+install -d -m 0700 "${STORE_DIR}"
+tmp="$(mktemp "${STORE_DIR}/${SECRET_ID}.XXXXXX.cred")"
+trap 'rm -f "${tmp}"' EXIT
+
+if ! systemd-creds encrypt --with-key=tpm2+host - "${tmp}"; then
     exit 1
 fi
 
-age -r "$RECIPIENT" -o "${STORE_DIR}/${SECRET_ID}.age"
+chmod 0600 "${tmp}"
+mv -f "${tmp}" "${STORE_DIR}/${SECRET_ID}.cred"
+trap - EXIT

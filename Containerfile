@@ -1,8 +1,6 @@
 # Build arguments - all required, no defaults
 ARG KERNEL_VERSION
 ARG ZFS_VERSION
-ARG AGE_PLUGIN_TPM_VERSION=v1.0.1
-ARG AGE_PLUGIN_TPM_SHA256=ba5930cef12998e1bf5e979bcbb45e4e4cefdac773144b57f7e9e391c8c7e3fe
 
 #####
 #
@@ -22,8 +20,6 @@ ARG ZFS_VERSION
 FROM quay.io/fedora/fedora-coreos:stable
 ARG KERNEL_VERSION
 ARG ZFS_VERSION
-ARG AGE_PLUGIN_TPM_VERSION
-ARG AGE_PLUGIN_TPM_SHA256
 
 # Add container labels for future deduplication
 LABEL org.opencontainers.image.title="Custom CoreOS with ZFS and Tailscale"
@@ -66,17 +62,8 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
-      "d /var/lib/age-tpm 0700 root root -" \
       "d /var/lib/podman-secrets 0700 root root -" \
       > /usr/lib/tmpfiles.d/podman-secret-driver.conf'
-
-RUN /bin/bash -c 'set -euo pipefail; \
-    curl -fsSL -o /tmp/age-plugin-tpm.tar.gz \
-        "https://github.com/Foxboron/age-plugin-tpm/releases/download/${AGE_PLUGIN_TPM_VERSION}/age-plugin-tpm-${AGE_PLUGIN_TPM_VERSION}-linux-amd64.tar.gz"; \
-    echo "${AGE_PLUGIN_TPM_SHA256}  /tmp/age-plugin-tpm.tar.gz" | sha256sum -c -; \
-    tar xzf /tmp/age-plugin-tpm.tar.gz -C /tmp; \
-    install -m 0755 /tmp/age-plugin-tpm/age-plugin-tpm /usr/local/bin/age-plugin-tpm; \
-    rm -rf /tmp/age-plugin-tpm.tar.gz /tmp/age-plugin-tpm'
 
 RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
@@ -88,7 +75,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     arch="$(rpm -qa kernel --queryformat "%{ARCH}")"; \
     rpm -e --nodeps nfs-utils-coreos; \
     dnf install -y \
-        age \
         cockpit-bridge \
         cockpit-kdump \
         cockpit-machines \
@@ -113,7 +99,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         ensure-nas-blackbox-account.service \
         ensure-nas-grafana-account.service \
         ensure-nas-vmalert-account.service \
-        age-tpm-identity.service \
         bootc-fetch-apply-updates.timer \
         nftables.service \
         tailscaled.service \

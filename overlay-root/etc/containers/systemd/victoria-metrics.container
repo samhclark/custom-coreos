@@ -2,8 +2,8 @@
 Description=VictoriaMetrics Time Series Database
 Documentation=https://docs.victoriametrics.com/
 Wants=network-online.target nss-lookup.target
-After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-victoria-metrics-dataset.service age-tpm-identity.service
-Requires=zfs-create-victoria-metrics-dataset.service garage-generate-secrets.service age-tpm-identity.service
+After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-victoria-metrics-dataset.service
+Requires=zfs-create-victoria-metrics-dataset.service garage-generate-secrets.service
 
 [Container]
 ContainerName=victoria-metrics

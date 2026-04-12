@@ -2,8 +2,8 @@
 Description=Garage S3-compatible Object Storage
 Documentation=https://garagehq.deuxfleurs.fr/
 Wants=network-online.target nss-lookup.target
-After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-garage-datasets.service age-tpm-identity.service
-Requires=garage-generate-secrets.service zfs-create-garage-datasets.service age-tpm-identity.service
+After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-garage-datasets.service
+Requires=garage-generate-secrets.service zfs-create-garage-datasets.service
 
 [Container]
 ContainerName=garage
@@ -18,7 +18,8 @@ Volume=/run/systemd/journal/socket:/run/systemd/journal/socket
 # Mount configuration (read-only)
 Volume=/etc/garage/garage.toml:/etc/garage.toml:ro,Z
 
-# Secrets injected via podman secrets (encrypted at rest with age + TPM)
+# Secrets injected via podman secrets. The shell driver stores them encrypted
+# at rest with systemd-creds in /var/lib/podman-secrets.
 Secret=garage-rpc-secret,mode=0400
 Secret=garage-admin-token,mode=0400
 Secret=garage-metrics-token,mode=0400

@@ -215,7 +215,7 @@ Root unlock is TPM-backed but deliberately not bound to PCR values. Binding only
 
 Some parts of the system are still intentionally bootstrapped by hand after installation:
 - Additional encrypted data volumes are enrolled with TPM manually.
-- Some Podman secrets are created manually over SSH on the NAS.
+- Some Podman secrets are created manually over SSH on the NAS with `nas-secrets`.
 - Garage secrets are auto-generated on first boot, but service-specific secrets such as Cloudflare and Pushover are not yet provisioned declaratively.
 
 ### Host Service UIDs
@@ -278,7 +278,8 @@ sudo tailscale up
 ```
 
 Additional post-install steps still happen manually over SSH:
-- Create non-generated Podman secrets such as `cf-api-token`, `pushover-user-key`, and `pushover-api-token`
+- Create non-generated Podman secrets such as `cf-api-token`, `pushover-user-key`, and `pushover-api-token` with `nas-secrets`
+- Validate the Podman shell secret driver after secret-storage changes with `sudo test-podman-secret-driver.sh`
 - Enroll any non-root LUKS volumes with TPM and add them to `crypttab`
 - Import the ZFS pool if it is not imported automatically
 

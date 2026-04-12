@@ -1,7 +1,6 @@
 #!/bin/bash
 # ABOUTME: Generates Garage API tokens and stores them as podman secrets.
-# Uses the shell driver backed by age + age-plugin-tpm for encryption at rest.
-# This script is idempotent - it only creates secrets that don't exist.
+# The shell driver keeps them encrypted at rest with systemd-creds.
 
 set -euo pipefail
 

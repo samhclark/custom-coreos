@@ -1,6 +1,7 @@
 #!/bin/bash
-# ABOUTME: Generates Alertmanager config by substituting Pushover secrets into the template.
-# Reads secrets from the podman secret shell driver (age + TPM encrypted).
+# ABOUTME: Generates Alertmanager config by substituting Pushover secrets into
+# the template. Reads secrets through the Podman shell driver, which stores
+# them encrypted with systemd-creds.
 
 set -euo pipefail
 

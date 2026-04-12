@@ -1,6 +1,6 @@
 #!/bin/bash
-# ABOUTME: Validates that systemd-creds encrypt/decrypt works with TPM on this
-# machine. Run this before migrating secrets from age to systemd-creds.
+# ABOUTME: Low-level validation that systemd-creds encrypt/decrypt works with
+# TPM on this machine. This does not exercise the Podman shell secret driver.
 
 set -euo pipefail
 
