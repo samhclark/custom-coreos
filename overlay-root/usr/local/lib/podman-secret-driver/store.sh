@@ -15,7 +15,10 @@ install -d -m 0700 "${STORE_DIR}"
 tmp="$(mktemp "${STORE_DIR}/${SECRET_ID}.XXXXXX.cred")"
 trap 'rm -f "${tmp}"' EXIT
 
-if ! systemd-creds encrypt --with-key=tpm2+host - "${tmp}"; then
+# systemd-creds embeds a credential name and verifies it on decrypt. Use the
+# final backing-file name rather than the mktemp path so the post-write rename
+# does not invalidate the credential.
+if ! systemd-creds encrypt --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"; then
     exit 1
 fi
 

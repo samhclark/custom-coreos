@@ -18,4 +18,4 @@ if [[ ! -f "${SECRET_FILE}" ]]; then
     exit 1
 fi
 
-systemd-creds decrypt "${SECRET_FILE}" -
+systemd-creds decrypt --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
