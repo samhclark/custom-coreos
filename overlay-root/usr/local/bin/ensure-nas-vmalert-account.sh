@@ -1,6 +1,6 @@
 #!/bin/bash
-# ABOUTME: Repairs the persisted _nas_vmalert account state so the lingering
-# user manager can start after bootc upgrades.
+# ABOUTME: Ensures the _nas_vmalert rootless service account has the state
+# required for a lingering user manager.
 
 set -euo pipefail
 
@@ -83,7 +83,7 @@ ensure_subid_entry /etc/subgid
 ensure_fcontext_rule "${VMALERT_CONFIG_FCONTEXT}"
 
 if systemctl is-failed --quiet "user@${USER_UID}.service"; then
-    log "Retrying user@${USER_UID}.service after account repair"
+    log "Retrying user@${USER_UID}.service after account setup"
     systemctl reset-failed "user@${USER_UID}.service"
     systemctl start "user@${USER_UID}.service"
 fi

@@ -1,5 +1,5 @@
 [Unit]
-Description=Ensure _nas_blackbox can run a lingering user manager
+Description=Prepare _nas_blackbox for a lingering user manager
 DefaultDependencies=no
 After=local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
 Before=sysinit.target systemd-logind.service user@51230.service
