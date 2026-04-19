@@ -174,30 +174,26 @@ user-scoped systemd-creds.
 
 **Changes needed**:
 
-The driver scripts need to detect whether they are running as root or as a
-service user and adjust behavior accordingly:
+The driver scripts need to detect whether they are operating on root's Podman
+store or a rootless user's Podman store. Do not rely only on `id -u`: Podman may
+invoke shell secret-driver helpers from a user namespace where namespace UID 0
+maps back to the rootless service user's host UID. The helper should resolve
+the host UID through `/proc/self/uid_map`; host UID 0 uses
+`/var/lib/podman-secrets`, and non-root host UIDs use
+`/var/lib/podman-secrets/<username>`.
 
+For `store.sh`, add `--user` when the resolved host UID is non-root:
 ```bash
-# In each script, replace the fixed STORE_DIR with:
-if [[ "$(id -u)" -eq 0 ]]; then
-    STORE_DIR="/var/lib/podman-secrets"
-else
-    STORE_DIR="/var/lib/podman-secrets/$(id -un)"
-fi
-```
-
-For `store.sh`, add `--user` when running as a non-root user:
-```bash
-if [[ "$(id -u)" -eq 0 ]]; then
+if [[ "${host_uid}" -eq 0 ]]; then
     systemd-creds encrypt --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"
 else
     systemd-creds encrypt --user --with-key=host+tpm2 --name "${SECRET_ID}.cred" - "${tmp}"
 fi
 ```
 
-For `lookup.sh`, add `--user` when running as a non-root user:
+For `lookup.sh`, add `--user` when the resolved host UID is non-root:
 ```bash
-if [[ "$(id -u)" -eq 0 ]]; then
+if [[ "${host_uid}" -eq 0 ]]; then
     systemd-creds decrypt --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
 else
     systemd-creds decrypt --user --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
@@ -213,6 +209,7 @@ target user.
 - `overlay-root/usr/local/lib/podman-secret-driver/lookup.sh`
 - `overlay-root/usr/local/lib/podman-secret-driver/delete.sh`
 - `overlay-root/usr/local/lib/podman-secret-driver/list.sh`
+- `overlay-root/usr/local/lib/podman-secret-driver/common.sh`
 
 **Notes**:
 - The `containers.conf.d/50-secret-driver.conf` does not change. The same
@@ -305,7 +302,9 @@ install -d -m 0700 -o "$user" -g "$user" "/var/lib/podman-secrets/$user"
 This is done in the distribution service rather than in tmpfiles.d because only
 users that actually have secrets need a store directory. The root store
 (`/var/lib/podman-secrets/`) is already created by the existing
-`podman-secret-driver.conf` tmpfiles entry.
+`podman-secret-driver.conf` tmpfiles entry. The parent directory is `0711 root
+root` so rootless users can traverse to their own private `0700` subdirectory
+without being able to list the root store.
 
 #### Script flow
 

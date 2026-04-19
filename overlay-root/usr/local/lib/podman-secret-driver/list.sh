@@ -3,13 +3,11 @@
 
 set -euo pipefail
 
-if [[ "$(id -u)" -eq 0 ]]; then
-    STORE_DIR="/var/lib/podman-secrets"
-else
-    STORE_DIR="/var/lib/podman-secrets/$(id -un)"
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/common.sh"
+podman_secret_store_context
 
 shopt -s nullglob
-for f in "${STORE_DIR}"/*.cred; do
+for f in "${SECRET_STORE_DIR}"/*.cred; do
     basename "${f}" .cred
 done

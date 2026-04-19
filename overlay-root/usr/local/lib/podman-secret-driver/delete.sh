@@ -3,18 +3,16 @@
 
 set -euo pipefail
 
-if [[ "$(id -u)" -eq 0 ]]; then
-    STORE_DIR="/var/lib/podman-secrets"
-else
-    STORE_DIR="/var/lib/podman-secrets/$(id -un)"
-fi
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/common.sh"
+podman_secret_store_context
 
 if [[ -z "${SECRET_ID:-}" ]]; then
     echo "ERROR: SECRET_ID not set" >&2
     exit 1
 fi
 
-SECRET_FILE="${STORE_DIR}/${SECRET_ID}.cred"
+SECRET_FILE="${SECRET_STORE_DIR}/${SECRET_ID}.cred"
 
 if [[ ! -f "${SECRET_FILE}" ]]; then
     echo "ERROR: Secret not found: ${SECRET_ID}" >&2

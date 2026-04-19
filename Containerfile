@@ -72,7 +72,7 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
-      "d /var/lib/podman-secrets 0700 root root -" \
+      "d /var/lib/podman-secrets 0711 root root -" \
       > /usr/lib/tmpfiles.d/podman-secret-driver.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
