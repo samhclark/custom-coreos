@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SOPS_FILE="/usr/share/custom-coreos/secrets/secrets.sops.yaml"
-ROOTFUL_MANIFEST="/usr/share/custom-coreos/secrets/rootful-secrets.yaml"
+ROOTFUL_MANIFEST="/usr/share/custom-coreos/secrets/rootful-secrets.json"
 QUADLET_DIR="/usr/share/custom-coreos/quadlets"
 AGE_CREDENTIAL="/var/lib/nas-secrets/age-key.cred"
 STATE_DIR="/var/lib/nas-secrets"
@@ -45,18 +45,17 @@ require_file() {
 }
 
 read_rootful_secrets() {
-    awk '
-        /^[[:space:]]*(#|$)/ { next }
-        /^[[:space:]]*secrets:[[:space:]]*$/ { in_list = 1; next }
-        in_list && /^[[:space:]]*-[[:space:]]*/ {
-            sub(/^[[:space:]]*-[[:space:]]*/, "")
-            sub(/[[:space:]]*#.*/, "")
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "")
-            gsub(/^["'\''"]|["'\''"]$/, "")
-            if ($0 != "") print
-            next
-        }
-        in_list && /^[^[:space:]]/ { in_list = 0 }
+    jq -r '
+        if (.secrets | type) != "array" then
+            error("rootful secrets manifest must contain a secrets array")
+        else
+            .secrets[]
+            | if type == "string" then
+                .
+              else
+                error("rootful secrets manifest entries must be strings")
+              end
+        end
     ' "${ROOTFUL_MANIFEST}"
 }
 

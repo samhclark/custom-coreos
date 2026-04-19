@@ -265,18 +265,19 @@ two sources:
    `_nas_grafana`."
 
 2. **Rootful services** (no TOML configs): A separate manifest file at
-   `overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.yaml`
+   `overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.json`
    declares which secrets go to root:
-   ```yaml
-   # Secrets distributed to the rootful (root) podman secret store.
-   # Rootless secret assignments are derived from quadlets/*.toml configs.
-   secrets:
-     - garage-rpc-secret
-     - garage-admin-token
-     - garage-metrics-token
-     - cf-api-token
-     - pushover-user-key
-     - pushover-api-token
+   ```json
+   {
+     "secrets": [
+       "garage-rpc-secret",
+       "garage-admin-token",
+       "garage-metrics-token",
+       "cf-api-token",
+       "pushover-user-key",
+       "pushover-api-token"
+     ]
+   }
    ```
 
 A single secret can appear in both — e.g., `garage-metrics-token` may be
@@ -324,7 +325,7 @@ users that actually have secrets need a store directory. The root store
    shred -u /tmp/age-key.txt
 
 4. Build the secret-to-user mapping:
-   a. Read /usr/share/custom-coreos/secrets/rootful-secrets.yaml
+   a. Read /usr/share/custom-coreos/secrets/rootful-secrets.json
       → all listed secrets map to user "root"
    b. Read each /usr/share/custom-coreos/quadlets/*.toml
       → for each file, map [container.secrets].name entries to
@@ -421,7 +422,7 @@ sudo -u _nas_grafana env HOME=/var/home/_nas_grafana \
 **Files created**:
 - `NEW: overlay-root/usr/local/bin/sops-distribute-secrets.sh`
 - `NEW: overlay-root/etc/systemd/system/sops-distribute-secrets.service`
-- `NEW: overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.yaml`
+- `NEW: overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.json`
 
 **Files modified**:
 - `overlay-root/etc/containers/systemd/garage.container`
@@ -782,7 +783,7 @@ done
 .sops.yaml
 secrets/age-recipients.txt
 overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml
-overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.yaml
+overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.json
 overlay-root/usr/local/bin/sops-distribute-secrets.sh
 overlay-root/etc/systemd/system/sops-distribute-secrets.service
 generate-quadlets.py
