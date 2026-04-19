@@ -32,6 +32,7 @@ podman_secret_store_context() {
     if [[ "${host_uid}" -eq 0 ]]; then
         SECRET_STORE_DIR="/var/lib/podman-secrets"
         SECRET_CREDS_MODE=()
+        SECRET_CREDS_KEY="tpm2+host"
         return
     fi
 
@@ -43,4 +44,7 @@ podman_secret_store_context() {
 
     SECRET_STORE_DIR="/var/lib/podman-secrets/${user}"
     SECRET_CREDS_MODE=(--user)
+    # The host key lives at /var/lib/systemd/credential.secret and is root-only.
+    # User-scoped credentials still bind to UID, username, and machine-id.
+    SECRET_CREDS_KEY="tpm2"
 }

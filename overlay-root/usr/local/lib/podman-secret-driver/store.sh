@@ -20,7 +20,7 @@ trap 'rm -f "${tmp}"' EXIT
 # systemd-creds embeds a credential name and verifies it on decrypt. Use the
 # final backing-file name rather than the mktemp path so the post-write rename
 # does not invalidate the credential.
-if ! systemd-creds encrypt "${SECRET_CREDS_MODE[@]}" --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"; then
+if ! systemd-creds encrypt "${SECRET_CREDS_MODE[@]}" --with-key="${SECRET_CREDS_KEY}" --name "${SECRET_ID}.cred" - "${tmp}"; then
     exit 1
 fi
 
