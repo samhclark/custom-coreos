@@ -1,2 +1,13 @@
 ignition.json
 .codex
+
+# Plaintext secret material and local age identities.
+age-key.txt
+age-key*.txt
+*.agekey
+*.cred
+secrets/*.key
+secrets/*identity*
+secrets/*private*
+overlay-root/usr/share/custom-coreos/secrets/*.plain.yaml
+overlay-root/usr/share/custom-coreos/secrets/*.decrypted.yaml

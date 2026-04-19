@@ -47,7 +47,7 @@ These are considered active and in use on the real machine unless explicitly sta
 ### Supporting Host Units
 
 Important non-container units:
-- `garage-generate-secrets.service` - auto-generates Garage secrets on first boot
+- `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and distributes Podman secrets at boot
 - `alertmanager-generate-config.service` - renders Alertmanager config from stored secrets
 - `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
 - `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
@@ -71,23 +71,19 @@ Important non-container units:
 ### Secrets Model
 
 - Podman is configured to use the shell secret driver
-- Secret material is encrypted at rest with `systemd-creds` in `/var/lib/podman-secrets/*.cred`
+- Secret material is encrypted in the repo with SOPS at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`
+- The SOPS age private key is expected on the NAS as a `systemd-creds` file at `/var/lib/nas-secrets/age-key.cred`
+- Distributed Podman secret material is encrypted at rest with `systemd-creds` in `/var/lib/podman-secrets/*.cred` and per-user subdirectories for rootless services
 - `nas-secrets` is the admin-facing wrapper for creating, rotating, showing, and deleting those Podman secrets
 - `test-podman-secret-driver.sh` is the host-level smoke test for `podman secret create/show/run/rm`; it requires a live TPM-backed host and is not part of CI
-- Garage secrets are generated automatically if missing
-- Other service secrets are still manual
+- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, and Alertmanager secrets
 
 ### Manual Bootstrap Reality
 
 This repository intentionally still has some manual host bootstrap:
 - non-root LUKS volumes are enrolled with TPM manually after install
-- some Podman secrets are created manually over SSH
+- the SOPS age private key credential must be installed manually on the NAS
 - `tank` may still need to be imported manually depending on system state
-
-Specifically, expect manual creation/management of secrets such as:
-- `cf-api-token`
-- `pushover-user-key`
-- `pushover-api-token`
 
 This is acceptable because the system has one real user and is published as a reference project, not as a turnkey product.
 
@@ -120,7 +116,7 @@ This is acceptable because the system has one real user and is published as a re
 
 ### Verification
 - After changes, run `just generate-ignition` and `just test-build`.
-- `bootc container lint` warnings about `/var` cache artifacts are currently expected and can be ignored for now.
+- `bootc container lint` warnings about `/var` cache artifacts are currently expected and can be ignored for now. Warnings about `/var/usrlocal` usually mean something was copied into `/usr/local` before this image's overlay replaced Fedora CoreOS's default `/usr/local -> ../var/usrlocal` symlink.
 
 ## Architecture (Production)
 
@@ -254,6 +250,7 @@ Images include labels for future deduplication:
 - Treat `/usr` as immutable at runtime; bootc bind-mounts it read-only.
 - Only `/var` persists across upgrades; avoid relying on updates to existing `/var` files from new images.
 - Standard writable paths are symlinks into `/var` (e.g. `/home` -> `/var/home`, `/opt` -> `/var/opt`).
+- Fedora CoreOS normally has `/usr/local -> ../var/usrlocal`, but this image intentionally ships image-managed files under `overlay-root/usr/local/`, so the deployed NAS has `/usr/local` as a real immutable directory.
 - Use systemd `tmpfiles.d` or unit `StateDirectory=` to seed `/var` content on first boot.
 - Prefer packaging static content into `/usr`; avoid dropping mutable content into `/var` during image builds.
 

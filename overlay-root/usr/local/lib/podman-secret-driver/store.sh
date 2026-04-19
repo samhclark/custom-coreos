@@ -4,7 +4,13 @@
 
 set -euo pipefail
 
-STORE_DIR="/var/lib/podman-secrets"
+if [[ "$(id -u)" -eq 0 ]]; then
+    STORE_DIR="/var/lib/podman-secrets"
+    CREDS_MODE=()
+else
+    STORE_DIR="/var/lib/podman-secrets/$(id -un)"
+    CREDS_MODE=(--user)
+fi
 
 if [[ -z "${SECRET_ID:-}" ]]; then
     echo "ERROR: SECRET_ID not set" >&2
@@ -18,7 +24,7 @@ trap 'rm -f "${tmp}"' EXIT
 # systemd-creds embeds a credential name and verifies it on decrypt. Use the
 # final backing-file name rather than the mktemp path so the post-write rename
 # does not invalidate the credential.
-if ! systemd-creds encrypt --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"; then
+if ! systemd-creds encrypt "${CREDS_MODE[@]}" --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"; then
     exit 1
 fi
 

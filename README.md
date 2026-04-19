@@ -215,8 +215,8 @@ Root unlock is TPM-backed but deliberately not bound to PCR values. Binding only
 
 Some parts of the system are still intentionally bootstrapped by hand after installation:
 - Additional encrypted data volumes are enrolled with TPM manually.
-- Some Podman secrets are created manually over SSH on the NAS with `nas-secrets`.
-- Garage secrets are auto-generated on first boot, but service-specific secrets such as Cloudflare and Pushover are not yet provisioned declaratively.
+- The SOPS age private key credential is installed manually on the NAS at `/var/lib/nas-secrets/age-key.cred`.
+- Podman secrets are distributed at boot from the repo-managed SOPS file at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`.
 
 ### Host Service UIDs
 
@@ -278,10 +278,15 @@ sudo tailscale up
 ```
 
 Additional post-install steps still happen manually over SSH:
-- Create non-generated Podman secrets such as `cf-api-token`, `pushover-user-key`, and `pushover-api-token` with `nas-secrets`
+- Install the SOPS age private key credential at `/var/lib/nas-secrets/age-key.cred`
+- Verify `sops-distribute-secrets.service` populated the Podman secret store
 - Validate the Podman shell secret driver after secret-storage changes with `sudo test-podman-secret-driver.sh`
 - Enroll any non-root LUKS volumes with TPM and add them to `crypttab`
 - Import the ZFS pool if it is not imported automatically
+
+### `/usr/local` Note
+
+Fedora CoreOS normally points `/usr/local` at `/var/usrlocal`, but this image intentionally ships image-managed admin scripts and helpers under `overlay-root/usr/local/`. On the deployed NAS, `/usr/local` is a real immutable directory under `/usr`, not a writable `/var` symlink.
 
 ## Troubleshooting
 

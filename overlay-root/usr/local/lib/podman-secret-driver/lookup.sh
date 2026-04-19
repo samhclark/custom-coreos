@@ -4,7 +4,13 @@
 
 set -euo pipefail
 
-STORE_DIR="/var/lib/podman-secrets"
+if [[ "$(id -u)" -eq 0 ]]; then
+    STORE_DIR="/var/lib/podman-secrets"
+    CREDS_MODE=()
+else
+    STORE_DIR="/var/lib/podman-secrets/$(id -un)"
+    CREDS_MODE=(--user)
+fi
 
 if [[ -z "${SECRET_ID:-}" ]]; then
     echo "ERROR: SECRET_ID not set" >&2
@@ -18,4 +24,4 @@ if [[ ! -f "${SECRET_FILE}" ]]; then
     exit 1
 fi
 
-systemd-creds decrypt --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
+systemd-creds decrypt "${CREDS_MODE[@]}" --name "${SECRET_ID}.cred" "${SECRET_FILE}" -

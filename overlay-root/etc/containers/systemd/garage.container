@@ -2,8 +2,8 @@
 Description=Garage S3-compatible Object Storage
 Documentation=https://garagehq.deuxfleurs.fr/
 Wants=network-online.target nss-lookup.target
-After=network-online.target nss-lookup.target garage-generate-secrets.service zfs-create-garage-datasets.service
-Requires=garage-generate-secrets.service zfs-create-garage-datasets.service
+After=network-online.target nss-lookup.target sops-distribute-secrets.service zfs-create-garage-datasets.service
+Requires=sops-distribute-secrets.service zfs-create-garage-datasets.service
 
 [Container]
 ContainerName=garage

@@ -13,6 +13,37 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  verify-sops-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Resolve SOPS image from Containerfile
+        id: sops-image
+        run: |
+          SOPS_IMAGE="$(awk '$1 == "FROM" && $2 ~ /^ghcr.io\/getsops\/sops:/ { print $2; exit }' Containerfile)"
+          if [[ -z "${SOPS_IMAGE}" ]]; then
+            echo "Failed to find SOPS image in Containerfile" >&2
+            exit 1
+          fi
+          echo "image=${SOPS_IMAGE}" >> "${GITHUB_OUTPUT}"
+          echo "Verifying ${SOPS_IMAGE}"
+
+      - name: Verify SOPS image signature
+        uses: samhclark/cosign-exec-action@v1.0.15
+        with:
+          registry-token: ${{ secrets.GITHUB_TOKEN }}
+          args: >-
+            verify ${{ steps.sops-image.outputs.image }}
+            --certificate-identity-regexp=https://github.com/getsops
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+            -o text
+
   query-versions:
     runs-on: ubuntu-latest
     outputs:
@@ -64,7 +95,9 @@ jobs:
           fi
 
   build:
-    needs: query-versions
+    needs:
+      - query-versions
+      - verify-sops-image
     if: needs.query-versions.outputs.zfs-available == 'true'
     runs-on: ubuntu-latest
     permissions:

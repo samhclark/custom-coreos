@@ -4,7 +4,15 @@ ARG ZFS_VERSION
 
 #####
 #
-#  Stage 1: Pull prebuilt ZFS kmods
+#  Stage 1: Pull SOPS binary
+#
+#####
+FROM ghcr.io/getsops/sops:v3.12.2 as sops
+
+
+#####
+#
+#  Stage 2: Pull prebuilt ZFS kmods
 #
 #####
 FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
@@ -14,7 +22,7 @@ ARG ZFS_VERSION
 
 #####
 # 
-#  Stage 2: Final image
+#  Stage 3: Final image
 #
 #####
 FROM quay.io/fedora/fedora-coreos:stable
@@ -27,7 +35,9 @@ LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modu
 LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
 LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
+COPY quadlets/ /usr/share/custom-coreos/quadlets/
 COPY overlay-root/ /
+COPY --from=sops /usr/local/bin/sops /usr/local/bin/sops
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
@@ -66,6 +76,11 @@ RUN /bin/bash -c 'set -euo pipefail; \
       > /usr/lib/tmpfiles.d/podman-secret-driver.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    printf "%s\n" \
+      "d /var/lib/nas-secrets 0700 root root -" \
+      > /usr/lib/tmpfiles.d/nas-secrets.conf'
+
+RUN /bin/bash -c 'set -euo pipefail; \
     semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
@@ -102,7 +117,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         bootc-fetch-apply-updates.timer \
         nftables.service \
         tailscaled.service \
-        garage-generate-secrets.service \
+        sops-distribute-secrets.service \
         zfs-create-garage-datasets.service \
         zfs-create-victoria-metrics-dataset.service \
         zfs-health-check.timer \

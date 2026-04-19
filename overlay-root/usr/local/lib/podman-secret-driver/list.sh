@@ -3,7 +3,11 @@
 
 set -euo pipefail
 
-STORE_DIR="/var/lib/podman-secrets"
+if [[ "$(id -u)" -eq 0 ]]; then
+    STORE_DIR="/var/lib/podman-secrets"
+else
+    STORE_DIR="/var/lib/podman-secrets/$(id -un)"
+fi
 
 shopt -s nullglob
 for f in "${STORE_DIR}"/*.cred; do
