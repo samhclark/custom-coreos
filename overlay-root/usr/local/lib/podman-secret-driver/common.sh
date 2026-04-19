@@ -43,8 +43,8 @@ podman_secret_store_context() {
     fi
 
     SECRET_STORE_DIR="/var/lib/podman-secrets/${user}"
-    SECRET_CREDS_MODE=(--user)
-    # The host key lives at /var/lib/systemd/credential.secret and is root-only.
-    # User-scoped credentials still bind to UID, username, and machine-id.
-    SECRET_CREDS_KEY="tpm2"
+    # Podman may invoke the shell driver from a user namespace where "self" is
+    # namespace UID 0. Use the resolved host user explicitly.
+    SECRET_CREDS_MODE=(--uid="${user}")
+    SECRET_CREDS_KEY="tpm2+host"
 }

@@ -182,24 +182,28 @@ the host UID through `/proc/self/uid_map`; host UID 0 uses
 `/var/lib/podman-secrets`, and non-root host UIDs use
 `/var/lib/podman-secrets/<username>`.
 
-For `store.sh`, add `--user` when the resolved host UID is non-root. Rootful
-secrets use `host+tpm2`; rootless secrets use `tpm2` because the host secret
-file is root-only. The `--user` mode still incorporates UID, username, and the
-machine ID into the encrypted credential key.
+For `store.sh`, add an explicit `--uid=<service-user>` when the resolved host
+UID is non-root. This matters because Podman may invoke shell driver helpers
+from a user namespace where `--user`/`--uid=self` would resolve to namespace
+UID 0 rather than the host service user. Both rootful and rootless secrets use
+`host+tpm2`; rootless credentials are still user-scoped because `--uid` implies
+`--user` and incorporates UID, username, and the machine ID into the encrypted
+credential key.
 ```bash
 if [[ "${host_uid}" -eq 0 ]]; then
     systemd-creds encrypt --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"
 else
-    systemd-creds encrypt --user --with-key=tpm2 --name "${SECRET_ID}.cred" - "${tmp}"
+    systemd-creds encrypt --uid="${user}" --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"
 fi
 ```
 
-For `lookup.sh`, add `--user` when the resolved host UID is non-root:
+For `lookup.sh`, use the same explicit `--uid=<service-user>` when the
+resolved host UID is non-root:
 ```bash
 if [[ "${host_uid}" -eq 0 ]]; then
     systemd-creds decrypt --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
 else
-    systemd-creds decrypt --user --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
+    systemd-creds decrypt --uid="${user}" --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
 fi
 ```
 
