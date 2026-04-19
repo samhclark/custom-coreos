@@ -3,7 +3,8 @@
 This plan covers two related improvements to the NAS infrastructure:
 
 1. **SOPS + age secrets management**: Encrypted secrets checked into the repo,
-   decrypted at boot and distributed to per-user podman secret stores.
+   decrypted once at boot, distributed to rootful Podman secrets, and written
+   as per-service runtime files under `/run` for rootless services.
 2. **Quadlet generator**: A Python script that reads declarative config files
    and generates the rootless quadlet boilerplate (sysusers.d, tmpfiles.d,
    ensure-account scripts, container units, subuid/subgid).
@@ -20,11 +21,11 @@ no-op until new services are added.
 - [Background](#background)
 - [Phase 1: SOPS + age secrets](#phase-1-sops--age-secrets)
   - [Step 1.1: Age keypair and SOPS file](#step-11-age-keypair-and-sops-file)
-  - [Step 1.2: Per-user secret driver](#step-12-per-user-secret-driver)
+  - [Step 1.2: Rootless runtime secret delivery](#step-12-rootless-runtime-secret-delivery)
   - [Step 1.3: SOPS distribution service](#step-13-sops-distribution-service)
   - [Step 1.4: Remove garage-generate-secrets](#step-14-remove-garage-generate-secrets)
   - [Step 1.5: Deploy and verify (rootful secrets)](#step-15-deploy-and-verify-rootful-secrets)
-  - [Step 1.6: Deploy and verify (rootless secrets)](#step-16-deploy-and-verify-rootless-secrets)
+  - [Step 1.6: Deploy and verify (rootless runtime files)](#step-16-deploy-and-verify-rootless-runtime-files)
 - [Phase 2: Quadlet generator](#phase-2-quadlet-generator)
   - [Step 2.1: Config schema and generator script](#step-21-config-schema-and-generator-script)
   - [Step 2.2: Convert existing services](#step-22-convert-existing-services)
@@ -33,6 +34,7 @@ no-op until new services are added.
 - [Appendix A: File inventory](#appendix-a-file-inventory)
 - [Appendix B: Secret inventory](#appendix-b-secret-inventory)
 - [Appendix C: Config schema reference](#appendix-c-config-schema-reference)
+- [Appendix D: Rootless secret findings](#appendix-d-rootless-secret-findings)
 
 ---
 
@@ -53,15 +55,17 @@ Today, only rootful services use podman secrets:
 - **alertmanager**: `pushover-user-key`, `pushover-api-token` (manually created,
   read by `alertmanager-generate-config.sh` via `nas-secrets show`)
 
-No rootless services use podman secrets yet.
+No rootless services use secrets yet.
 
 Problems:
 - Some secrets are manually created and exist only on the NAS (cf-api-token,
   pushover tokens). If the NAS is rebuilt, they must be re-created by hand.
 - Garage secrets are randomly generated at first boot. They cannot be
   pre-configured or version-controlled.
-- There is no mechanism for rootless services to consume podman secrets, because
-  `systemd-creds encrypt/decrypt` without `--user` requires root.
+- The rootful Podman secret driver is not a safe path for rootless services.
+  NAS testing showed rootless Podman's shell-driver helper can run in a user
+  namespace where meaningful `systemd-creds` key modes cannot access the host
+  credential secret or TPM device.
 
 ### Current quadlet boilerplate
 
@@ -75,23 +79,32 @@ Each rootless service requires ~7 nearly identical files:
 
 The ensure-account scripts are ~90 lines each, 95% identical across services.
 
-### Key finding: user-scoped systemd-creds
+### Key finding: user-scoped systemd-creds and rootless Podman
 
-Tested on Fedora 43 (systemd 257):
+Initial Fedora 43 testing showed that user-scoped `systemd-creds` can work in a
+plain user session. NAS validation later showed an important caveat: rootless
+Podman may invoke shell secret-driver helpers inside a user namespace, and that
+namespace cannot access the host credential secret or TPM device in the way
+`systemd-creds` needs.
 
-- `systemd-creds encrypt --user` works without root. It talks to the system
-  credential service via the `/run/systemd/io.systemd.Credentials` varlink
-  socket.
-- Root can encrypt for a specific user with `--uid=<uid>`. The credential
-  incorporates the target user's UID, username, and the machine ID.
-- The target user can decrypt with `systemd-creds decrypt --user`. No sudo,
-  no PAM escalation.
-- `--with-key=host+tpm2` works in both `--user` and `--uid=` modes, preserving
-  the full TPM2+host binding.
+Validated behavior on the NAS:
+- `systemd-creds --user --with-key=host`, `host+tpm2`, and `auto` work for the
+  `core` user in a normal shell.
+- `systemd-creds --user --with-key=tpm2`, `auto-initrd`, and `null` are rejected
+  in `--uid=` scoped mode.
+- Direct `_nas_grafana` use of `systemd-creds --uid=_nas_grafana
+  --with-key=host+tpm2` works in a normal shell.
+- The same explicit `--uid=_nas_grafana --with-key=host+tpm2` command fails
+  inside `podman unshare` with `Failed to determine local credential host
+  secret: Permission denied`.
+- Inside `podman unshare`, unscoped `host`, `host+tpm2`, and `auto` fail on the
+  host secret; `tpm2` and `auto-initrd` fail opening `/dev/tpmrm0`; only `null`
+  works, which is not useful for secrets.
 
-This means the existing shell driver pattern can extend to rootless users with
-minimal changes: add `--user` to the encrypt/decrypt calls and use per-user
-store directories.
+Conclusion: the existing Podman shell-driver pattern is good for rootful Podman
+secrets, but should not be considered a validated path for rootless Podman
+secrets. Future rootless secret work should use a different design. See
+[Appendix D](#appendix-d-rootless-secret-findings).
 
 ---
 
@@ -160,84 +173,71 @@ checked into the repo, and store the age private key on the NAS.
 
 ---
 
-### Step 1.2: Per-user secret driver
+### Step 1.2: Rootless runtime secret delivery
 
-**Goal**: Extend the existing shell driver to support rootless users via
-user-scoped systemd-creds.
+**Goal**: Keep the existing Podman shell secret driver as the rootful secret
+store, and use rootful SOPS distribution to write rootless service secrets as
+runtime-only files under `/run`.
 
-**Current driver** (`/usr/local/lib/podman-secret-driver/`):
-- `store.sh`: `systemd-creds encrypt --with-key=tpm2+host`
-- `lookup.sh`: `systemd-creds decrypt`
-- `delete.sh`: `rm -f`
-- `list.sh`: `ls *.cred`
-- All use `STORE_DIR="/var/lib/podman-secrets"`
+**Selected design**:
+- Rootful services continue to consume Podman secrets. Those secrets are
+  encrypted at rest in `/var/lib/podman-secrets/*.cred` by the existing
+  shell driver and `systemd-creds --with-key=tpm2+host`.
+- Rootless services do not use Podman `Secret=` with the current shell driver.
+  The shell driver can be invoked from a rootless Podman helper namespace where
+  it cannot access the host credential secret or TPM device.
+- `sops-distribute-secrets.service` remains rootful. It decrypts SOPS once at
+  boot, creates or updates rootful Podman secrets, and writes only the rootless
+  service files that are declared in the TOML configs.
+- Rootless secret files live in tmpfs under `/run`, so plaintext does not
+  persist across reboots and no general-purpose decryption key is handed to a
+  service user.
 
-**Changes needed**:
-
-The driver scripts need to detect whether they are operating on root's Podman
-store or a rootless user's Podman store. Do not rely only on `id -u`: Podman may
-invoke shell secret-driver helpers from a user namespace where namespace UID 0
-maps back to the rootless service user's host UID. The helper should resolve
-the host UID through `/proc/self/uid_map`; host UID 0 uses
-`/var/lib/podman-secrets`, and non-root host UIDs use
-`/var/lib/podman-secrets/<username>`.
-
-For `store.sh`, add an explicit `--uid=<service-user>` when the resolved host
-UID is non-root. This matters because Podman may invoke shell driver helpers
-from a user namespace where `--user`/`--uid=self` would resolve to namespace
-UID 0 rather than the host service user. Both rootful and rootless secrets use
-`host+tpm2`; rootless credentials are still user-scoped because `--uid` implies
-`--user` and incorporates UID, username, and the machine ID into the encrypted
-credential key.
-```bash
-if [[ "${host_uid}" -eq 0 ]]; then
-    systemd-creds encrypt --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"
-else
-    systemd-creds encrypt --uid="${user}" --with-key=tpm2+host --name "${SECRET_ID}.cred" - "${tmp}"
-fi
+Runtime file layout:
+```text
+/run/nas-secrets/                         0711 root:root
+/run/nas-secrets/<service>/               0710 root:<service-user>
+/run/nas-secrets/<service>/<secret-name>  0400 <service-user>:<service-user>
 ```
 
-For `lookup.sh`, use the same explicit `--uid=<service-user>` when the
-resolved host UID is non-root:
-```bash
-if [[ "${host_uid}" -eq 0 ]]; then
-    systemd-creds decrypt --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
-else
-    systemd-creds decrypt --uid="${user}" --name "${SECRET_ID}.cred" "${SECRET_FILE}" -
-fi
+The directory is service-scoped rather than only user-scoped. If two services
+need the same SOPS key, the distributor writes two separate runtime files, one
+per consuming service. That keeps the service user's readable surface limited
+to the files explicitly mounted into that service.
+
+Generated rootless Quadlets should mount runtime secret files read-only into
+the conventional container path:
+```ini
+Volume=/run/nas-secrets/grafana/garage-metrics-token:/run/secrets/garage-metrics-token:ro,Z
 ```
 
-The per-user store directories (`/var/lib/podman-secrets/<username>/`) are
-created by the SOPS distribution service (Step 1.3) with ownership set to the
-target user.
+The `:Z` relabel is the intended first validation path because these files are
+tiny and per-service. If rootless relabeling of `/run` files fails on the NAS,
+fall back to setting the required SELinux label in the distributor and mount
+without relabeling. Do not add a real rootless secret consumer until this has
+been validated on the NAS.
 
-**Files modified**:
-- `overlay-root/usr/local/lib/podman-secret-driver/store.sh`
-- `overlay-root/usr/local/lib/podman-secret-driver/lookup.sh`
-- `overlay-root/usr/local/lib/podman-secret-driver/delete.sh`
-- `overlay-root/usr/local/lib/podman-secret-driver/list.sh`
-- `overlay-root/usr/local/lib/podman-secret-driver/common.sh`
+**Rejected design**:
 
-**Notes**:
-- The `containers.conf.d/50-secret-driver.conf` does not change. The same
-  driver scripts are used by both rootful and rootless podman. The scripts
-  internally detect which mode they are in.
-- The `nas-secrets` CLI wrapper works for root's secrets. For rootless user
-  secrets, the operator would use
-  `sudo -u _nas_grafana env HOME=/var/home/_nas_grafana nas-secrets list` or
-  similar. This is a diagnostic/debugging path, not a normal workflow.
+The earlier plan tried to extend the Podman shell driver with per-user
+`/var/lib/podman-secrets/<username>/` stores and `systemd-creds --uid=<user>`.
+Direct user-scoped `systemd-creds` works in a normal shell, but not from the
+rootless Podman helper namespace. Keep those findings in
+[Appendix D](#appendix-d-rootless-secret-findings) and do not build new
+rootless secret consumers on that path.
 
 ---
 
 ### Step 1.3: SOPS distribution service
 
-**Goal**: A rootful systemd one-shot that runs at boot, decrypts the SOPS file,
-and distributes secrets to the appropriate podman secret stores.
+**Goal**: A rootful systemd one-shot that runs at boot, decrypts the SOPS file
+once, distributes rootful Podman secrets, and writes rootless runtime secret
+files under `/run`.
 
 **Service unit**: `overlay-root/etc/systemd/system/sops-distribute-secrets.service`
 ```ini
 [Unit]
-Description=Decrypt SOPS secrets and distribute to podman stores
+Description=Decrypt SOPS secrets and distribute to Podman stores and runtime files
 DefaultDependencies=no
 After=local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
 Before=sysinit.target
@@ -258,15 +258,15 @@ will change to `Requires=sops-distribute-secrets.service`.
 
 #### How the distribution service knows which secrets go where
 
-The distribution service needs a mapping of secret names to users. There are
-two sources:
+The distribution service needs a mapping of secret names to consumers. There
+are two sources:
 
 1. **Rootless services** (have TOML configs): The service reads every
    `quadlets/*.toml` file on the image (installed at
    `/usr/share/custom-coreos/quadlets/*.toml` — see note below). For each
    file, it extracts `[host].username` and `[[container.secrets]]` entries.
-   This tells it e.g. "secret `garage-metrics-token` goes to user
-   `_nas_grafana`."
+   This tells it e.g. "write secret `garage-metrics-token` to
+   `/run/nas-secrets/grafana/garage-metrics-token`, owned by `_nas_grafana`."
 
 2. **Rootful services** (no TOML configs): A separate manifest file at
    `overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.json`
@@ -284,8 +284,10 @@ two sources:
    }
    ```
 
-A single secret can appear in both — e.g., `garage-metrics-token` may be
-needed by both root (for victoria-metrics) and `_nas_grafana` (for grafana).
+A single SOPS key can appear in multiple places — e.g.,
+`garage-metrics-token` may be needed by rootful Podman and by one or more
+rootless services. Rootful consumers get a Podman secret. Each rootless service
+gets its own runtime file.
 
 **Note on TOML file location at runtime**: The TOML configs live at
 `quadlets/` in the repo and are used by the generator at development time.
@@ -298,54 +300,65 @@ This makes the TOMLs available at `/usr/share/custom-coreos/quadlets/*.toml`
 on the running NAS. They are read-only image-controlled files, consistent with
 the existing pattern for assets under `/usr/share/custom-coreos/`.
 
-#### Per-user store directory creation
+#### Runtime secret directory creation
 
-Per-user store directories (`/var/lib/podman-secrets/<username>/`) are created
-by the distribution service itself, just before creating secrets for that user:
+The distribution service owns `/run/nas-secrets` and rebuilds the runtime
+secret tree on each run. Service directories are created just before writing
+files for that service:
 ```bash
-install -d -m 0700 -o "$user" -g "$user" "/var/lib/podman-secrets/$user"
+install -d -m 0711 -o root -g root /run/nas-secrets
+install -d -m 0710 -o root -g "$user" "/run/nas-secrets/$service"
 ```
 
-This is done in the distribution service rather than in tmpfiles.d because only
-users that actually have secrets need a store directory. The root store
-(`/var/lib/podman-secrets/`) is already created by the existing
-`podman-secret-driver.conf` tmpfiles entry. The parent directory is `0711 root
-root` so rootless users can traverse to their own private `0700` subdirectory
-without being able to list the root store.
+Files are written atomically with ownership and mode set before the final
+rename:
+```bash
+install -m 0400 -o "$user" -g "$user" /dev/null "$tmp"
+printf '%s' "$value" > "$tmp"
+mv -f "$tmp" "/run/nas-secrets/$service/$secret"
+```
+
+This is done by the distributor rather than tmpfiles.d because only services
+that declare secrets need runtime directories. The parent is traversable but
+not listable by service users; each service directory is group-traversable only
+by the owning service user.
 
 #### Script flow
 
 **Script**: `overlay-root/usr/local/bin/sops-distribute-secrets.sh`
 
 ```
-1. Decrypt the age private key:
+1. Create a private work directory in tmpfs:
+   install -d -m 0700 -o root -g root /run/nas-secrets/.work
+
+2. Decrypt the age private key:
    systemd-creds decrypt --name=age-key \
-     /var/lib/nas-secrets/age-key.cred /tmp/age-key.txt
+     /var/lib/nas-secrets/age-key.cred /run/nas-secrets/.work/age-key.txt
 
-2. Decrypt the SOPS file using the age key:
-   SOPS_AGE_KEY_FILE=/tmp/age-key.txt \
+3. Decrypt the SOPS file using the age key:
+   SOPS_AGE_KEY_FILE=/run/nas-secrets/.work/age-key.txt \
      sops --decrypt /usr/share/custom-coreos/secrets/secrets.sops.yaml \
-     > /tmp/secrets-plain.yaml
+     > /run/nas-secrets/.work/secrets-plain.yaml
 
-3. Shred the age key from /tmp:
-   shred -u /tmp/age-key.txt
+4. Shred the age key from /run:
+   shred -u /run/nas-secrets/.work/age-key.txt
 
-4. Build the secret-to-user mapping:
+5. Build the secret-to-consumer mapping:
    a. Read /usr/share/custom-coreos/secrets/rootful-secrets.json
-      → all listed secrets map to user "root"
+      → all listed secrets map to the rootful Podman secret store
    b. Read each /usr/share/custom-coreos/quadlets/*.toml
       → for each file, map [container.secrets].name entries to
-        [host].username and [host].uid
+        [service].name, [host].username, [host].uid, and the container target
    Result example:
-     root:           [garage-rpc-secret, garage-admin-token, ...]
-     _nas_grafana:   [garage-metrics-token]
+     podman/root:       [garage-rpc-secret, garage-admin-token, ...]
+     runtime/grafana:   [garage-metrics-token]
 
-5. Load the previous distribution state from
+6. Load the previous distribution state from
    /var/lib/nas-secrets/distributed-state.json.
    If the file does not exist (first boot), treat it as empty — all
-   secrets will be created.
+   rootful Podman secrets will be created.
 
-6. For each (user, secret) pair in the mapping:
+7. For each rootful Podman secret:
    a. Compute sha256 of the secret value from the decrypted YAML.
    b. Compare against the hash in the state file (if any).
    c. If hashes match: skip (secret is up to date).
@@ -355,75 +368,68 @@ without being able to list the root store.
      - If the secret already exists in podman: delete it first.
      - Create the new secret:
 
-       For root:
-         echo "$value" | podman secret create "$name" -
+       echo "$value" | podman secret create "$name" -
 
-       For rootless users:
-         install -d -m 0700 -o "$user" -g "$user" \
-           "/var/lib/podman-secrets/$user"
-         echo "$value" | sudo -u "$user" env HOME="/var/home/$user" \
-           podman secret create "$name" -
+8. Rebuild the rootless runtime file tree:
+   a. Remove managed service directories under /run/nas-secrets.
+   b. For each rootless service with declared secrets, create:
+      /run/nas-secrets/<service>/ as 0710 root:<service-user>
+   c. For each declared secret, write:
+      /run/nas-secrets/<service>/<secret-name>
+      as 0400 <service-user>:<service-user>
 
-       This calls the shell driver's store.sh as the target user.
-       For rootless users, store.sh detects non-root and uses
-       systemd-creds encrypt --user --with-key=host+tpm2.
-       Podman handles its own metadata automatically.
+   Runtime files are always written when the service runs. Do not skip them
+   solely because /var/lib/nas-secrets/distributed-state.json has a matching
+   hash; /run is tmpfs and may have been cleared since the last successful
+   distribution.
 
-7. For each (user, secret) pair in the OLD state that is NOT in the
-   new mapping: delete the secret.
+9. For each rootful Podman secret in the OLD state that is NOT in the new
+   rootful mapping, delete the secret:
 
-     For root:
-       podman secret rm "$name"
+   podman secret rm "$name"
 
-     For rootless users:
-       sudo -u "$user" env HOME="/var/home/$user" \
-         podman secret rm "$name"
+10. Shred the plaintext secrets file and remove the work directory:
+    shred -u /run/nas-secrets/.work/secrets-plain.yaml
+    rmdir /run/nas-secrets/.work
 
-8. Shred the plaintext secrets file:
-   shred -u /tmp/secrets-plain.yaml
-
-9. Write the new state file to
-   /var/lib/nas-secrets/distributed-state.json:
+11. Write the new state file to
+    /var/lib/nas-secrets/distributed-state.json:
 
    {
-     "root": {
-       "garage-rpc-secret": "<sha256>",
-       "garage-admin-token": "<sha256>",
-       ...
+     "podman": {
+       "root": {
+         "garage-rpc-secret": "<sha256>",
+         "garage-admin-token": "<sha256>",
+         ...
+       }
      },
-     "_nas_grafana": {
-       "garage-metrics-token": "<sha256>"
+     "runtime": {
+       "grafana": {
+         "garage-metrics-token": "<sha256>"
+       }
      }
    }
 ```
 
 #### Early boot compatibility
 
-This approach uses `sudo -u $user podman secret create` for rootless secrets.
-This works at early boot because:
-- `podman secret create` is a local file operation — no D-Bus, no user
-  manager, no container runtime needed.
-- `systemd-creds encrypt --user` (called by store.sh) talks to the
-  system-level varlink socket at `/run/systemd/io.systemd.Credentials`,
-  which is available from PID 1 very early.
-- The service runs `After=systemd-sysusers.service systemd-tmpfiles-setup.service`,
-  so the user account and home directory exist.
+Rootful secret distribution is compatible with early boot and has been
+validated on the NAS.
 
-**Verify on the NAS before deploying**: Run this manual test to confirm:
-```bash
-# As root, create a test secret for a rootless user
-echo "test-value" | sudo -u _nas_grafana \
-  env HOME=/var/home/_nas_grafana \
-  podman secret create test-early-boot -
-
-# Verify it exists
-sudo -u _nas_grafana env HOME=/var/home/_nas_grafana \
-  podman secret ls
-
-# Clean up
-sudo -u _nas_grafana env HOME=/var/home/_nas_grafana \
-  podman secret rm test-early-boot
+Rootless runtime file distribution should also be compatible with early boot:
+the service runs after `systemd-sysusers.service` and
+`systemd-tmpfiles-setup.service`, so service users and `/run` exist before the
+files are written. The normal boot path runs this service before container
+services start. Generated rootless Quadlets that consume runtime files should
+also include a local readability check, such as:
+```ini
+ExecStartPre=/usr/bin/test -r /run/nas-secrets/grafana/garage-metrics-token
 ```
+
+Do not use cross-manager ordering from user services to
+`sops-distribute-secrets.service` as the primary dependency. It is clearer for
+the distributor to run early and for the user service to fail with an explicit
+missing-file check if the distributor did not complete.
 
 **Files created**:
 - `NEW: overlay-root/usr/local/bin/sops-distribute-secrets.sh`
@@ -529,27 +535,56 @@ systemctl status caddy.service
 
 ---
 
-### Step 1.6: Deploy and verify (rootless secrets)
+### Step 1.6: Deploy and verify (rootless runtime files)
 
-This step is for when a rootless service first needs a secret. It may happen
-as part of a future service migration or when adding a new service.
+This step is for the first rootless service that needs a secret. It uses the
+runtime-file design from Step 1.2, not Podman `Secret=`.
 
 **Work**:
 1. Add `[[container.secrets]]` entries to the service's TOML config
-   (e.g., `quadlets/grafana.toml`).
-2. Re-run `python3 generate-quadlets.py` to regenerate the .container file
-   with `Secret=` lines.
+   (e.g., `quadlets/grafana.toml`):
+   ```toml
+   [[container.secrets]]
+   name = "garage-metrics-token"
+   target = "/run/secrets/garage-metrics-token"
+   mode = "0400"
+   ```
+2. Re-run `python3 generate-quadlets.py` to regenerate the `.container` file.
+   The generator emits a read-only volume mount from the distributor-owned
+   runtime file:
+   ```ini
+   Volume=/run/nas-secrets/grafana/garage-metrics-token:/run/secrets/garage-metrics-token:ro,Z
+   ExecStartPre=/usr/bin/test -r /run/nas-secrets/grafana/garage-metrics-token
+   ```
 3. The distribution service automatically picks up the new mapping from the
-   TOML config — no separate manifest change needed.
-4. Deploy the new image and test on the NAS.
+   TOML config. No rootless Podman secret store and no separate rootless
+   manifest are needed.
+4. Deploy the new image and test on the NAS before relying on the secret in
+   production.
+
+**Validation focus**:
+- The distributor creates `/run/nas-secrets/<service>/` with the expected owner,
+  group, mode, and SELinux label.
+- The rootless service user can read the host file.
+- The rootless container can read the mounted target file.
+- The file is gone after reboot until `sops-distribute-secrets.service` runs
+  again.
 
 **Post-deploy verification**:
 ```bash
-# Check the secret was distributed to the rootless user
+# Check the distributor wrote the runtime file without printing the secret
+systemctl status sops-distribute-secrets.service
+sudo ls -ldZ /run/nas-secrets /run/nas-secrets/grafana
+sudo ls -lZ /run/nas-secrets/grafana
+
+# Check the service user can read it
+sudo -u _nas_grafana test -r /run/nas-secrets/grafana/garage-metrics-token
+
+# Check the user service and container can see the mounted file
 sudo -u _nas_grafana env HOME=/var/home/_nas_grafana \
   XDG_RUNTIME_DIR=/run/user/51210 \
   DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/51210/bus \
-  bash -lc 'podman secret ls && systemctl --user status grafana.service'
+  bash -lc 'systemctl --user status grafana.service && podman exec grafana test -r /run/secrets/garage-metrics-token'
 ```
 
 ---
@@ -610,6 +645,7 @@ target = "/var/lib/grafana"
 
 [[container.secrets]]
 name = "some-future-secret"
+target = "/run/secrets/some-future-secret"
 mode = "0400"
 
 [data]
@@ -646,8 +682,9 @@ Design principles:
   ]
   ```
 - `[[container.secrets]]` declares secrets this service needs. The generator
-  emits `Secret=` lines in the .container file AND verifies these against
-  the SOPS file.
+  emits read-only `Volume=` mounts from `/run/nas-secrets/<service>/<name>` to
+  `/run/secrets/<name>` by default, adds a local readability check, and
+  verifies the names against the SOPS file.
 
 **What the generator produces per service**:
 
@@ -808,10 +845,6 @@ overlay-root/etc/systemd/system/garage-generate-secrets.service
 ```
 .gitignore
 Containerfile
-overlay-root/usr/local/lib/podman-secret-driver/store.sh
-overlay-root/usr/local/lib/podman-secret-driver/lookup.sh
-overlay-root/usr/local/lib/podman-secret-driver/delete.sh
-overlay-root/usr/local/lib/podman-secret-driver/list.sh
 overlay-root/etc/containers/systemd/garage.container
 overlay-root/etc/containers/systemd/victoria-metrics.container
 .github/workflows/build-check.yaml
@@ -895,7 +928,8 @@ container = 3900
 # Optional: secret references (array of tables)
 [[container.secrets]]
 name = "secret-name"        # Must exist in SOPS file
-mode = "0400"               # Optional file mode
+target = "/run/secrets/secret-name"  # Container path, default shown
+mode = "0400"               # Runtime host file mode, default shown
 
 # Optional: persistent data directory
 [data]
@@ -928,3 +962,133 @@ Install = []
 - Shell = `/sbin/nologin`
 - Linger is always enabled
 - Generated file header comment
+
+---
+
+## Appendix D: Rootless secret findings
+
+### Production status
+
+The rootful SOPS deployment is validated on the NAS:
+- the age key credential decrypts
+- `sops-distribute-secrets.service` completes successfully
+- all six rootful Podman secrets are recreated from the SOPS file
+- Garage, VictoriaMetrics, Caddy, and Alertmanager start and pass health checks
+
+Rootless Podman secrets are not validated and should not be enabled for any
+rootless service. Current rootless services do not declare secrets, so this
+does not block the rootful deployment.
+
+The selected rootless design is now runtime files under `/run` written by the
+rootful SOPS distributor. That avoids the rootless Podman shell-driver
+namespace entirely. It still needs a focused NAS validation pass before the
+first real rootless service consumes a secret.
+
+### NAS test results
+
+Tests were run on the NAS as `core` and `_nas_grafana`.
+
+User-scoped `systemd-creds` in a normal shell:
+- `--user --with-key=host` works
+- `--user --with-key=host+tpm2` works
+- `--user --with-key=auto` works
+- `--user --with-key=tpm2` fails with
+  `Selected key not available in --uid= scoped mode, refusing.`
+- `--user --with-key=auto-initrd` fails with the same scoped-mode error
+- `--user --with-key=null` fails with the same scoped-mode error
+
+Root creating user-scoped credentials with `--uid=core` has the same behavior:
+`host`, `host+tpm2`, and `auto` work; `tpm2`, `auto-initrd`, and `null` are
+rejected in scoped mode.
+
+Direct `_nas_grafana` use works in a normal shell:
+```bash
+systemd-creds encrypt --uid=_nas_grafana --with-key=host+tpm2 ...
+systemd-creds decrypt --uid=_nas_grafana ...
+```
+
+The same explicit `--uid=_nas_grafana --with-key=host+tpm2` command fails
+inside `podman unshare`:
+```text
+Failed to determine local credential host secret: Permission denied
+```
+
+Inside `podman unshare`, unscoped `systemd-creds` behaves as follows:
+- `host`, `host+tpm2`, and `auto` fail because the host credential secret is
+  not readable from that namespace
+- `tpm2` and `auto-initrd` fail because `/dev/tpmrm0` is not accessible
+- `null` works, but provides no useful protection for secrets
+
+Conclusion: rootless Podman shell-driver helpers do not have a useful
+`systemd-creds` key mode available from their execution context.
+
+### Option: age-backed Podman shell driver
+
+An age-backed shell driver is technically possible, but it does not solve the
+core key-placement problem by itself. The helper would need an age private key
+available whenever Podman creates or looks up a secret.
+
+Possible placements and tradeoffs:
+- Plaintext age key persisted under the rootless service user: simple, but weak
+  at-rest protection; compromise of the service user can decrypt every secret
+  in that user's store.
+- Age key encrypted with `systemd-creds`: returns to the same rootless helper
+  problem, because the helper cannot use meaningful `systemd-creds` modes from
+  Podman's user namespace.
+- Root decrypts an age key to `/run` for the service user: avoids persistent
+  plaintext, but gives that service user a runtime decrypt capability broader
+  than just the specific secret files it needs.
+
+For this NAS, an age-backed Podman shell driver is not the preferred next step.
+
+### Selected design: rootful distributor writes runtime files
+
+The selected rootless design is:
+1. keep SOPS as the persistent source of truth
+2. keep the age private key protected as `/var/lib/nas-secrets/age-key.cred`
+3. have the rootful `sops-distribute-secrets.service` decrypt the SOPS file at
+   boot
+4. write only the needed per-service secret files under `/run`, owned by the
+   rootless service user and mode `0400`
+5. have generated rootless Quadlets mount those runtime files read-only under
+   `/run/secrets/`
+
+This keeps plaintext off persistent storage and avoids the rootless Podman shell
+driver namespace entirely. It also limits each service user to exactly the
+runtime files it is given, rather than handing it a general-purpose decryption
+key.
+
+Concrete layout:
+```text
+/run/nas-secrets/                         0711 root:root
+/run/nas-secrets/<service>/               0710 root:<service-user>
+/run/nas-secrets/<service>/<secret-name>  0400 <service-user>:<service-user>
+```
+
+Generated Quadlet mount:
+```ini
+Volume=/run/nas-secrets/<service>/<secret-name>:/run/secrets/<secret-name>:ro,Z
+ExecStartPre=/usr/bin/test -r /run/nas-secrets/<service>/<secret-name>
+```
+
+Details still to validate:
+- SELinux behavior for `:Z` on `/run` files mounted by rootless Podman. If this
+  fails, the distributor should set a suitable label and the generated mount
+  should omit relabeling.
+- Normal boot ordering between the early rootful distributor and admin-managed
+  rootless user services.
+- Restart behavior when the distributor fails and the runtime file is missing.
+
+### Other possible designs
+
+Root-mediated Podman secret creation:
+- A privileged helper or service could create rootless Podman secrets outside
+  the problematic namespace.
+- This adds a new privilege boundary and API surface. It is probably overkill
+  for a single-admin NAS unless Podman secrets become mandatory.
+
+Systemd credentials for user services:
+- It may be possible to use systemd user-service credentials rather than Podman
+  secrets.
+- This needs separate validation with admin-managed rootless Quadlets and the
+  Podman systemd generator. It should not be assumed to work.

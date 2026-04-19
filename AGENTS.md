@@ -73,10 +73,11 @@ Important non-container units:
 - Podman is configured to use the shell secret driver
 - Secret material is encrypted in the repo with SOPS at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`
 - The SOPS age private key is expected on the NAS as a `systemd-creds` file at `/var/lib/nas-secrets/age-key.cred`
-- Distributed Podman secret material is encrypted at rest with `systemd-creds` in `/var/lib/podman-secrets/*.cred` and per-user subdirectories for rootless services
+- Distributed rootful Podman secret material is encrypted at rest with `systemd-creds` in `/var/lib/podman-secrets/*.cred`; rootless services should use per-service runtime files under `/run/nas-secrets/<service>/` instead of Podman `Secret=`
 - `nas-secrets` is the admin-facing wrapper for creating, rotating, showing, and deleting those Podman secrets
 - `test-podman-secret-driver.sh` is the host-level smoke test for `podman secret create/show/run/rm`; it requires a live TPM-backed host and is not part of CI
 - `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, and Alertmanager secrets
+- Rootless Podman secrets are not a validated production path. NAS testing showed rootless Podman's shell secret-driver context cannot use meaningful `systemd-creds` key modes. The selected rootless design is for the rootful SOPS distributor to write per-service runtime files under `/run/nas-secrets/<service>/`; see `docs/plan-sops-and-quadlet-generator.md` Appendix D before adding rootless secrets.
 
 ### Manual Bootstrap Reality
 
@@ -274,6 +275,7 @@ Useful reference points for future rootless work:
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
 - Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana`, `_nas_vmalert`, and `_nas_blackbox` ranges in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
+- Do not assume Podman `Secret=` works for rootless services with the current shell driver. The helper can run inside a user namespace where `systemd-creds` cannot access the host key or TPM device. Rootless services that need secrets should consume per-service runtime files written by the rootful SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only into the container, and the exact mount/SELinux behavior must be validated on the NAS before deploying.
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
 - Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently, or use a bounded `ExecStartPre=` readiness loop when startup requires a local dependency to answer first
 - Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
