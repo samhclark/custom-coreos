@@ -64,7 +64,7 @@ This is not intended to be a polished appliance for other people. It is my own N
 
 ### Prerequisites
 
-- `just` (command runner)
+- `make` (GNU Make, standard on Linux)
 - `podman` or `docker`
 - `gh` (GitHub CLI)
 - `skopeo`
@@ -74,43 +74,40 @@ This is not intended to be a polished appliance for other people. It is my own N
 
 ```bash
 # Show all available commands
-just
+make help
 
 # Check current versions and compatibility
-just versions
+make versions
 
-# Build locally  
-just build
-
-# Test build (removes image after)
-just test-build
+# Build locally
+make build
 
 # Generate Ignition file from butane.yaml
-just generate-ignition
+make generate-ignition
 
 # Trigger CI/CD workflows
-just run-workflow        # Main build
-just run-pages          # Ignition file deployment  
-just run-cleanup        # Container cleanup (dry run)
+make run-workflow        # Main build
+make run-pages          # Ignition file deployment
+make run-cleanup        # Container cleanup (dry run)
 
 # Check workflow status
-just workflow-status    # Main build workflow
-just all-workflows     # All workflows
+make workflow-status    # Main build workflow
+make all-workflows      # All workflows
 ```
 
 ### Local Development
 
 ```bash
 # Check if prebuilt ZFS modules are available
-just check-zfs-available
+make check
 
 # View version information
-just zfs-version         # Latest ZFS 2.4.x
-just kernel-version      # Current CoreOS kernel (script-based fallback if labels are missing)
-just versions           # All versions + compatibility
+make zfs-version         # Latest ZFS version
+make kernel-version      # Current CoreOS kernel (script-based fallback if labels are missing)
+make versions            # All versions + compatibility
 
-# Test cleanup logic locally  
-just cleanup-dry-run 30  # 30-day retention test
+# Test cleanup logic locally
+make cleanup-dry-run RETENTION_DAYS=30
 ```
 
 ## Architecture
@@ -161,7 +158,7 @@ $ sha256sum cosign.pub
 
 ### Main Build (`build.yaml`)
 - **Schedule**: Daily at 9:18 AM UTC
-- **Trigger**: Manual via `just run-workflow` 
+- **Trigger**: Manual via `make run-workflow`
 - **Output**: `ghcr.io/samhclark/custom-coreos:stable`
 - **Features**: Automatic version discovery, compatibility checking, build attestations
 
@@ -296,12 +293,12 @@ Fedora CoreOS normally points `/usr/local` at `/var/usrlocal`, but this image in
 **Solution**: Check [`fedora-zfs-kmods`](https://github.com/samhclark/fedora-zfs-kmods) - either the ZFS+kernel combination is incompatible or the build hasn't run yet.
 
 **Problem**: Local build fails
-**Solution**: Run `just check-zfs-available` to verify dependencies
+**Solution**: Run `make check` to verify ZFS kmod availability
 
 ### Workflow Issues
 
 **Problem**: GitHub Actions workflow fails
-**Solution**: Check status with `just all-workflows` and review specific job logs
+**Solution**: Check status with `make all-workflows` and review specific job logs
 
 **Problem**: Ignition file not updating
 **Solution**: Verify GitHub Pages is enabled in repository settings
@@ -333,12 +330,12 @@ sudo ausearch -m avc -ts boot | audit2allow -M local-selinux-fix
 Apply fix declaratively:
 1. Add a CIL rule under `overlay-root/usr/share/selinux/targeted/`.
 2. Install it in `Containerfile` with `semodule -i /usr/share/selinux/targeted/<name>.cil`.
-3. Rebuild (`just test-build`) and redeploy.
+3. Rebuild (`make build`) and redeploy.
 
 ## Contributing
 
-1. **Local development**: Use `just build` and `just test-build`
-2. **Configuration changes**: Update `butane.yaml` and test with `just generate-ignition`
+1. **Local development**: Use `make build`
+2. **Configuration changes**: Update `butane.yaml` and test with `make generate-ignition`
 3. **CI/CD changes**: Test workflow changes with manual triggers
 4. **Version updates**: The system automatically tracks latest versions
 
@@ -347,7 +344,7 @@ Apply fix declaratively:
 ```
 ├── Containerfile              # 2-stage build definition
 ├── butane.yaml               # CoreOS configuration
-├── Justfile                  # Development commands
+├── Makefile                  # Development commands
 ├── ignition.json            # Generated Ignition file (auto-updated)
 ├── .github/workflows/       # CI/CD workflows
 │   ├── build.yaml          # Main container build

@@ -21,7 +21,7 @@ This project depends on `../fedora-zfs-kmods/` which builds and publishes prebui
 
 The quickest accurate mental model is:
 
-1. `Justfile` and `.github/workflows/` decide **what versions to build**
+1. `Makefile` and `.github/workflows/` decide **what versions to build**
 2. `Containerfile` decides **what goes into the bootc image**
 3. `overlay-root/` decides **how the installed machine behaves at runtime**
 4. `butane.yaml` is intentionally narrow and personal: it handles host identity and root storage setup, not service orchestration
@@ -91,32 +91,33 @@ This is acceptable because the system has one real user and is published as a re
 ## Key Commands
 
 ### Version Discovery & Compatibility
-- `just versions` - Show ZFS, kernel versions and compatibility status
-- `just zfs-version` - Get latest ZFS 2.4.x release
-- `just kernel-version` - Get current CoreOS kernel version (script-based fallback if labels are missing)
-- `just check-zfs-available` - Verify prebuilt ZFS kmods exist for current versions
+- `make versions` - Show ZFS, kernel versions and compatibility status
+- `make zfs-version` - Get latest ZFS release
+- `make kernel-version` - Get current CoreOS kernel version (script-based fallback if labels are missing)
+- `make check` - Verify prebuilt ZFS kmods exist for current versions
 
-### Building & Testing
-- `just build` - Build image locally with automatic version discovery
-- `just test-build` - Quick build test (builds then removes image)
+### Building
+- `make build` - Build image locally with automatic version discovery
+- `make deps` - Verify required tools are present (podman, gh, skopeo)
 
 ### Ignition File Management
-- `just butane` - Run Butane container to process configuration files
-- `just generate-ignition` - Generate Ignition JSON from butane.yaml
+- `make generate-ignition` - Generate Ignition JSON from butane.yaml
 
 ### CI/CD Integration
-- `just run-workflow` - Trigger main build workflow
-- `just run-pages` - Trigger Ignition file generation and GitHub Pages deployment
-- `just run-cleanup` - Trigger container cleanup (dry run)
-- `just run-cleanup-force` - Trigger container cleanup (actual deletion)
-- `just workflow-status` - Check build workflow status
-- `just all-workflows` - Check status of all workflows
+- `make run-workflow` - Trigger main build workflow
+- `make run-pages` - Trigger Ignition file generation and GitHub Pages deployment
+- `make run-cleanup` - Trigger container cleanup (dry run)
+- `make run-cleanup-force` - Trigger container cleanup (actual deletion)
+- `make workflow-status` - Check build workflow status
+- `make all-workflows` - Check status of all workflows
 
 ### Local Testing
-- `just cleanup-dry-run DAYS` - Test cleanup logic with configurable retention
+- `make cleanup-dry-run RETENTION_DAYS=N` - Test cleanup logic with configurable retention
 
 ### Verification
-- After changes, run `just generate-ignition` and `just test-build`.
+- After changing `butane.yaml`: run `make generate-ignition` to verify the config is valid Butane.
+- After changing `Containerfile` or `overlay-root/`: run `make build` to verify the image builds.
+- These are independent — the Ignition file and the container image are separate artifacts with separate CI workflows.
 - `bootc container lint` warnings about `/var` cache artifacts are currently expected and can be ignored for now. Warnings about `/var/usrlocal` usually mean something was copied into `/usr/local` before this image's overlay replaced Fedora CoreOS's default `/usr/local -> ../var/usrlocal` symlink.
 
 ## Architecture (Production)
@@ -222,10 +223,12 @@ Images include labels for future deduplication:
 ### Core Files
 - `Containerfile` - 2-stage build definition
 - `butane.yaml` - Fedora CoreOS configuration with host identity + storage
-- `Justfile` - Comprehensive development commands
+- `Makefile` - Development commands (`make help` to see all targets)
 - `ignition.json` - Generated Ignition file (auto-updated)
 - `overlay-root/` - Systemd units, ZFS scripts, cockpit Quadlet, cosign policy files
-- `scripts/query-coreos-kernel.sh` - Kernel version discovery helper
+- `scripts/query-coreos-kernel.sh` - Kernel version discovery (called by Makefile and CI)
+- `scripts/resolve-zfs-version.sh` - ZFS version discovery (called by Makefile and CI)
+- `scripts/cleanup-dry-run.sh` - Local dry-run of container image cleanup logic
 
 ### CI/CD Workflows
 - `.github/workflows/build.yaml` - Main container build
@@ -244,7 +247,7 @@ Images include labels for future deduplication:
 
 **Registry-First Compatibility**: Let the container registry be the source of truth for ZFS+kernel compatibility rather than maintaining duplicate matrices.
 
-**Local-First CI/CD Development**: Implement workflow logic in Justfile commands first, then port to GitHub Actions for fast iteration and testing.
+**Local-First CI/CD Development**: Implement workflow logic in Makefile targets and `scripts/` first, then reference those scripts from GitHub Actions for consistency.
 
 ## bootc Primer (Tips)
 
@@ -319,13 +322,13 @@ SELinux labels are stored as xattrs on files. ZFS snapshots capture xattrs. Roll
 
 ## Quick Start
 
-1. **Build locally**: `just build`
-2. **Generate Ignition**: `just generate-ignition`
-3. **Trigger CI build**: `just run-workflow`
-4. **Install CoreOS**: Use `https://samhclark.github.io/custom-coreos/ignition.json`
+- **Build the container image**: `make build`
+- **Update the Ignition file** (after editing `butane.yaml`): `make generate-ignition`
+- **Trigger CI build**: `make run-workflow`
+- **Install CoreOS**: Use `https://samhclark.github.io/custom-coreos/ignition.json`
 
 ## Troubleshooting
 
-**Build failures**: Check `just check-zfs-available` - likely no prebuilt ZFS kmods for current versions
-**Workflow failures**: Check `just all-workflows` for status
-**Ignition issues**: Verify with `just generate-ignition` locally first
+**Build failures**: Check `make check` - likely no prebuilt ZFS kmods for current versions
+**Workflow failures**: Check `make all-workflows` for status
+**Ignition issues**: Verify with `make generate-ignition` locally first
