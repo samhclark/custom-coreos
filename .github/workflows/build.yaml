@@ -73,18 +73,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Get the latest ZFS 2.4.x release
-          ZFS_VERSION=$(gh release list \
-              --repo openzfs/zfs \
-              --json publishedAt,tagName \
-              --jq '[.[] | select(.tagName | startswith("zfs-2.4"))] | sort_by(.publishedAt) | last | .tagName' \
-              --limit 100)
-          
-          # Extract just the version part for container tag
-          ZFS_VERSION_CLEAN=${ZFS_VERSION#zfs-}
-          
-          echo "zfs-tag=$ZFS_VERSION" >> $GITHUB_OUTPUT
-          echo "zfs-version=$ZFS_VERSION_CLEAN" >> $GITHUB_OUTPUT
+          ZFS_VERSION=$(./scripts/resolve-zfs-version.sh)
+          echo "zfs-tag=zfs-$ZFS_VERSION" >> $GITHUB_OUTPUT
+          echo "zfs-version=$ZFS_VERSION" >> $GITHUB_OUTPUT
           echo "Found ZFS version: $ZFS_VERSION"
 
       - name: Check if prebuilt ZFS kmods are available
