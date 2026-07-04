@@ -11,3 +11,4 @@ secrets/*identity*
 secrets/*private*
 overlay-root/usr/share/custom-coreos/secrets/*.plain.yaml
 overlay-root/usr/share/custom-coreos/secrets/*.decrypted.yaml
+__pycache__/
