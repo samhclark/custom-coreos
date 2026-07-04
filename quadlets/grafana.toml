@@ -1,0 +1,55 @@
+# ABOUTME: Declarative config for the rootless Grafana quadlet; consumed by
+# generate-quadlets.py (build time) and sops-distribute-secrets.sh (boot time).
+
+[service]
+name = "grafana"
+description = "Grafana Dashboard"
+documentation = "https://grafana.com/docs/grafana/latest/"
+
+[host]
+username = "_nas_grafana"
+uid = 51210
+subid-start = 512100000
+display-name = "Grafana"
+
+[container]
+image = "docker.io/grafana/grafana-oss:12.1.1"
+network = "host"
+container-user = 0
+
+[container.environment]
+# GF_PLUGINS_PREINSTALL_SYNC installs the VictoriaMetrics datasource plugin
+# on first start.
+GF_PLUGINS_PREINSTALL_SYNC = "victoriametrics-metrics-datasource"
+GF_SERVER_HTTP_ADDR = "127.0.0.1"
+GF_SERVER_HTTP_PORT = "3000"
+GF_AUTH_ANONYMOUS_ENABLED = "true"
+GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin"
+GF_AUTH_DISABLE_LOGIN_FORM = "true"
+
+[[container.volumes]]
+comment = "Image-controlled provisioning configs (read-only)"
+source = "/usr/share/custom-coreos/grafana/provisioning"
+target = "/etc/grafana/provisioning"
+options = "ro"
+
+[[container.volumes]]
+comment = "Image-controlled dashboards (read-only)"
+source = "/usr/share/custom-coreos/grafana/dashboards"
+target = "/etc/grafana/dashboards"
+options = "ro"
+
+[[container.volumes]]
+comment = "Persistent storage for Grafana SQLite DB and plugins"
+source = "/var/lib/grafana"
+target = "/var/lib/grafana"
+
+[data]
+path = "/var/lib/grafana"
+mode = "0750"
+
+[assets]
+path = "/usr/share/custom-coreos/grafana"
+
+[unit]
+timeout-start-sec = 900
