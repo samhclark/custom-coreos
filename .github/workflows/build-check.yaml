@@ -44,6 +44,25 @@ jobs:
             --certificate-oidc-issuer=https://token.actions.githubusercontent.com
             -o text
 
+  verify-generated:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Regenerate quadlet files
+        run: python3 generate-quadlets.py
+
+      - name: Check for drift between quadlets/*.toml and generated files
+        run: |
+          if ! git diff --exit-code overlay-root/; then
+            echo "::error::Generated files are out of date. Run python3 generate-quadlets.py and commit the result."
+            exit 1
+          fi
+
   query-versions:
     runs-on: ubuntu-latest
     outputs:
