@@ -248,6 +248,7 @@ Images include labels for future deduplication:
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
 - Current allocation: `_nas_grafana` uses host UID/GID `51210`; `_nas_vmalert` uses host UID/GID `51220`; `_nas_blackbox` uses host UID/GID `51230`
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
+- UIDs are allocate-only: never reuse a UID from a retired service. File ownership is numeric and outlives the user — ZFS snapshots in particular can hand a retired UID's files to whatever service reuses it. `quadlets/*.toml` is the registry of active allocations; when the first service is actually retired, record its UID here as retired and add a `retired-uids` check to `generate-quadlets.py`.
 
 ## Rootless Quadlet Note
 
