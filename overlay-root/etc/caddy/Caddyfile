@@ -10,10 +10,6 @@
 	#acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
 
-cockpit.i.samhclark.com {
-	reverse_proxy 127.0.0.1:9090
-}
-
 # Garage S3-compatible object storage
 # Admin API - for garage CLI and metrics
 garage.i.samhclark.com {

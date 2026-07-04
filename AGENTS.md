@@ -4,7 +4,7 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Overview
 
-This repository creates a custom CoreOS container image with ZFS, Tailscale, Cockpit management tooling, and encrypted storage support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
+This repository creates a custom CoreOS container image with ZFS, Tailscale, and encrypted storage support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
 
 **Status**: In production for one personal NAS
 **Build Time**: ~2-3 minutes (down from 10+ minutes)
@@ -37,7 +37,6 @@ This repo is not just "CoreOS with ZFS". It currently defines a full single-node
 These are considered active and in use on the real machine unless explicitly stated otherwise:
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services
-- `cockpit-ws.container` - privileged Cockpit web service proxy
 - `garage.container` - S3-compatible object storage on ZFS
 - `victoria-metrics.container` - metrics storage
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
@@ -130,29 +129,13 @@ FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSI
 ```
 
 ### Stage 2: Final Image Assembly
-```dockerfile
-FROM quay.io/fedora/fedora-coreos:stable
-# Inline kernel version validation
-RUN [[ "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" == "${KERNEL_VERSION}" ]]
 
-# Single RUN command for efficiency
-RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
-    dnf install -y \
-        cockpit-ostree \
-        cockpit-podman \
-        cockpit-system \
-        firewalld \
-        libnfsidmap \
-        sssd-nfs-idmap \
-        nfs-utils \
-        tailscale \
-        /zfs-rpms/*.noarch.rpm \
-        /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
-        /zfs-rpms/*.$(rpm -qa kernel --queryformat '%{ARCH}').rpm && \
-    depmod -a "$(rpm -qa kernel --queryformat '%{VERSION}-%{RELEASE}.%{ARCH}')" && \
-    echo "zfs" > /etc/modules-load.d/zfs.conf && \
-    systemctl enable tailscaled.service
-```
+Starts `FROM quay.io/fedora/fedora-coreos:stable`, validates that the
+provided `KERNEL_VERSION` matches the base image's actual kernel, then in a
+single `RUN`: installs the host packages (nftables, node-exporter,
+smartmontools, tailscale, jq) plus the ZFS RPMs from stage 1, runs
+`depmod`, and enables the systemd units. See the `Containerfile` itself for
+the authoritative package and unit lists — do not duplicate them here.
 
 ## CI/CD Workflows
 
@@ -180,8 +163,8 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 Use the `Containerfile` for configuration that adds **capabilities** to the system:
 - **Security**: Sigstore verification for container pulls via `/etc/containers/policy.json` (used by bootc)
 - **System Services**: NTP configuration, chronyd settings
-- **Package Installation**: ZFS modules, Cockpit tooling, firewalld, Tailscale
-- **Service Enablement**: systemd units (timers, cockpit-ws, tailscaled)
+- **Package Installation**: ZFS modules, firewalld, Tailscale
+- **Service Enablement**: systemd units (timers, tailscaled)
 
 ### Butane Configuration (Personal & Runtime)
 Use `butane.yaml` for configuration that is **personal** or **cannot be described declaratively**:
@@ -225,7 +208,7 @@ Images include labels for future deduplication:
 - `butane.yaml` - Fedora CoreOS configuration with host identity + storage
 - `Makefile` - Development commands (`make help` to see all targets)
 - `ignition.json` - Generated Ignition file (auto-updated)
-- `overlay-root/` - Systemd units, ZFS scripts, cockpit Quadlet, cosign policy files
+- `overlay-root/` - Systemd units, ZFS scripts, Quadlets, cosign policy files
 - `scripts/query-coreos-kernel.sh` - Kernel version discovery (called by Makefile and CI)
 - `scripts/resolve-zfs-version.sh` - ZFS version discovery (called by Makefile and CI)
 - `scripts/cleanup-dry-run.sh` - Local dry-run of container image cleanup logic
