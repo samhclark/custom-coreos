@@ -981,8 +981,7 @@ does not block the rootful deployment.
 
 The selected rootless design is now runtime files under `/run` written by the
 rootful SOPS distributor. That avoids the rootless Podman shell-driver
-namespace entirely. It still needs a focused NAS validation pass before the
-first real rootless service consumes a secret.
+namespace entirely. Validated on the NAS 2026-07-03 (see below).
 
 ### NAS test results
 
@@ -1071,10 +1070,22 @@ Volume=/run/nas-secrets/<service>/<secret-name>:/run/secrets/<secret-name>:ro,Z
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/<service>/<secret-name>
 ```
 
+NAS validation results (2026-07-03, tested with `_nas_grafana` and ephemeral
+files under `/run`):
+- Root can write the exact layout (`0711` parent, `0710 root:<user>` service
+  dir, `0400 <user>:<user>` file) and the service user can read the file.
+- `:ro,Z` on a `/run` tmpfs file works from rootless Podman: the file is
+  relabeled to `container_file_t` with the container's MCS pair and the
+  container reads it. This is the mount syntax generated quadlets should use.
+- Without relabeling, the mount is blocked by SELinux (`var_run_t` is not
+  readable from `container_t`) — expected, and confirms no pre-labeling is
+  needed in the distributor.
+- The rewritten `sops-distribute-secrets.sh` was run end-to-end on the NAS
+  (with all writable paths redirected to a throwaway tree): TOML parsing,
+  runtime-file writing, re-run idempotence, and in-container content match
+  all passed.
+
 Details still to validate:
-- SELinux behavior for `:Z` on `/run` files mounted by rootless Podman. If this
-  fails, the distributor should set a suitable label and the generated mount
-  should omit relabeling.
 - Normal boot ordering between the early rootful distributor and admin-managed
   rootless user services.
 - Restart behavior when the distributor fails and the runtime file is missing.
