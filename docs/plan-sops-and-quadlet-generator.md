@@ -1085,10 +1085,17 @@ files under `/run`):
   runtime-file writing, re-run idempotence, and in-container content match
   all passed.
 
-Details still to validate:
-- Normal boot ordering between the early rootful distributor and admin-managed
-  rootless user services.
-- Restart behavior when the distributor fails and the runtime file is missing.
+Production validation (2026-07-04, first real consumer: grafana +
+`garage-metrics-token`):
+- Boot ordering works without cross-manager dependencies: the distributor
+  finished at T+0 and grafana's lingering user service started at T+12s with
+  its `ExecStartPre` readability guard passing on the first boot.
+- The container sees the mounted file at `/run/secrets/<name>` as
+  container-root (host service user mapped through the rootless userns) with
+  content matching the host file.
+- The missing-file case is bounded by design rather than observed: the
+  `ExecStartPre` guard fails the start and `Restart=always`/`RestartSec=30`
+  retries until the distributor has run.
 
 ### Other possible designs
 

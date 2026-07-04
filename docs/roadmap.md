@@ -46,12 +46,14 @@ maintaining it.
 
 ## Remaining work (in order)
 
-- [ ] **1. First production rootless secret.** Add `[[container.secrets]]`
-      to `quadlets/grafana.toml` (e.g. `garage-metrics-token` for the
-      datasource), regenerate, deploy, and run the Step 1.6 checks from the
-      plan doc. This proves the secrets path end-to-end in production and
-      settles the two open Appendix D questions (boot ordering, behavior
-      when the runtime file is missing).
+- [x] **1. First production rootless secret.** Done 2026-07-04: grafana
+      mounts `garage-metrics-token` via the runtime-file path. Verified on
+      the NAS: distributor writes the file at boot from the image-shipped
+      TOML, grafana's user service starts ~12s later with the ExecStartPre
+      guard passing (boot ordering needs no cross-manager dependency), and
+      the container reads the mounted file with matching content. The
+      missing-file case is bounded by design (guard fails the start;
+      Restart=always retries every 30s) and was not observed live.
 - [ ] **2. Migrate rootful services to rootless**, one at a time, easiest
       first: alertmanager → victoria-metrics → garage → caddy decision.
       Each migration: new TOML + UID allocation, secrets move from Podman
