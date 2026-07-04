@@ -1,83 +1,90 @@
 # Roadmap: Rootless Platform Migration
 
-This file records the decisions made during the July 2026 repo review and the
-sequenced action items that follow from them. The goal driving all of it:
-spend time using the NAS, not maintaining it.
+This file records the decisions from the July 2026 repo review and the work
+remaining. The goal driving all of it: spend time using the NAS, not
+maintaining it.
 
 ## Decisions (settled — do not re-litigate without new evidence)
 
 1. **Rootless secrets use runtime files, not Podman `Secret=`.**
    The rootful `sops-distribute-secrets.service` decrypts SOPS once at boot
    and writes per-service files under `/run/nas-secrets/<service>/`, owned by
-   the service user, mode 0400, mounted read-only into containers. Rootless
-   Podman secrets via the shell driver are a validated dead end (the helper
-   runs in a user namespace where `systemd-creds` has no usable key mode).
-   Full findings: `docs/plan-sops-and-quadlet-generator.md` Appendix D.
+   the service user, mode 0400, mounted `:ro,Z` into containers (relabeling
+   `/run` tmpfs files from rootless Podman is NAS-validated). Rootless Podman
+   secrets via the shell driver are a validated dead end. Full findings:
+   `docs/plan-sops-and-quadlet-generator.md` Appendix D.
 
 2. **libkrun is deferred, and is a per-service dial, not an architecture.**
    Volumes cross into a libkrun microVM via virtiofs (host kernel keeps ZFS;
    no NFS layer needed). Enabling it later is a per-unit runtime flag
    (`PodmanArgs=--runtime krun`), and bind-mounted secret files carry over
    unchanged. Candidates later: small network-facing services. Likely never:
-   media-path services (jellyfin, immich) where virtiofs overhead lands on
-   the hot path. Nothing in the rootless migration is made harder by
-   adopting libkrun later.
+   media-path services where virtiofs overhead lands on the hot path.
 
-3. **The quadlet generator (plan Phase 2) is worth building.**
-   Target state is ~10 rootless services (immich, jellyfin, audiobookshelf,
-   *arr, plus current). At that count, one TOML per service beats seven
-   hand-copied boilerplate files, and the TOML doubles as the secret-routing
-   manifest for the distributor.
+3. **Rootless boilerplate is generated, never hand-edited.**
+   `quadlets/<service>.toml` + `generate-quadlets.py` produce everything;
+   CI fails on drift. The TOMLs double as the secret-routing manifest for
+   the distributor.
 
 4. **Everything migrates to rootless except possibly caddy.**
    Caddy binds 80/443; either set `net.ipv4.ip_unprivileged_port_start=80`
    or keep the edge proxy rootful. Rootful-caddy-plus-rootless-everything is
-   an acceptable end state. cockpit-ws gets deleted, not migrated.
+   an acceptable end state.
 
-## Action items (in order)
+5. **Service UIDs are allocate-only.** Never reuse a retired UID; numeric
+   file ownership (especially in ZFS snapshots) outlives the user. Scheme
+   and current allocations live in AGENTS.md; `quadlets/*.toml` is the
+   active registry.
 
-- [x] **1. Rewrite the rootless branch of `sops-distribute-secrets.sh`.**
-      Done 2026-07-03. The rejected design (rootless Podman secret stores via
-      `run_podman_as` / `ensure_rootless_store`) is replaced with the
-      runtime-file design; the rootful Podman-secret path is unchanged, and
-      the state-file format stays compatible. Not yet deployed — ships with
-      the next image build.
-- [x] **2. Validate the runtime-file design on the NAS.** Done 2026-07-03,
-      via ephemeral tests under `/run` (results recorded in
-      `docs/plan-sops-and-quadlet-generator.md` Appendix D). Key result:
-      `:ro,Z` relabeling of `/run` tmpfs files works from rootless Podman,
-      so generated quadlets use `:ro,Z` and the distributor does no
-      labeling. The rewritten script also ran end-to-end on the NAS with
-      writable paths redirected to a throwaway tree.
-- [x] **3. Build the quadlet generator.** Done 2026-07-03:
-      `generate-quadlets.py` + `quadlets/*.toml` now produce all rootless
-      boilerplate; grafana, vmalert, and blackbox-exporter are converted
-      with no functional diff, and build-check fails on drift. The first
-      deploy carrying this must be a no-op for the three services.
-- [ ] **4. Migrate rootful services to rootless**, one at a time, easiest
+## Done (July 2026)
+
+- Distributor rewritten to the runtime-file design; validated on the NAS
+  end-to-end, deployed, and verified across two reboots.
+- Quadlet generator built; grafana, vmalert, and blackbox-exporter converted
+  with no functional diff; CI drift check active.
+- Cockpit deleted (quadlet, packages, Caddy vhost).
+
+## Remaining work (in order)
+
+- [ ] **1. First production rootless secret.** Add `[[container.secrets]]`
+      to `quadlets/grafana.toml` (e.g. `garage-metrics-token` for the
+      datasource), regenerate, deploy, and run the Step 1.6 checks from the
+      plan doc. This proves the secrets path end-to-end in production and
+      settles the two open Appendix D questions (boot ordering, behavior
+      when the runtime file is missing).
+- [ ] **2. Migrate rootful services to rootless**, one at a time, easiest
       first: alertmanager → victoria-metrics → garage → caddy decision.
-      Delete cockpit-ws. When the last `Secret=` consumer is gone, delete
-      the shell secret driver (`/usr/local/lib/podman-secret-driver/`),
-      `nas-secrets`, and `test-podman-secret-driver.sh`.
-- [ ] **5. Add Renovate** with a custom regex manager for `Image=` lines in
-      `*.container` files (and quadlet TOMLs once the generator lands), plus
-      the `FROM ghcr.io/getsops/sops:` pin. Converge every service on
-      pinned tags/digests; drop the inert `AutoUpdate=`/`Pull=newer` mix.
-      This is the highest-leverage maintenance item once service count grows.
-- [ ] **6. Guard against `nas-secrets` ↔ SOPS drift** until item 4 removes
-      `nas-secrets` entirely: rotation goes through the SOPS file + redeploy,
-      never through `nas-secrets` alone. (The distributor skips secrets whose
-      state-file hash matches SOPS, so a manual rotation silently diverges.)
-- [ ] **7. Cleanups** (fold in opportunistically): delete
-      `test-systemd-creds.sh` (findings preserved in plan Appendix D);
-      de-duplicate README.md vs AGENTS.md; move `zfs-snapshot-*.sh` out of
-      `/etc/systemd/system/` into `/usr/local/bin`; remove the empty
-      `quadlets/` COPY plumbing if the generator design changes it.
+      Each migration: new TOML + UID allocation, secrets move from Podman
+      `Secret=` to runtime files, then delete the rootful quadlet. When the
+      last `Secret=` consumer is gone, delete the shell secret driver
+      (`/usr/local/lib/podman-secret-driver/`), `nas-secrets`, and
+      `test-podman-secret-driver.sh`. Until then: secret rotation goes
+      through `secrets.sops.yaml` + redeploy, never `nas-secrets` alone
+      (the distributor's hash check will not correct a manual rotation).
+- [ ] **3. Add Renovate** with a custom regex manager for image references
+      in `quadlets/*.toml` and the rootful `*.container` files, plus the
+      `FROM ghcr.io/getsops/sops:` pin in the Containerfile. Converge every
+      service on pinned tags/digests; drop the inert
+      `AutoUpdate=`/`Pull=newer` mix. Matters more with every service added.
+- [ ] **4. New services** (the actual goal): immich, jellyfin,
+      audiobookshelf, *arr — each is one TOML + UID + Containerfile enable
+      line + SOPS values + Caddy vhost, per the pipeline below.
+- [ ] **5. Small cleanups**, opportunistically:
+      - NAS-local cockpit residue (manual, one-time):
+        `sudo rm -rf /etc/cockpit` and
+        `sudo podman rmi quay.io/cockpit/ws:latest`. The `cockpit-ws`
+        passwd entry stays — it ships in Fedora CoreOS's static sysusers,
+        not from this repo.
+      - Delete `test-systemd-creds.sh` (findings preserved in the plan doc).
+      - De-duplicate README.md vs AGENTS.md.
+      - Move `zfs-snapshot-*.sh` from `/etc/systemd/system/` to
+        `/usr/local/bin/`.
 
-## New-service pipeline (after items 1–4)
+## New-service pipeline
 
-Adding a service should cost: one `quadlets/<name>.toml`, a UID allocation
-from the scheme in AGENTS.md, secret values added to `secrets.sops.yaml`,
-one `systemctl enable ensure-nas-<name>-account.service` line in the
-Containerfile, and a deploy. Anything beyond that is a defect in the
-platform layer and worth fixing there instead of working around per-service.
+Adding a service should cost: one `quadlets/<name>.toml` (UID from the
+scheme in AGENTS.md), `python3 generate-quadlets.py`, one
+`systemctl enable ensure-nas-<name>-account.service` line in the
+Containerfile, secret values in `secrets.sops.yaml`, a Caddy vhost if
+user-facing, and a deploy. Anything beyond that is a defect in the platform
+layer and worth fixing there instead of working around per-service.
