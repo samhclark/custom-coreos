@@ -49,10 +49,11 @@ spend time using the NAS, not maintaining it.
       so generated quadlets use `:ro,Z` and the distributor does no
       labeling. The rewritten script also ran end-to-end on the NAS with
       writable paths redirected to a throwaway tree.
-- [ ] **3. Build the quadlet generator** per
-      `docs/plan-sops-and-quadlet-generator.md` Phase 2. Convert grafana,
-      vmalert, and blackbox-exporter first; that deploy must be a no-op.
-      Add the CI drift check.
+- [x] **3. Build the quadlet generator.** Done 2026-07-03:
+      `generate-quadlets.py` + `quadlets/*.toml` now produce all rootless
+      boilerplate; grafana, vmalert, and blackbox-exporter are converted
+      with no functional diff, and build-check fails on drift. The first
+      deploy carrying this must be a no-op for the three services.
 - [ ] **4. Migrate rootful services to rootless**, one at a time, easiest
       first: alertmanager → victoria-metrics → garage → caddy decision.
       Delete cockpit-ws. When the last `Secret=` consumer is gone, delete

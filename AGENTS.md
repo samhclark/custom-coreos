@@ -254,6 +254,7 @@ Images include labels for future deduplication:
 Current state:
 - Most active Quadlets in this repo are rootful system units under `overlay-root/etc/containers/systemd/`
 - Grafana, vmalert, and blackbox exporter are the current exceptions: they are defined as rootless admin-managed user Quadlets under `overlay-root/etc/containers/systemd/users/51210/grafana.container`, `overlay-root/etc/containers/systemd/users/51220/vmalert.container`, and `overlay-root/etc/containers/systemd/users/51230/blackbox-exporter.container`
+- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
