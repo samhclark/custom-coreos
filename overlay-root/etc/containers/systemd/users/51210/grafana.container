@@ -25,9 +25,13 @@ Volume=/usr/share/custom-coreos/grafana/dashboards:/etc/grafana/dashboards:ro
 # Persistent storage for Grafana SQLite DB and plugins
 Volume=/var/lib/grafana:/var/lib/grafana
 
+# Runtime secret written at boot by sops-distribute-secrets.service
+Volume=/run/nas-secrets/grafana/garage-metrics-token:/run/secrets/garage-metrics-token:ro,Z
+
 Pull=newer
 
 [Service]
+ExecStartPre=/usr/bin/test -r /run/nas-secrets/grafana/garage-metrics-token
 Restart=always
 RestartSec=30
 TimeoutStartSec=900

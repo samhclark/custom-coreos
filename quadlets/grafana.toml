@@ -44,6 +44,13 @@ comment = "Persistent storage for Grafana SQLite DB and plugins"
 source = "/var/lib/grafana"
 target = "/var/lib/grafana"
 
+# First production consumer of the runtime-file secret path (roadmap item 1).
+# Grafana does not currently read this token — the local VictoriaMetrics
+# datasource is unauthenticated — it exists to prove the TOML -> distributor
+# -> /run/nas-secrets -> :ro,Z mount chain end to end.
+[[container.secrets]]
+name = "garage-metrics-token"
+
 [data]
 path = "/var/lib/grafana"
 mode = "0750"
