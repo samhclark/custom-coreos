@@ -122,6 +122,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         disk-health-metrics.timer \
         node_exporter.service; \
     systemctl disable zincati.service; \
+    systemctl disable fwupd-refresh.timer; \
     dnf clean all; \
     rm -rf /var/log/dnf*'
 
