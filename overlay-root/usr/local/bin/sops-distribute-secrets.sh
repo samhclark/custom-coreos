@@ -173,10 +173,12 @@ write_runtime_secret() {
     local secret="$3"
     local dir="${RUNTIME_DIR}/${service}"
     local tmp
+    local value
 
     install -d -m 0710 -o root -g "${user}" "${dir}"
     tmp="$(mktemp "${dir}/.tmp.XXXXXX")"
-    secret_value "${secret}" > "${tmp}"
+    value="$(secret_value "${secret}")"
+    printf '%s' "${value}" > "${tmp}"
     chown "${user}:${user}" "${tmp}"
     chmod 0400 "${tmp}"
     mv -f "${tmp}" "${dir}/${secret}"
