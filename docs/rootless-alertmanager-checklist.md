@@ -102,6 +102,18 @@ curl -fsS http://127.0.0.1:9093/metrics >/dev/null
 journalctl --machine _nas_alertmanager@ --user -u alertmanager.service -b --no-pager
 ```
 
-Confirm Grafana and VictoriaMetrics still report Alertmanager as available. A
-real notification test can use the existing alerting pipeline once the service
-is healthy; avoid inventing a second test-only notification path.
+Confirm Grafana and VictoriaMetrics still report Alertmanager as available.
+
+## 6. Test Notification
+
+Trigger a short-lived synthetic alert through Alertmanager:
+
+```bash
+sudo systemctl start alertmanager-test-alert.service
+sudo journalctl -u alertmanager-test-alert.service -n 20 --no-pager
+```
+
+The notification is subject to Alertmanager's configured `group_wait` and
+expires automatically after five minutes. This verifies Alertmanager routing,
+its Pushover credentials, and Pushover delivery; it does not exercise vmalert
+rule evaluation.

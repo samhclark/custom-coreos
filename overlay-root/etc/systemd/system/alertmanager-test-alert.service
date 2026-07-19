@@ -1,0 +1,16 @@
+[Unit]
+Description=Send a synthetic Alertmanager notification
+Documentation=https://prometheus.io/docs/alerting/latest/alertmanager/
+After=ensure-nas-alertmanager-account.service
+Requires=ensure-nas-alertmanager-account.service
+
+[Service]
+Type=oneshot
+User=_nas_alertmanager
+Group=_nas_alertmanager
+Environment=HOME=/var/home/_nas_alertmanager
+Environment=XDG_RUNTIME_DIR=/run/user/51240
+WorkingDirectory=/
+ExecStart=/usr/local/bin/alertmanager-test-alert.sh
+StandardOutput=journal
+StandardError=journal
