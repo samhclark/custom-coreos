@@ -1,5 +1,14 @@
 # Plan: SOPS Secrets Management and Quadlet Generator
 
+> **Implementation status (2026-07-19):** The SOPS distributor and Quadlet
+> generator described here are deployed. Grafana, vmalert, blackbox exporter,
+> and Alertmanager now run as rootless user Quadlets. Alertmanager's migration
+> was production-validated through a successful synthetic Pushover
+> notification. Sections written in the present tense under "Background" and
+> the phased rollout steps preserve the pre-implementation design history;
+> use `docs/roadmap.md`, `docs/rootless-quadlet-playbook.md`, and the live files
+> under `quadlets/` and `overlay-root/` for current behavior.
+
 This plan covers two related improvements to the NAS infrastructure:
 
 1. **SOPS + age secrets management**: Encrypted secrets checked into the repo,

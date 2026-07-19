@@ -5,6 +5,10 @@ migration. The expected host identity is `_nas_alertmanager` with UID/GID
 `51240`; the user Quadlet lives under
 `/etc/containers/systemd/users/51240/alertmanager.container`.
 
+Status: completed and production-validated on 2026-07-19. The checks below
+passed on the NAS, including a synthetic alert delivered through Alertmanager
+to Pushover.
+
 ## Success Criteria
 
 - the `_nas_alertmanager` account, subordinate IDs, linger state, and user
@@ -39,13 +43,18 @@ stat -c '%U:%G %a %n' \
   /run/nas-secrets/alertmanager \
   /run/nas-secrets/alertmanager/pushover-user-key \
   /run/nas-secrets/alertmanager/pushover-api-token
+stat -c '%s bytes: %n' \
+  /run/nas-secrets/alertmanager/pushover-user-key \
+  /run/nas-secrets/alertmanager/pushover-api-token
 sudo -u _nas_alertmanager test -r /run/nas-secrets/alertmanager/pushover-user-key
 sudo -u _nas_alertmanager test -r /run/nas-secrets/alertmanager/pushover-api-token
 ```
 
 The service directory should be `root:_nas_alertmanager` mode `0710`; secret
-files should be `_nas_alertmanager:_nas_alertmanager` mode `0400`. Do not print
-their contents during validation.
+files should be `_nas_alertmanager:_nas_alertmanager` mode `0400`. Both
+Pushover credentials should be exactly 30 bytes. The distributor strips the
+newline emitted while extracting each SOPS value before writing runtime files.
+Do not print their contents during routine validation.
 
 The distributor should also have removed the retired rootful Podman secrets:
 
@@ -72,7 +81,6 @@ files under `/var/lib/alertmanager/data` should still be present.
 
 ```bash
 systemctl status alertmanager.service --no-pager
-systemctl --machine _nas_alertmanager@ --user status alertmanager.service --no-pager
 sudo -u _nas_alertmanager env \
   HOME=/var/home/_nas_alertmanager \
   XDG_RUNTIME_DIR=/run/user/51240 \
@@ -99,7 +107,8 @@ sudo -u _nas_alertmanager env \
 curl -fsS http://127.0.0.1:9093/-/healthy
 curl -fsS http://127.0.0.1:9093/-/ready
 curl -fsS http://127.0.0.1:9093/metrics >/dev/null
-journalctl --machine _nas_alertmanager@ --user -u alertmanager.service -b --no-pager
+sudo -u _nas_alertmanager sh -c \
+  'cd / && HOME=/var/home/_nas_alertmanager XDG_RUNTIME_DIR=/run/user/51240 podman logs --since 20m alertmanager'
 ```
 
 Confirm Grafana and VictoriaMetrics still report Alertmanager as available.

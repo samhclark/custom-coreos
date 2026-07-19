@@ -13,7 +13,7 @@ persists across upgrades.
 
 ## Reference Implementation
 
-The repo now has three concrete rootless examples:
+The repo now has four concrete rootless examples:
 
 - Grafana is the fuller migration example with persistent service data:
   - `overlay-root/etc/containers/systemd/users/51210/grafana.container`
@@ -39,6 +39,20 @@ The repo now has three concrete rootless examples:
   - `overlay-root/usr/lib/tmpfiles.d/nas-blackbox-rootless.conf`
   - `overlay-root/usr/local/bin/ensure-nas-blackbox-account.sh`
   - `overlay-root/etc/systemd/system/ensure-nas-blackbox-account.service`
+
+- Alertmanager is the runtime-secret notification example:
+  - `quadlets/alertmanager.toml`
+  - `overlay-root/etc/containers/systemd/users/51240/alertmanager.container`
+  - `overlay-root/usr/share/custom-coreos/alertmanager/alertmanager.yml`
+  - `overlay-root/usr/lib/sysusers.d/nas-alertmanager.conf`
+  - `overlay-root/usr/lib/tmpfiles.d/nas-alertmanager-rootless.conf`
+  - `overlay-root/usr/local/bin/ensure-nas-alertmanager-account.sh`
+  - `overlay-root/etc/systemd/system/ensure-nas-alertmanager-account.service`
+
+  Its Pushover credentials are distributed as service-owned runtime files
+  under `/run/nas-secrets/alertmanager/` and mounted read-only into the
+  container. The static config uses Alertmanager's native `user_key_file` and
+  `token_file` settings.
 
 Read those first if you want the exact concrete implementation.
 

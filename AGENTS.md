@@ -40,7 +40,7 @@ These are considered active and in use on the real machine unless explicitly sta
 - `garage.container` - S3-compatible object storage on ZFS
 - `victoria-metrics.container` - metrics storage
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
-- `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/` in the repository, pending NAS deploy validation
+- `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/`, deployed and validated on the NAS
 - `grafana.container` - dashboards; rootless under `etc/containers/systemd/users/51210/`
 
 ### Supporting Host Units
@@ -254,7 +254,7 @@ Images include labels for future deduplication:
 
 Current state:
 - Caddy, Garage, and VictoriaMetrics remain rootful system Quadlets under `overlay-root/etc/containers/systemd/`
-- Grafana, vmalert, and blackbox exporter are deployed as rootless admin-managed user Quadlets; Alertmanager now has the same repository layout under UID `51240`, pending NAS deploy validation
+- Grafana, vmalert, blackbox exporter, and Alertmanager are deployed as rootless admin-managed user Quadlets; Alertmanager uses UID `51240`
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
