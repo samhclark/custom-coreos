@@ -89,8 +89,8 @@ check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
 	fi
 
 .PHONY: test
-test: ## Run tests (none defined for this repository)
-	@printf "$(COLOR_BLUE)No tests defined for this repository$(COLOR_RESET)\n"
+test: ## Run unit tests
+	@python3 -m unittest discover -s tests -v
 
 ##@ Building
 
