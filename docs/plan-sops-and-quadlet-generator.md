@@ -920,8 +920,9 @@ source = "/host/path"
 target = "/container/path"
 options = "ro"              # Optional mount options
 
-# Optional: published ports (array of tables, rootful only typically)
+# Optional: published scalar TCP ports (array of tables)
 [[container.ports]]
+# Literal IPv4:port or bracketed IPv6, e.g. "[::1]:3900"
 host = "127.0.0.1:3900"
 container = 3900
 
@@ -952,6 +953,13 @@ Container = ["PodmanArgs=--foo"]
 Service = ["ExecStartPre=/usr/bin/something"]
 Install = []
 ```
+
+Published ports require an explicit literal bind address to avoid accidentally
+exposing a service on every interface. They cannot be combined with
+`network = "host"`. Rootless containers can publish high ports normally; ports
+below the host's `net.ipv4.ip_unprivileged_port_start` require an explicit host
+policy decision. Port ranges, dynamic host ports, and non-TCP protocols are
+deferred until a service requires them.
 
 **Conventions baked into the generator** (not configurable per service):
 - `subid-count` is always `65536`

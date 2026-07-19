@@ -68,5 +68,75 @@ class RemoveStaleGeneratedTests(unittest.TestCase):
             self.assertTrue(target.exists())
 
 
+class PublishedPortTests(unittest.TestCase):
+    def test_validates_and_renders_ipv4_and_ipv6_ports_in_source_order(self):
+        container = {
+            "image": "example.invalid/service:1",
+            "ports": [
+                {"host": "127.0.0.1:3900", "container": 3900},
+                {"host": "[::1]:3901", "container": 3901},
+            ],
+        }
+        GENERATOR.validate_ports("service.toml", container)
+
+        cfg = {
+            "_toml_path": Path("service.toml"),
+            "service": {"name": "service", "description": "Test service"},
+            "host": {"username": "_nas_service"},
+            "container": container,
+        }
+        unit = GENERATOR.container_unit(cfg)
+
+        self.assertIn(
+            "PublishPort=127.0.0.1:3900:3900\n"
+            "PublishPort=[::1]:3901:3901\n",
+            unit,
+        )
+
+    def test_rejects_invalid_port_declarations(self):
+        invalid_cases = {
+            "host networking": {
+                "network": "host",
+                "ports": [{"host": "127.0.0.1:3900", "container": 3900}],
+            },
+            "hostname": {
+                "ports": [{"host": "localhost:3900", "container": 3900}],
+            },
+            "unbracketed IPv6": {
+                "ports": [{"host": "::1:3900", "container": 3900}],
+            },
+            "host port zero": {
+                "ports": [{"host": "127.0.0.1:0", "container": 3900}],
+            },
+            "container port too large": {
+                "ports": [{"host": "127.0.0.1:3900", "container": 65536}],
+            },
+            "boolean container port": {
+                "ports": [{"host": "127.0.0.1:3900", "container": True}],
+            },
+            "missing host": {"ports": [{"container": 3900}]},
+            "unknown key": {
+                "ports": [
+                    {
+                        "host": "127.0.0.1:3900",
+                        "container": 3900,
+                        "protocol": "udp",
+                    }
+                ],
+            },
+            "duplicate": {
+                "ports": [
+                    {"host": "127.0.0.1:3900", "container": 3900},
+                    {"host": "127.0.0.1:3900", "container": 3900},
+                ],
+            },
+        }
+
+        for label, container in invalid_cases.items():
+            with self.subTest(label=label), self.assertRaises(SystemExit):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    GENERATOR.validate_ports("service.toml", container)
+
+
 if __name__ == "__main__":
     unittest.main()

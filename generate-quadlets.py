@@ -3,6 +3,7 @@
 # sysusers.d, tmpfiles.d, ensure-account scripts/units, subuid/subgid) into
 # overlay-root/ from the declarative configs in quadlets/*.toml.
 
+import ipaddress
 import re
 import sys
 import textwrap
@@ -34,6 +35,63 @@ def wrap_comment(text: str) -> str:
     return textwrap.fill(text, width=78, initial_indent="# ", subsequent_indent="# ")
 
 
+def validate_ports(toml_name: str, container: dict) -> None:
+    ports = container.get("ports", [])
+    if not isinstance(ports, list):
+        die(f"{toml_name}: [container].ports must be an array of tables")
+    if ports and container.get("network") == "host":
+        die(f"{toml_name}: [container].ports cannot be used with network = \"host\"")
+
+    seen = set()
+    for index, port in enumerate(ports, start=1):
+        field = f"[container].ports[{index}]"
+        if not isinstance(port, dict):
+            die(f"{toml_name}: {field} must be a table")
+
+        unknown = sorted(set(port) - {"host", "container"})
+        if unknown:
+            die(f"{toml_name}: {field} has unknown keys: {', '.join(unknown)}")
+        for key in ("host", "container"):
+            if key not in port:
+                die(f"{toml_name}: {field} is missing {key!r}")
+
+        host = port["host"]
+        if not isinstance(host, str) or not host:
+            die(f"{toml_name}: {field}.host must be a non-empty string")
+
+        if host.startswith("["):
+            match = re.fullmatch(r"\[([^]]+)]:(\d+)", host)
+            expected_version = 6
+        else:
+            match = re.fullmatch(r"([^:]+):(\d+)", host)
+            expected_version = 4
+        if match is None:
+            die(
+                f"{toml_name}: {field}.host must be an IPv4:port or "
+                "[IPv6]:port endpoint"
+            )
+
+        try:
+            address = ipaddress.ip_address(match.group(1))
+        except ValueError:
+            die(f"{toml_name}: {field}.host contains an invalid IP address")
+        if address.version != expected_version:
+            die(f"{toml_name}: {field}.host must bracket IPv6 addresses")
+
+        host_port = int(match.group(2))
+        if not 1 <= host_port <= 65535:
+            die(f"{toml_name}: {field}.host port must be between 1 and 65535")
+
+        container_port = port["container"]
+        if type(container_port) is not int or not 1 <= container_port <= 65535:
+            die(f"{toml_name}: {field}.container must be an integer from 1 to 65535")
+
+        rendered = f"{host}:{container_port}"
+        if rendered in seen:
+            die(f"{toml_name}: duplicate published port {rendered!r}")
+        seen.add(rendered)
+
+
 def load_service(toml_path: Path) -> dict:
     with open(toml_path, "rb") as f:
         cfg = tomllib.load(f)
@@ -56,6 +114,7 @@ def load_service(toml_path: Path) -> dict:
         die(f"{toml_path.name}: [service].name must match {NAME_RE.pattern}")
     if not USERNAME_RE.match(host["username"]):
         die(f"{toml_path.name}: [host].username must match {USERNAME_RE.pattern}")
+    validate_ports(toml_path.name, container)
     cfg["_toml_path"] = toml_path
     cfg["_slug"] = host["username"].removeprefix("_nas_")
     return cfg
@@ -151,6 +210,11 @@ def container_unit(cfg: dict) -> str:
         lines.append("")
         lines.append("# Runtime secret written at boot by sops-distribute-secrets.service")
         lines.append(f"Volume=/run/nas-secrets/{svc['name']}/{secret['name']}:{target}:ro,Z")
+
+    ports = container.get("ports", [])
+    if ports:
+        lines.append("")
+        lines += [f"PublishPort={port['host']}:{port['container']}" for port in ports]
 
     if "exec" in container:
         lines += ["", f"Exec={container['exec']}"]
