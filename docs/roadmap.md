@@ -55,7 +55,11 @@ maintaining it.
       missing-file case is bounded by design (guard fails the start;
       Restart=always retries every 30s) and was not observed live.
 - [ ] **2. Migrate rootful services to rootless**, one at a time, easiest
-      first: alertmanager → victoria-metrics → garage → caddy decision.
+      first: victoria-metrics → garage → caddy decision. Alertmanager's
+      repository migration was completed 2026-07-19 and is pending NAS deploy
+      validation: its native Pushover file settings now consume runtime
+      secrets directly, replacing the rootful config generator and Podman
+      secrets.
       Each migration: new TOML + UID allocation, secrets move from Podman
       `Secret=` to runtime files, then delete the rootful quadlet. When the
       last `Secret=` consumer is gone, delete the shell secret driver

@@ -1,0 +1,50 @@
+# ABOUTME: Declarative config for the rootless Alertmanager quadlet; consumed by
+# generate-quadlets.py (build time) and sops-distribute-secrets.sh (boot time).
+
+[service]
+name = "alertmanager"
+description = "Prometheus Alertmanager"
+documentation = "https://prometheus.io/docs/alerting/latest/alertmanager/"
+
+[host]
+username = "_nas_alertmanager"
+uid = 51240
+subid-start = 512400000
+display-name = "Alertmanager"
+
+[container]
+image = "docker.io/prom/alertmanager:v0.28.1"
+network = "host"
+container-user = 0
+exec = "--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager"
+
+[[container.volumes]]
+comment = "Image-controlled configuration (read-only)"
+source = "/usr/share/custom-coreos/alertmanager/alertmanager.yml"
+target = "/etc/alertmanager/alertmanager.yml"
+options = "ro"
+
+[[container.volumes]]
+comment = "Persistent storage for silences and the notification log"
+source = "/var/lib/alertmanager/data"
+target = "/alertmanager"
+
+[[container.secrets]]
+name = "pushover-user-key"
+
+[[container.secrets]]
+name = "pushover-api-token"
+
+[data]
+path = "/var/lib/alertmanager"
+mode = "0750"
+
+[assets]
+path = "/usr/share/custom-coreos/alertmanager"
+
+[unit.extra]
+# The parent data directory is generator-managed. Create the mounted child as
+# the service user before starting the container.
+Service = [
+    "ExecStartPre=/usr/bin/install -d -m 0750 /var/lib/alertmanager/data",
+]

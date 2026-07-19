@@ -60,12 +60,6 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
-      "d /var/lib/alertmanager 0755 root root -" \
-      "d /var/lib/alertmanager/data 0755 root root -" \
-      > /usr/lib/tmpfiles.d/alertmanager.conf'
-
-RUN /bin/bash -c 'set -euo pipefail; \
-    printf "%s\n" \
       "d /var/lib/prometheus 0755 prometheus prometheus -" \
       "d /var/lib/prometheus/node-exporter 0755 prometheus prometheus -" \
       > /usr/lib/tmpfiles.d/prometheus-node-exporter.conf'
@@ -101,6 +95,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     systemctl enable \
+        ensure-nas-alertmanager-account.service \
         ensure-nas-blackbox-account.service \
         ensure-nas-grafana-account.service \
         ensure-nas-vmalert-account.service \
@@ -118,7 +113,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         zfs-snapshots-weekly@videos.timer \
         zfs-snapshots-monthly@videos.timer \
         zfs-snapshots-yearly@videos.timer \
-        alertmanager-generate-config.service \
         disk-health-metrics.timer \
         node_exporter.service; \
     systemctl disable zincati.service; \
@@ -127,11 +121,12 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     rm -rf /var/log/dnf*'
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/alertmanager(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/blackbox-exporter(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/vmalert(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/grafana /usr/share/custom-coreos/vmalert'
+    restorecon -F -R /usr/share/custom-coreos/alertmanager /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/grafana /usr/share/custom-coreos/vmalert'
 
 RUN ["bootc", "container", "lint"]
 
