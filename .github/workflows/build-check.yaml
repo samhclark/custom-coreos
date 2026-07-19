@@ -58,7 +58,9 @@ jobs:
 
       - name: Check for drift between quadlets/*.toml and generated files
         run: |
-          if ! git diff --exit-code overlay-root/; then
+          if [[ -n "$(git status --porcelain=v1 --untracked-files=all -- overlay-root/)" ]]; then
+            git diff -- overlay-root/
+            git status --short --untracked-files=all -- overlay-root/
             echo "::error::Generated files are out of date. Run python3 generate-quadlets.py and commit the result."
             exit 1
           fi
