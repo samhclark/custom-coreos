@@ -16,6 +16,11 @@ set -euo pipefail
 
 POOL="tank"
 BASE_DATASET="${POOL}/garage"
+META_DATASET="${BASE_DATASET}/meta"
+DATA_DATASET="${BASE_DATASET}/data"
+META_PATH="/var/lib/garage/meta"
+DATA_PATH="/var/lib/garage/data"
+EXPECTED_LABEL="system_u:object_r:container_file_t:s0"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -23,6 +28,76 @@ log() {
 
 dataset_exists() {
     zfs list -H -o name "$1" &>/dev/null
+}
+
+ensure_fcontext_rule() {
+    local target="$1"
+
+    if semanage fcontext -a -t container_file_t -r s0 "${target}" 2>/dev/null; then
+        log "Added SELinux fcontext for ${target}"
+        return
+    fi
+
+    semanage fcontext -m -t container_file_t -r s0 "${target}"
+}
+
+sample_descendant() {
+    local path="$1"
+
+    find "${path}" -xdev -mindepth 1 -maxdepth 1 \
+        ! -path "${path}/.zfs" -print -quit 2>/dev/null
+}
+
+labels_are_ready() {
+    local path="$1"
+    local sample
+
+    if [[ "$(stat -c '%C' "${path}")" != "${EXPECTED_LABEL}" ]]; then
+        return 1
+    fi
+
+    sample="$(sample_descendant "${path}")"
+    [[ -z "${sample}" || "$(stat -c '%C' "${sample}")" == "${EXPECTED_LABEL}" ]]
+}
+
+restorecon_recursive() {
+    local path="$1"
+    local args=(-F -R)
+
+    if [[ -d "${path}/.zfs" ]]; then
+        args+=(-e "${path}/.zfs")
+    fi
+
+    restorecon "${args[@]}" "${path}"
+}
+
+validate_mount() {
+    local dataset="$1"
+    local path="$2"
+    local mounted_source
+
+    mounted_source="$(findmnt -rn -o SOURCE -T "${path}" 2>/dev/null || true)"
+    if [[ "${mounted_source}" != "${dataset}" ]]; then
+        log "ERROR: ${path} is mounted from '${mounted_source:-nothing}', expected '${dataset}'"
+        exit 1
+    fi
+}
+
+prepare_labels() {
+    local path="$1"
+
+    ensure_fcontext_rule "${path}(/.*)?"
+    restorecon -F "${path}"
+
+    if ! labels_are_ready "${path}"; then
+        log "SELinux labels incorrect in ${path}, relabeling..."
+        restorecon_recursive "${path}"
+    fi
+
+    if ! labels_are_ready "${path}"; then
+        log "ERROR: ${path} does not have the expected SELinux label ${EXPECTED_LABEL}"
+        exit 1
+    fi
 }
 
 # Check if pool exists
@@ -33,6 +108,8 @@ fi
 
 # Create parent dataset (not mounted - just a container for child datasets)
 # Secrets live in /var/lib/garage/ on the root filesystem (via tmpfiles)
+install -d -m 0755 -o root -g root /var/lib/garage
+
 if dataset_exists "${BASE_DATASET}"; then
     log "Dataset ${BASE_DATASET} already exists, skipping"
 else
@@ -45,62 +122,39 @@ fi
 # - compression=lz4: metadata is compressible text/indexes, lz4 is fast
 # - atime=off: no need to track access times
 # - primarycache=metadata: hint for caching
-if dataset_exists "${BASE_DATASET}/meta"; then
-    log "Dataset ${BASE_DATASET}/meta already exists, skipping"
+if dataset_exists "${META_DATASET}"; then
+    log "Dataset ${META_DATASET} already exists, skipping"
 else
-    log "Creating ${BASE_DATASET}/meta (optimized for database workload)"
+    log "Creating ${META_DATASET} (optimized for database workload)"
     zfs create \
-        -o mountpoint=/var/lib/garage/meta \
+        -o mountpoint="${META_PATH}" \
         -o recordsize=4K \
         -o compression=lz4 \
         -o atime=off \
         -o primarycache=metadata \
-        "${BASE_DATASET}/meta"
+        "${META_DATASET}"
 fi
 
 # Create data dataset - optimized for large sequential I/O (object blocks)
 # - recordsize=1M: matches Garage's default block_size (1MiB)
 # - compression=off: Garage already uses zstd compression, avoid double compression
 # - atime=off: no need to track access times
-if dataset_exists "${BASE_DATASET}/data"; then
-    log "Dataset ${BASE_DATASET}/data already exists, skipping"
+if dataset_exists "${DATA_DATASET}"; then
+    log "Dataset ${DATA_DATASET} already exists, skipping"
 else
-    log "Creating ${BASE_DATASET}/data (optimized for object storage)"
+    log "Creating ${DATA_DATASET} (optimized for object storage)"
     zfs create \
-        -o mountpoint=/var/lib/garage/data \
+        -o mountpoint="${DATA_PATH}" \
         -o recordsize=1M \
         -o compression=off \
         -o atime=off \
-        "${BASE_DATASET}/data"
+        "${DATA_DATASET}"
 fi
 
-# Ensure SELinux policy rules exist (idempotent — errors if already present)
-semanage fcontext -a -t container_file_t -r s0 "/var/lib/garage/meta(/.*)?" 2>/dev/null || true
-semanage fcontext -a -t container_file_t -r s0 "/var/lib/garage/data(/.*)?" 2>/dev/null || true
-
-# Only run restorecon if labels are wrong inside the directory.
-# The mountpoint itself may have the correct label while files inside retain
-# stale MCS categories from a previous podman :Z relabel. Sample a file inside
-# to detect this. Full recursive relabel on /var/lib/garage/data can take 30+
-# minutes, so we only do it when actually needed.
-expected_label="system_u:object_r:container_file_t:s0"
-needs_relabel() {
-    local sample
-    sample=$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)
-    [ -z "$sample" ] && return 1  # empty dir, nothing to fix
-    [ "$(stat -c '%C' "$sample")" != "$expected_label" ]
-}
-
-if needs_relabel /var/lib/garage/meta; then
-    log "SELinux labels incorrect in /var/lib/garage/meta, relabeling..."
-    # -F forces full context reset including the MCS range (e.g. s0:c709,c748 -> s0).
-    # Without -F, restorecon only resets the type — it won't clear MCS categories.
-    restorecon -F -R /var/lib/garage/meta
-fi
-if needs_relabel /var/lib/garage/data; then
-    log "SELinux labels incorrect in /var/lib/garage/data, relabeling..."
-    restorecon -F -R /var/lib/garage/data
-fi
+validate_mount "${META_DATASET}" "${META_PATH}"
+validate_mount "${DATA_DATASET}" "${DATA_PATH}"
+prepare_labels "${META_PATH}"
+prepare_labels "${DATA_PATH}"
 
 log "Garage ZFS datasets ready"
-zfs get recordsize,compression,atime,mountpoint "${BASE_DATASET}" "${BASE_DATASET}/meta" "${BASE_DATASET}/data"
+zfs get recordsize,compression,atime,mountpoint "${BASE_DATASET}" "${META_DATASET}" "${DATA_DATASET}"

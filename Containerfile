@@ -99,6 +99,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         nftables.service \
         tailscaled.service \
         sops-distribute-secrets.service \
+        garage-rootless-preflight.timer \
         zfs-create-garage-datasets.service \
         zfs-create-victoria-metrics-dataset.service \
         zfs-health-check.timer \

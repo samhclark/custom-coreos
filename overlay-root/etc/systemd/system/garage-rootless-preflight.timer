@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Garage rootless migration preflight after boot
+
+[Timer]
+OnBootSec=5min
+Unit=garage-rootless-preflight.service
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

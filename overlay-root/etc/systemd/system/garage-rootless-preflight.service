@@ -1,0 +1,12 @@
+[Unit]
+Description=Record Garage rootless migration preflight
+After=garage.service
+Requires=garage.service
+ConditionPathExists=!/var/lib/nas-migrations/garage-rootless-preflight-v1/complete
+
+[Service]
+Type=oneshot
+StateDirectory=nas-migrations
+StateDirectoryMode=0700
+ExecStart=/usr/local/bin/garage-rootless-preflight.sh
+TimeoutStartSec=infinity
