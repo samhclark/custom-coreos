@@ -2,3 +2,4 @@ _nas_grafana:512100000:65536
 _nas_vmalert:512200000:65536
 _nas_blackbox:512300000:65536
 _nas_alertmanager:512400000:65536
+_nas_victoriametrics:512500000:65536

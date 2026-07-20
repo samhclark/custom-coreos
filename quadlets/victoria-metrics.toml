@@ -1,0 +1,49 @@
+# ABOUTME: Declarative config for the rootless VictoriaMetrics Quadlet;
+# consumed by generate-quadlets.py (build time) and
+# sops-distribute-secrets.sh (boot time).
+
+[service]
+name = "victoria-metrics"
+description = "VictoriaMetrics Time Series Database"
+documentation = "https://docs.victoriametrics.com/"
+
+[host]
+username = "_nas_victoriametrics"
+uid = 51250
+subid-start = 512500000
+display-name = "VictoriaMetrics"
+
+[container]
+image = "docker.io/victoriametrics/victoria-metrics:v1.139.0@sha256:67c689e152183138ff68eb237ca53d236e92bbef314545733dcb40324829b7c4"
+network = "host"
+container-user = 0
+exec = "-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=127.0.0.1:8428"
+
+[[container.volumes]]
+comment = "Image-controlled scrape configuration (read-only)"
+source = "/usr/share/custom-coreos/victoria-metrics/promscrape.yml"
+target = "/etc/victoria-metrics/promscrape.yml"
+options = "ro"
+
+[[container.volumes]]
+comment = "Persistent ZFS storage; ownership and SELinux labels are prepared by the host unit"
+source = "/var/lib/victoria-metrics"
+target = "/victoria-metrics-data"
+
+[[container.secrets]]
+name = "garage-metrics-token"
+
+[assets]
+path = "/usr/share/custom-coreos/victoria-metrics"
+
+[unit]
+timeout-start-sec = 900
+
+[unit.extra]
+# A user service cannot depend directly on the root ZFS preparation unit. Wait
+# for its current-boot marker, the expected mount, migrated ownership, and a
+# writable data path instead.
+Service = [
+    '''ExecStartPre=/usr/bin/bash -lc 'if [[ -e /etc/containers/systemd/victoria-metrics.container ]]; then echo "Refusing to start while the retired rootful VictoriaMetrics Quadlet still exists" >&2; exit 1; fi'''',
+    '''ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do if /usr/bin/test -e /run/victoria-metrics-dataset/ready && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/victoria-metrics 2>/dev/null)" == "tank/victoria-metrics/data" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/victoria-metrics 2>/dev/null)" == "51250:51250" ]] && /usr/bin/test -w /var/lib/victoria-metrics; then exit 0; fi; sleep 2; done; echo "VictoriaMetrics storage was not ready within 300 seconds" >&2; exit 1'''',
+]
