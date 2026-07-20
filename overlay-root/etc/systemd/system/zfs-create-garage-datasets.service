@@ -2,7 +2,8 @@
 Description=Create ZFS datasets for Garage object storage
 Documentation=https://garagehq.deuxfleurs.fr/
 Requires=zfs.target
-After=zfs.target
+Requires=ensure-nas-garage-account.service
+After=zfs.target ensure-nas-garage-account.service
 ConditionPathIsDirectory=/sys/module/zfs
 
 [Service]

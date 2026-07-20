@@ -1,0 +1,79 @@
+# ABOUTME: Declarative config for the rootless Garage Quadlet; consumed by
+# generate-quadlets.py (build time) and sops-distribute-secrets.sh (boot time).
+
+[service]
+name = "garage"
+description = "Garage S3-compatible Object Storage"
+documentation = "https://garagehq.deuxfleurs.fr/"
+
+[host]
+username = "_nas_garage"
+uid = 51110
+subid-start = 511100000
+display-name = "Garage"
+
+[container]
+image = "docker.io/dxflrs/garage:v2.2.0@sha256:45a61ce3f7c9c24fc23d9ed2b09b27ed560ab87b34605d175d5c588f539c24e4"
+auto-update = "registry"
+container-user = 0
+
+[container.environment]
+GARAGE_LOG_TO_JOURNALD = "1"
+
+[[container.volumes]]
+comment = "Host journald socket for native Garage logs"
+source = "/run/systemd/journal/socket"
+target = "/run/systemd/journal/socket"
+
+[[container.volumes]]
+comment = "Image-controlled configuration (read-only)"
+source = "/usr/share/custom-coreos/garage/garage.toml"
+target = "/etc/garage.toml"
+options = "ro"
+
+[[container.volumes]]
+comment = "Persistent metadata ZFS dataset; ownership and SELinux labels are prepared by the host unit"
+source = "/var/lib/garage/meta"
+target = "/var/lib/garage/meta"
+
+[[container.volumes]]
+comment = "Persistent block ZFS dataset; ownership and SELinux labels are prepared by the host unit"
+source = "/var/lib/garage/data"
+target = "/var/lib/garage/data"
+
+[[container.secrets]]
+name = "garage-rpc-secret"
+
+[[container.secrets]]
+name = "garage-admin-token"
+
+[[container.secrets]]
+name = "garage-metrics-token"
+
+[[container.ports]]
+host = "127.0.0.1:3900"
+container = 3900
+
+[[container.ports]]
+host = "127.0.0.1:3902"
+container = 3902
+
+[[container.ports]]
+host = "127.0.0.1:3903"
+container = 3903
+
+[assets]
+path = "/usr/share/custom-coreos/garage"
+
+[unit]
+timeout-start-sec = 4200
+
+[unit.extra]
+# Rootless user services cannot order themselves after root system services.
+# Wait for the host's current-boot storage marker and independently verify
+# every condition required before opening Garage's SQLite metadata.
+Service = [
+    '''ExecStartPre=/usr/bin/bash -lc 'if [[ -e /etc/containers/systemd/garage.container ]]; then echo "Refusing to start while the retired rootful Garage Quadlet still exists" >&2; exit 1; fi'''',
+    '''ExecStartPre=/usr/bin/bash -lc 'for i in {1..1800}; do if /usr/bin/test -e /run/garage-datasets/ready && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/garage/meta 2>/dev/null)" == "tank/garage/meta" ]] && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/garage/data 2>/dev/null)" == "tank/garage/data" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/garage/meta 2>/dev/null)" == "51110:51110" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/garage/data 2>/dev/null)" == "51110:51110" ]] && /usr/bin/test -w /var/lib/garage/meta && /usr/bin/test -w /var/lib/garage/data; then exit 0; fi; sleep 2; done; echo "Garage storage was not ready within 3600 seconds" >&2; exit 1'''',
+    '''ExecStartPre=/usr/bin/bash -lc 'if /usr/bin/ss -H -ltn | /usr/bin/grep -Eq ":390(0|2|3)[[:space:]]"; then echo "Refusing to start while a process already listens on a Garage host port" >&2; exit 1; fi'''',
+]
