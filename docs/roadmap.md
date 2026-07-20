@@ -63,9 +63,11 @@ maintaining it.
       first: victoria-metrics → garage → caddy decision. Alertmanager was
       completed and production-validated 2026-07-19. VictoriaMetrics was also
       deployed and production-validated 2026-07-19 using UID `51250`, guarded
-      ZFS ownership conversion, and a runtime Garage metrics token. Garage is
-      next and uses a two-release plan: rootful hardening/preflight first, then
-      the rootless identity and ownership cutover.
+      ZFS ownership conversion, and a runtime Garage metrics token. Garage's
+      rootful hardening/preflight release was validated, and its second-release
+      rootless cutover is implemented using UID `51110`, a coordinated ZFS
+      rollback snapshot, guarded ownership conversion, and runtime secrets;
+      NAS deploy validation is pending.
       Each migration: new TOML + UID allocation, secrets move from Podman
       `Secret=` to runtime files, then delete the rootful quadlet. When the
       last `Secret=` consumer is gone, delete the shell secret driver

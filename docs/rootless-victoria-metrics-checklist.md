@@ -114,7 +114,8 @@ sudo -u _nas_victoriametrics \
 
 The directory should be `root:_nas_victoriametrics` mode `0710`; the file
 should be `_nas_victoriametrics:_nas_victoriametrics` mode `0400`. Do not
-print its value. The rootful Podman secret must remain while Garage is rootful.
+print its value. Garage receives an independent runtime-file copy of the same
+SOPS value; the rootful Podman copy is retired by Garage's migration.
 
 ## 4. User Service And Logs
 

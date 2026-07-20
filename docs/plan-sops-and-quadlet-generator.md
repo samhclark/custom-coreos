@@ -2,9 +2,9 @@
 
 > **Implementation status (2026-07-19):** The SOPS distributor and Quadlet
 > generator described here are deployed. Grafana, vmalert, blackbox exporter,
-> Alertmanager, and VictoriaMetrics now run as rootless user Quadlets.
-> VictoriaMetrics was production-validated on the NAS; Garage remains rootful
-> while its first-stage hardening and preflight report are validated.
+> Alertmanager, and VictoriaMetrics run as production-validated rootless user
+> Quadlets. Garage's rootless cutover is implemented after a successful
+> first-stage preflight and awaits NAS production validation.
 > Alertmanager's migration was production-validated through a successful
 > synthetic Pushover notification. Sections written in the present tense under
 > "Background" and the phased rollout steps preserve the pre-implementation design history;

@@ -13,7 +13,7 @@ persists across upgrades.
 
 ## Reference Implementation
 
-The repo now has five concrete rootless examples:
+The repo now has six concrete rootless examples:
 
 - Grafana is the fuller migration example with persistent service data:
   - `overlay-root/etc/containers/systemd/users/51210/grafana.container`
@@ -65,6 +65,17 @@ The repo now has five concrete rootless examples:
   section. The dedicated host preparation unit performs the guarded one-time
   ownership migration and conditional SELinux repair, then publishes a
   current-boot readiness marker for the user service.
+
+- Garage is the coordinated multi-dataset migration example:
+  - `quadlets/garage.toml`
+  - `overlay-root/etc/containers/systemd/users/51110/garage.container`
+  - `overlay-root/usr/share/custom-coreos/garage/garage.toml`
+  - `overlay-root/usr/local/bin/zfs-create-garage-datasets.sh`
+
+  Its fixed recursive ZFS snapshot establishes one rollback point for metadata
+  and blocks before either tree is changed. Both dataset roots act as durable
+  completion markers, and the user service independently verifies mounts,
+  ownership, write access, secrets, and host-port availability before starting.
 
 Read those first if you want the exact concrete implementation.
 

@@ -1,11 +1,12 @@
-# Garage Rootless Migration Preflight
+# Garage Rootless Migration Preflight (Completed)
 
-Garage is being migrated in two releases because it is a single-node object
-store with coordinated SQLite metadata and block datasets. This document covers
-the first, rootful hardening release only. It does not change Garage's runtime
-identity, secrets, ports, or dataset ownership.
+This is the historical record of Garage's first, rootful hardening release.
+The NAS preflight completed successfully before the rootless cutover was
+implemented. The second release removes the timer, service, and script described
+below; the report remains under `/var/lib/nas-migrations/` for comparison. See
+`docs/rootless-garage-checklist.md` for the current rollout procedure.
 
-## What Runs
+## What Ran
 
 `zfs-create-garage-datasets.service` now:
 
@@ -15,7 +16,7 @@ identity, secrets, ports, or dataset ownership.
 - has no start timeout and retries after failures such as a late `tank` import
 - publishes `/run/garage-datasets/ready` only after both datasets are prepared
 
-Five minutes after boot, `garage-rootless-preflight.timer` starts
+Five minutes after boot, `garage-rootless-preflight.timer` started
 `garage-rootless-preflight.service` outside the boot-critical target
 transaction. The service records a one-time baseline under
 `/var/lib/nas-migrations/garage-rootless-preflight-v1/`. It captures Garage's
@@ -31,7 +32,7 @@ The hardened dataset-preparation service may repair SELinux xattrs if drift is
 detected. A `complete` marker prevents the preflight from repeating on later
 boots.
 
-## Post-Deployment Check
+## First-Stage Check
 
 ```bash
 sudo systemctl status zfs-create-garage-datasets.service --no-pager
@@ -93,6 +94,7 @@ sudo rm -f /var/lib/nas-migrations/garage-rootless-preflight-v1/complete
 sudo systemctl start garage-rootless-preflight.service
 ```
 
-Do not remove or change dataset ownership during this stage. The second release
-will take a coordinated recursive ZFS snapshot while Garage is stopped, then
-perform the guarded rootless ownership migration.
+The successful report established that both trees were consistently owned by
+`0:0` and labeled `container_file_t:s0`. The second release uses that evidence
+before taking its permanent coordinated rollback snapshot and migrating
+ownership.

@@ -37,7 +37,7 @@ This repo is not just "CoreOS with ZFS". It currently defines a full single-node
 These are considered active and in use on the real machine unless explicitly stated otherwise:
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services
-- `garage.container` - S3-compatible object storage on ZFS
+- `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
 - `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/`, deployed and validated on the NAS
@@ -224,7 +224,8 @@ Images include labels for future deduplication:
 - `docs/rootless-grafana-checklist.md` - Post-boot validation and troubleshooting checklist for the first rootless Quadlet rollout
 - `docs/rootless-alertmanager-checklist.md` - Post-boot validation for the Alertmanager rootless and runtime-secret migration
 - `docs/rootless-victoria-metrics-checklist.md` - Post-boot validation for the VictoriaMetrics rootless, ZFS ownership, and runtime-secret migration
-- `docs/rootless-garage-preflight.md` - First-stage rootful hardening and NAS evidence collection before Garage's rootless ownership migration
+- `docs/rootless-garage-preflight.md` - Historical first-stage evidence collection before Garage's rootless ownership migration
+- `docs/rootless-garage-checklist.md` - Post-boot validation and rollback steps for the Garage rootless, ZFS ownership, and runtime-secret migration
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
@@ -248,22 +249,22 @@ Images include labels for future deduplication:
 - Rootless service accounts should use namespaced host usernames such as `_nas_grafana` rather than upstream/vendor defaults like `grafana`
 - Reserve `51000-51999` for image-managed service accounts in this repo
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
-- Current allocation: `_nas_grafana` uses host UID/GID `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`
+- Current allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
 - UIDs are allocate-only: never reuse a UID from a retired service. File ownership is numeric and outlives the user — ZFS snapshots in particular can hand a retired UID's files to whatever service reuses it. `quadlets/*.toml` is the registry of active allocations; when the first service is actually retired, record its UID here as retired and add a `retired-uids` check to `generate-quadlets.py`.
 
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy and Garage remain rootful system Quadlets under `overlay-root/etc/containers/systemd/`
-- Grafana, vmalert, blackbox exporter, Alertmanager, and VictoriaMetrics are deployed as rootless admin-managed user Quadlets; Garage remains rootful while its checked-in preflight is validated
+- Caddy remains a rootful system Quadlet under `overlay-root/etc/containers/systemd/`
+- Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are defined as rootless admin-managed user Quadlets; Garage's cutover is implemented and awaits NAS production validation
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
 - In practice, placing a user Quadlet under `/usr/share/containers/systemd/users/${UID}/` caused Fedora 43 with Podman 5.8.1 to generate a system unit in `system.slice`, because that path is still underneath the rootful `/usr/share/containers/systemd/` tree. Use `/etc/containers/systemd/users/${UID}/` for rootless service users in this repo.
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
-- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_grafana`, `_nas_vmalert`, `_nas_blackbox`, `_nas_alertmanager`, and `_nas_victoriametrics` ranges in `/etc/subuid` and `/etc/subgid`
+- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_garage`, `_nas_grafana`, `_nas_vmalert`, `_nas_blackbox`, `_nas_alertmanager`, and `_nas_victoriametrics` ranges in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - Do not assume Podman `Secret=` works for rootless services with the current shell driver. The helper can run inside a user namespace where `systemd-creds` cannot access the host key or TPM device. Rootless services that need secrets should consume per-service runtime files written by the rootful SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only with `:ro,Z` (validated on the NAS 2026-07-03: rootless Podman can relabel `/run` tmpfs files to `container_file_t`; unrelabeled `var_run_t` files are blocked by SELinux).
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
@@ -272,6 +273,7 @@ Useful reference points for future rootless work:
 - vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
 - Alertmanager's static config lives under `/usr/share/custom-coreos/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
 - VictoriaMetrics' scrape config lives under `/usr/share/custom-coreos/victoria-metrics/`; its large ZFS data path is prepared by `zfs-create-victoria-metrics-dataset.service`, not recursive generator-managed tmpfiles rules
+- Garage's config lives under `/usr/share/custom-coreos/garage/`; its two ZFS paths use a fixed recursive rollback snapshot and guarded root-last ownership migration in `zfs-create-garage-datasets.service`
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance
