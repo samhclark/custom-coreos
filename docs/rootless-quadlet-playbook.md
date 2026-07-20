@@ -13,7 +13,7 @@ persists across upgrades.
 
 ## Reference Implementation
 
-The repo now has four concrete rootless examples:
+The repo now has five concrete rootless examples:
 
 - Grafana is the fuller migration example with persistent service data:
   - `overlay-root/etc/containers/systemd/users/51210/grafana.container`
@@ -53,6 +53,18 @@ The repo now has four concrete rootless examples:
   under `/run/nas-secrets/alertmanager/` and mounted read-only into the
   container. The static config uses Alertmanager's native `user_key_file` and
   `token_file` settings.
+
+- VictoriaMetrics is the large ZFS-backed data example, pending NAS deploy
+  validation:
+  - `quadlets/victoria-metrics.toml`
+  - `overlay-root/etc/containers/systemd/users/51250/victoria-metrics.container`
+  - `overlay-root/usr/share/custom-coreos/victoria-metrics/promscrape.yml`
+  - `overlay-root/usr/local/bin/zfs-create-victoria-metrics-dataset.sh`
+
+  Its ZFS dataset is intentionally not declared with the generator's `[data]`
+  section. The dedicated host preparation unit performs the guarded one-time
+  ownership migration and conditional SELinux repair, then publishes a
+  current-boot readiness marker for the user service.
 
 Read those first if you want the exact concrete implementation.
 

@@ -56,12 +56,15 @@ maintaining it.
       guard passing (boot ordering needs no cross-manager dependency), and
       the container reads the mounted file with matching content. The
       missing-file case is bounded by design (guard fails the start;
-      Restart=always retries every 30s) and was not observed live.
+      Restart=always retries every 30s) and was not observed live. This
+      proof-only Grafana mount is removed by the VictoriaMetrics migration;
+      VictoriaMetrics becomes the real rootless consumer of that token.
 - [ ] **2. Migrate rootful services to rootless**, one at a time, easiest
       first: victoria-metrics → garage → caddy decision. Alertmanager was
-      completed and production-validated 2026-07-19; its native Pushover file
-      settings consume runtime secrets directly, replacing the rootful config
-      generator and Podman secrets.
+      completed and production-validated 2026-07-19. VictoriaMetrics now has
+      a repository migration using UID `51250`, guarded ZFS ownership
+      conversion, and a runtime Garage metrics token; NAS deploy validation is
+      pending. Garage is next after that validation.
       Each migration: new TOML + UID allocation, secrets move from Podman
       `Secret=` to runtime files, then delete the rootful quadlet. When the
       last `Secret=` consumer is gone, delete the shell secret driver
