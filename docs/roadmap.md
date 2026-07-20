@@ -61,10 +61,11 @@ maintaining it.
       VictoriaMetrics becomes the real rootless consumer of that token.
 - [ ] **2. Migrate rootful services to rootless**, one at a time, easiest
       first: victoria-metrics → garage → caddy decision. Alertmanager was
-      completed and production-validated 2026-07-19. VictoriaMetrics now has
-      a repository migration using UID `51250`, guarded ZFS ownership
-      conversion, and a runtime Garage metrics token; NAS deploy validation is
-      pending. Garage is next after that validation.
+      completed and production-validated 2026-07-19. VictoriaMetrics was also
+      deployed and production-validated 2026-07-19 using UID `51250`, guarded
+      ZFS ownership conversion, and a runtime Garage metrics token. Garage is
+      next and uses a two-release plan: rootful hardening/preflight first, then
+      the rootless identity and ownership cutover.
       Each migration: new TOML + UID allocation, secrets move from Podman
       `Secret=` to runtime files, then delete the rootful quadlet. When the
       last `Secret=` consumer is gone, delete the shell secret driver

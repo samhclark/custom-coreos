@@ -54,8 +54,8 @@ The repo now has five concrete rootless examples:
   container. The static config uses Alertmanager's native `user_key_file` and
   `token_file` settings.
 
-- VictoriaMetrics is the large ZFS-backed data example, pending NAS deploy
-  validation:
+- VictoriaMetrics is the deployed and NAS-validated large ZFS-backed data
+  example:
   - `quadlets/victoria-metrics.toml`
   - `overlay-root/etc/containers/systemd/users/51250/victoria-metrics.container`
   - `overlay-root/usr/share/custom-coreos/victoria-metrics/promscrape.yml`

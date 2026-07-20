@@ -38,7 +38,7 @@ These are considered active and in use on the real machine unless explicitly sta
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services
 - `garage.container` - S3-compatible object storage on ZFS
-- `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/` in the repository, pending NAS deploy validation
+- `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
 - `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/`, deployed and validated on the NAS
 - `grafana.container` - dashboards; rootless under `etc/containers/systemd/users/51210/`
@@ -224,6 +224,7 @@ Images include labels for future deduplication:
 - `docs/rootless-grafana-checklist.md` - Post-boot validation and troubleshooting checklist for the first rootless Quadlet rollout
 - `docs/rootless-alertmanager-checklist.md` - Post-boot validation for the Alertmanager rootless and runtime-secret migration
 - `docs/rootless-victoria-metrics-checklist.md` - Post-boot validation for the VictoriaMetrics rootless, ZFS ownership, and runtime-secret migration
+- `docs/rootless-garage-preflight.md` - First-stage rootful hardening and NAS evidence collection before Garage's rootless ownership migration
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
@@ -255,7 +256,7 @@ Images include labels for future deduplication:
 
 Current state:
 - Caddy and Garage remain rootful system Quadlets under `overlay-root/etc/containers/systemd/`
-- Grafana, vmalert, blackbox exporter, and Alertmanager are deployed as rootless admin-managed user Quadlets; VictoriaMetrics now has the same repository layout under UID `51250`, pending NAS deploy validation
+- Grafana, vmalert, blackbox exporter, Alertmanager, and VictoriaMetrics are deployed as rootless admin-managed user Quadlets; Garage remains rootful while its checked-in preflight is validated
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
