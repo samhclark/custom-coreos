@@ -36,7 +36,7 @@ This repo is not just "CoreOS with ZFS". It currently defines a full single-node
 
 These are considered active and in use on the real machine unless explicitly stated otherwise:
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
-- `caddy.container` - reverse proxy / TLS termination for the user-facing services; still rootful while its rootless preflight release is prepared
+- `caddy.container` - reverse proxy / TLS termination for the user-facing services; still rootful after its rootless preflight completed successfully, with the guarded phase-two cutover next
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
@@ -227,7 +227,7 @@ Images include labels for future deduplication:
 - `docs/rootless-victoria-metrics-checklist.md` - Post-boot validation for the VictoriaMetrics rootless, ZFS ownership, and runtime-secret migration
 - `docs/rootless-garage-preflight.md` - Historical first-stage evidence collection before Garage's rootless ownership migration
 - `docs/rootless-garage-checklist.md` - Post-boot validation and rollback steps for the Garage rootless, ZFS ownership, and runtime-secret migration
-- `docs/rootless-caddy-preflight.md` - First-stage validation for Caddy's rootless identity, runtime secret, low-port policy, and persistent state
+- `docs/rootless-caddy-preflight.md` - Completed first-stage validation and phase-two handoff for Caddy's rootless identity, runtime secret, low-port policy, persistent state, and guarded cutover
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
@@ -258,7 +258,7 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy remains a rootful system Quadlet under `overlay-root/etc/containers/systemd/`; its rootless identity and runtime-secret preflight are staged with `quadlets/caddy.toml`, but `enabled = false` prevents generation of a user Quadlet
+- Caddy remains a rootful system Quadlet under `overlay-root/etc/containers/systemd/`; its rootless identity, runtime secret, low-port binding, state inventory, and representative routes were production-validated on 2026-07-21. `quadlets/caddy.toml` remains staged with `enabled = false`; the next task is the guarded phase-two cutover in `docs/rootless-caddy-preflight.md`.
 - Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
@@ -276,7 +276,7 @@ Useful reference points for future rootless work:
 - Alertmanager's static config lives under `/usr/share/custom-coreos/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
 - VictoriaMetrics' scrape config lives under `/usr/share/custom-coreos/victoria-metrics/`; its large ZFS data path is prepared by `zfs-create-victoria-metrics-dataset.service`, not recursive generator-managed tmpfiles rules
 - Garage's config lives under `/usr/share/custom-coreos/garage/`; its two ZFS paths use a fixed recursive rollback snapshot and guarded root-last ownership migration in `zfs-create-garage-datasets.service`. Normal boots check only roots and bounded samples; create `/var/lib/nas-migrations/garage-rootless-ownership-v1/repair-required` before restarting the preparation service when an explicit full recursive ownership and SELinux repair is required.
-- Caddy's first-stage preflight must not declare its live state paths through the generator's `[data]` section; the generated recursive tmpfiles ownership rule would mutate the rootful deployment
+- Caddy's completed first-stage preflight must not declare its live state paths through the generator's `[data]` section; phase two needs a cutover-specific archive plus guarded descendant-first/root-last ownership and SELinux preparation service
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance

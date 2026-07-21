@@ -26,10 +26,10 @@ maintaining it.
    CI fails on drift. The TOMLs double as the secret-routing manifest for
    the distributor.
 
-4. **Everything migrates to rootless except possibly caddy.**
-   Caddy binds 80/443; either set `net.ipv4.ip_unprivileged_port_start=80`
-   or keep the edge proxy rootful. Rootful-caddy-plus-rootless-everything is
-   an acceptable end state.
+4. **Caddy will migrate rootless using the validated low-port policy.**
+   The production preflight confirmed that `_nas_caddy` can bind TCP and UDP
+   low ports with `net.ipv4.ip_unprivileged_port_start=80`. Phase two is a
+   guarded state/config/service cutover, not another feasibility decision.
 
 5. **Service UIDs are allocate-only.** Never reuse a retired UID; numeric
    file ownership (especially in ZFS snapshots) outlives the user. Scheme
@@ -48,6 +48,9 @@ maintaining it.
 - VictoriaMetrics and Garage migrated to rootless Quadlets and were validated
   on the NAS, including their guarded ZFS ownership conversions, preserved
   history/object state, runtime secrets, monitoring, and rollback paths.
+- Caddy's rootless preflight completed on the NAS on 2026-07-21. UID `51310`,
+  runtime-secret delivery, TCP/UDP low-port binding, rootful state inventory,
+  listeners, metrics, redirect, and Garage routing are production-validated.
 - Cockpit deleted (quadlet, packages, Caddy vhost).
 
 ## Remaining work (in order)
@@ -64,11 +67,9 @@ maintaining it.
       VictoriaMetrics becomes the real rootless consumer of that token.
 - [ ] **2. Finish the Caddy rootless migration.** Alertmanager,
       VictoriaMetrics, and Garage are production-validated. Caddy's first-stage
-      preflight release reserves UID `51310`, stages its runtime Cloudflare
-      token, applies the host low-port policy, and records the live rootful
-      state without generating or starting a rootless Caddy Quadlet. After the
-      preflight is deployed and validated, implement the guarded ownership,
-      SELinux, static-config, and reboot-based service cutover.
+      preflight is also deployed and validated. Next, implement the guarded
+      ownership, SELinux, static-config, and reboot-based service cutover using
+      the handoff in `docs/rootless-caddy-preflight.md`.
       Each migration: new TOML + UID allocation, secrets move from Podman
       `Secret=` to runtime files, then delete the rootful quadlet. When the
       last `Secret=` consumer is gone, delete the shell secret driver
