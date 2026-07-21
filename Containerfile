@@ -85,11 +85,13 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     systemctl enable \
         ensure-nas-alertmanager-account.service \
         ensure-nas-blackbox-account.service \
+        ensure-nas-caddy-account.service \
         ensure-nas-garage-account.service \
         ensure-nas-grafana-account.service \
         ensure-nas-victoriametrics-account.service \
         ensure-nas-vmalert-account.service \
         bootc-fetch-apply-updates.timer \
+        caddy-rootless-preflight.timer \
         nftables.service \
         tailscaled.service \
         sops-distribute-secrets.service \

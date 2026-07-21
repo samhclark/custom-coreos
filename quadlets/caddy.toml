@@ -1,0 +1,26 @@
+# ABOUTME: Declarative identity and secret routing for Caddy's rootless
+# migration. The container stays disabled during the rootful preflight release.
+
+[service]
+name = "caddy"
+description = "Caddy Reverse Proxy"
+documentation = "https://caddyserver.com/docs/"
+
+[host]
+username = "_nas_caddy"
+uid = 51310
+subid-start = 513100000
+display-name = "Caddy"
+
+[container]
+# Preflight only: generate the service identity and route its runtime secret,
+# but do not emit a rootless Quadlet or disturb the live rootful service.
+enabled = false
+image = "ghcr.io/samhclark/lab-caddy:2.11.3-cf-0.2.4"
+network = "host"
+auto-update = "registry"
+container-user = 0
+pull = "always"
+
+[[container.secrets]]
+name = "cf-api-token"
