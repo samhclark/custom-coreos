@@ -80,10 +80,38 @@ Both paths must have owner `_nas_garage:_nas_garage`, mode `0750`, and the
 SELinux context `container_file_t:s0`. The snapshot listing must contain the
 parent, metadata, and data snapshots with the same fixed name.
 
-The preparation unit has no timeout and retries every 30 seconds. The user
-service waits up to one hour for its current-boot marker, exact mounts, owners,
-and write access. If `tank` was imported late, let the automatic retry recover;
-otherwise restart only the preparation unit and inspect its journal.
+The preparation unit has no timeout and retries every 30 seconds. On normal
+boots it checks only the dataset roots and one immediate descendant from each
+tree; it does not recursively scan the object store. The user service waits up
+to one hour for its current-boot marker, exact mounts, owners, and write access.
+If `tank` was imported late, let the automatic retry recover; otherwise restart
+only the preparation unit and inspect its journal.
+
+A recursive ownership and SELinux repair is deliberately explicit because it
+can take tens of minutes. With Garage stopped, request one by creating the
+durable marker and restarting the preparation unit:
+
+```bash
+sudo -u _nas_garage env \
+  HOME=/var/home/_nas_garage \
+  XDG_RUNTIME_DIR=/run/user/51110 \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/51110/bus \
+  bash -lc 'cd / && systemctl --user stop garage.service'
+sudo install -d -m 0700 -o root -g root \
+  /var/lib/nas-migrations/garage-rootless-ownership-v1
+sudo touch \
+  /var/lib/nas-migrations/garage-rootless-ownership-v1/repair-required
+sudo systemctl restart zfs-create-garage-datasets.service && \
+sudo -u _nas_garage env \
+  HOME=/var/home/_nas_garage \
+  XDG_RUNTIME_DIR=/run/user/51110 \
+  DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/51110/bus \
+  bash -lc 'cd / && systemctl --user start garage.service'
+```
+
+The marker is removed only after both complete recursive passes succeed. Do
+not start Garage manually while the preparation service is running; the
+foreground `systemctl restart` must return successfully first.
 
 ## 4. Runtime Secrets
 
@@ -177,10 +205,10 @@ Its timer, service, and executable are no longer present in the image.
 
 A bootc rollback alone does not require reversing ownership: the old rootful
 container can access UID `51110` files, and its SOPS manifest recreates the
-rootful Podman secrets at boot. If the rootful deployment writes new `0:0`
-files and you later redeploy the rootless image, the preparation service
-detects that descendant drift and automatically repeats the affected root-last
-ownership pass before publishing readiness.
+rootful Podman secrets at boot. If that deployment writes new `0:0` files,
+create the `repair-required` marker before returning Garage to service on the
+rootless image. Normal boots intentionally do not search the entire object
+store for deep ownership drift.
 
 For a data rollback while remaining on the rootless image, use this sequence:
 
@@ -205,4 +233,7 @@ Keep both Garage services stopped while rolling metadata and data back to the
 matching snapshots. A ZFS rollback is not atomic across datasets. The commands
 above fail rather than destroy newer snapshots; review and preserve any newer
 snapshots instead of casually adding `-r`. Dataset preparation reapplies
-ownership and labels before the user service can pass its readiness gate.
+ownership and labels before the user service can pass its readiness gate. The
+pre-rootless snapshots restore root-owned dataset roots, which automatically
+selects the interrupted-repair path; other rollback points may require the
+explicit `repair-required` marker.
