@@ -74,8 +74,11 @@ The repo now has six concrete rootless examples:
 
   Its fixed recursive ZFS snapshot establishes one rollback point for metadata
   and blocks before either tree is changed. Both dataset roots act as durable
-  completion markers, and the user service independently verifies mounts,
-  ownership, write access, secrets, and host-port availability before starting.
+  completion markers. Normal boots validate only roots and bounded samples;
+  full recursive repair requires an initial/interrupted migration or an
+  explicit durable repair request. The user service independently verifies
+  mounts, ownership, write access, secrets, and host-port availability before
+  starting.
 
 - Caddy is the staged-migration example. Its `quadlets/caddy.toml` entry uses
   `enabled = false` during the rootful preflight release. This reserves the

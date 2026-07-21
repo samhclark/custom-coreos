@@ -275,7 +275,7 @@ Useful reference points for future rootless work:
 - vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
 - Alertmanager's static config lives under `/usr/share/custom-coreos/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
 - VictoriaMetrics' scrape config lives under `/usr/share/custom-coreos/victoria-metrics/`; its large ZFS data path is prepared by `zfs-create-victoria-metrics-dataset.service`, not recursive generator-managed tmpfiles rules
-- Garage's config lives under `/usr/share/custom-coreos/garage/`; its two ZFS paths use a fixed recursive rollback snapshot and guarded root-last ownership migration in `zfs-create-garage-datasets.service`
+- Garage's config lives under `/usr/share/custom-coreos/garage/`; its two ZFS paths use a fixed recursive rollback snapshot and guarded root-last ownership migration in `zfs-create-garage-datasets.service`. Normal boots check only roots and bounded samples; create `/var/lib/nas-migrations/garage-rootless-ownership-v1/repair-required` before restarting the preparation service when an explicit full recursive ownership and SELinux repair is required.
 - Caddy's first-stage preflight must not declare its live state paths through the generator's `[data]` section; the generated recursive tmpfiles ownership rule would mutate the rootful deployment
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
