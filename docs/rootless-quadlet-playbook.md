@@ -66,7 +66,7 @@ The repo now has six concrete rootless examples:
   ownership migration and conditional SELinux repair, then publishes a
   current-boot readiness marker for the user service.
 
-- Garage is the coordinated multi-dataset migration example:
+- Garage is the production-validated coordinated multi-dataset migration example:
   - `quadlets/garage.toml`
   - `overlay-root/etc/containers/systemd/users/51110/garage.container`
   - `overlay-root/usr/share/custom-coreos/garage/garage.toml`
@@ -76,6 +76,12 @@ The repo now has six concrete rootless examples:
   and blocks before either tree is changed. Both dataset roots act as durable
   completion markers, and the user service independently verifies mounts,
   ownership, write access, secrets, and host-port availability before starting.
+
+- Caddy is the staged-migration example. Its `quadlets/caddy.toml` entry uses
+  `enabled = false` during the rootful preflight release. This reserves the
+  identity and routes a runtime secret without generating a user Quadlet. Do
+  not flip that setting alone: Caddy's two persistent paths require a guarded
+  cutover-specific ownership and SELinux preparation service first.
 
 Read those first if you want the exact concrete implementation.
 

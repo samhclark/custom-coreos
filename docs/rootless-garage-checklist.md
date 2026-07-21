@@ -4,6 +4,9 @@ Use this after the NAS boots an image containing the rootless Garage cutover.
 The expected host identity is `_nas_garage` with UID/GID `51110`; the user
 Quadlet lives under `/etc/containers/systemd/users/51110/garage.container`.
 
+Status: completed and production-validated on 2026-07-20. Every success
+criterion below passed on the NAS.
+
 Deploy this release through a reboot. Do not switch the running rootful service
 in place. On the first rootless boot, the host preparation service verifies the
 completed preflight, creates the coordinated recursive snapshot
