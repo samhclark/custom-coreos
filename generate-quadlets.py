@@ -110,6 +110,10 @@ def load_service(toml_path: Path) -> dict:
     if "image" not in container:
         die(f"{toml_path.name}: missing [container].image")
 
+    enabled = container.get("enabled", True)
+    if type(enabled) is not bool:
+        die(f"{toml_path.name}: [container].enabled must be a boolean")
+
     if not NAME_RE.match(svc["name"]):
         die(f"{toml_path.name}: [service].name must match {NAME_RE.pattern}")
     if not USERNAME_RE.match(host["username"]):
@@ -439,13 +443,15 @@ def write(path: Path, content: str, executable: bool = False) -> None:
 
 def generated_paths(cfg: dict) -> set[Path]:
     uid, slug, name = cfg["host"]["uid"], cfg["_slug"], cfg["service"]["name"]
-    return {
-        OVERLAY / f"etc/containers/systemd/users/{uid}/{name}.container",
+    paths = {
         OVERLAY / f"usr/lib/sysusers.d/nas-{slug}.conf",
         OVERLAY / f"usr/lib/tmpfiles.d/nas-{slug}-rootless.conf",
         OVERLAY / f"usr/local/bin/ensure-nas-{slug}-account.sh",
         OVERLAY / f"etc/systemd/system/ensure-nas-{slug}-account.service",
     }
+    if cfg["container"].get("enabled", True):
+        paths.add(OVERLAY / f"etc/containers/systemd/users/{uid}/{name}.container")
+    return paths
 
 
 def has_generated_header(path: Path) -> bool:
@@ -497,10 +503,13 @@ def main() -> None:
     for cfg in configs:
         uid, slug, name = cfg["host"]["uid"], cfg["_slug"], cfg["service"]["name"]
         expected_paths.update(generated_paths(cfg))
-        write(
-            OVERLAY / f"etc/containers/systemd/users/{uid}/{name}.container",
-            container_unit(cfg),
-        )
+        if cfg["container"].get("enabled", True):
+            write(
+                OVERLAY / f"etc/containers/systemd/users/{uid}/{name}.container",
+                container_unit(cfg),
+            )
+        else:
+            print(f"skip  quadlets/{cfg['_toml_path'].name} container (disabled)")
         write(OVERLAY / f"usr/lib/sysusers.d/nas-{slug}.conf", sysusers_conf(cfg))
         write(OVERLAY / f"usr/lib/tmpfiles.d/nas-{slug}-rootless.conf", tmpfiles_conf(cfg))
         write(

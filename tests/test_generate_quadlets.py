@@ -138,5 +138,55 @@ class PublishedPortTests(unittest.TestCase):
                     GENERATOR.validate_ports("service.toml", container)
 
 
+class StagedServiceTests(unittest.TestCase):
+    def test_disabled_container_keeps_identity_outputs_but_omits_quadlet(self):
+        cfg = {
+            "_toml_path": Path("caddy.toml"),
+            "_slug": "caddy",
+            "service": {"name": "caddy"},
+            "host": {"uid": 51310},
+            "container": {"enabled": False},
+        }
+
+        paths = GENERATOR.generated_paths(cfg)
+
+        self.assertNotIn(
+            GENERATOR.OVERLAY
+            / "etc/containers/systemd/users/51310/caddy.container",
+            paths,
+        )
+        self.assertIn(
+            GENERATOR.OVERLAY
+            / "etc/systemd/system/ensure-nas-caddy-account.service",
+            paths,
+        )
+
+    def test_rejects_non_boolean_container_enabled_value(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            toml_path = Path(tmpdir) / "invalid.toml"
+            toml_path.write_text(
+                """
+[service]
+name = "invalid"
+description = "Invalid staged service"
+
+[host]
+username = "_nas_invalid"
+uid = 51999
+subid-start = 519990000
+display-name = "Invalid"
+
+[container]
+enabled = "false"
+image = "example.invalid/invalid:1"
+"""
+            )
+
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                GENERATOR.load_service(toml_path)
+
+
 if __name__ == "__main__":
     unittest.main()
