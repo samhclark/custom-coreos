@@ -222,7 +222,7 @@ Rootless service accounts use namespaced host usernames and a reserved high UID 
 - Reserve `51000-51999` for image-managed service accounts.
 - Use `511xx` for storage, `512xx` for observability, and `513xx` for ingress/edge.
 - Prefer names such as `_nas_grafana` over upstream defaults such as `grafana`.
-- Current allocations: Grafana uses `_nas_grafana` with host UID/GID `51210`, vmalert uses `_nas_vmalert` with `51220`, blackbox exporter uses `_nas_blackbox` with `51230`, Alertmanager uses `_nas_alertmanager` with `51240`, and VictoriaMetrics uses `_nas_victoriametrics` with `51250`.
+- Current allocations: Garage uses `_nas_garage` with host UID/GID `51110`, Grafana uses `_nas_grafana` with `51210`, vmalert uses `_nas_vmalert` with `51220`, blackbox exporter uses `_nas_blackbox` with `51230`, Alertmanager uses `_nas_alertmanager` with `51240`, VictoriaMetrics uses `_nas_victoriametrics` with `51250`, and Caddy's staged rootless identity uses `_nas_caddy` with `51310`.
 - UIDs are allocate-only: never reuse a UID from a retired service, because numeric file ownership (especially inside ZFS snapshots) outlives the user.
 - Rootless Quadlets for image-managed service users belong under `/etc/containers/systemd/users/$UID/`, not under `/usr/share/containers/systemd/users/$UID/`.
 - See `docs/rootless-quadlet-playbook.md` for the full migration pattern and starter templates.

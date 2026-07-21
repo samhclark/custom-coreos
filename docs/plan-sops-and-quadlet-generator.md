@@ -1,10 +1,10 @@
 # Plan: SOPS Secrets Management and Quadlet Generator
 
-> **Implementation status (2026-07-19):** The SOPS distributor and Quadlet
+> **Implementation status (2026-07-20):** The SOPS distributor and Quadlet
 > generator described here are deployed. Grafana, vmalert, blackbox exporter,
-> Alertmanager, and VictoriaMetrics run as production-validated rootless user
-> Quadlets. Garage's rootless cutover is implemented after a successful
-> first-stage preflight and awaits NAS production validation.
+> Alertmanager, VictoriaMetrics, and Garage run as production-validated
+> rootless user Quadlets. Caddy remains rootful while its first-stage rootless
+> identity, runtime-secret, low-port, and state preflight is deployed.
 > Alertmanager's migration was production-validated through a successful
 > synthetic Pushover notification. Sections written in the present tense under
 > "Background" and the phased rollout steps preserve the pre-implementation design history;
@@ -914,6 +914,7 @@ subid-start = 123450000    # First subordinate ID
 
 # Required: container configuration
 [container]
+enabled = true             # false reserves identity/secrets without emitting a Quadlet
 image = "string"            # Full image reference
 network = "string"          # "host" or omit for default
 container-user = 0          # User= inside container (optional)

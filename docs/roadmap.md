@@ -45,6 +45,9 @@ maintaining it.
 - Alertmanager migrated to a rootless Quadlet and validated on the NAS,
   including runtime Pushover credentials, health and metrics endpoints,
   Grafana visibility, and successful synthetic-alert delivery to Pushover.
+- VictoriaMetrics and Garage migrated to rootless Quadlets and were validated
+  on the NAS, including their guarded ZFS ownership conversions, preserved
+  history/object state, runtime secrets, monitoring, and rollback paths.
 - Cockpit deleted (quadlet, packages, Caddy vhost).
 
 ## Remaining work (in order)
@@ -59,15 +62,13 @@ maintaining it.
       Restart=always retries every 30s) and was not observed live. This
       proof-only Grafana mount is removed by the VictoriaMetrics migration;
       VictoriaMetrics becomes the real rootless consumer of that token.
-- [ ] **2. Migrate rootful services to rootless**, one at a time, easiest
-      first: victoria-metrics → garage → caddy decision. Alertmanager was
-      completed and production-validated 2026-07-19. VictoriaMetrics was also
-      deployed and production-validated 2026-07-19 using UID `51250`, guarded
-      ZFS ownership conversion, and a runtime Garage metrics token. Garage's
-      rootful hardening/preflight release was validated, and its second-release
-      rootless cutover is implemented using UID `51110`, a coordinated ZFS
-      rollback snapshot, guarded ownership conversion, and runtime secrets;
-      NAS deploy validation is pending.
+- [ ] **2. Finish the Caddy rootless migration.** Alertmanager,
+      VictoriaMetrics, and Garage are production-validated. Caddy's first-stage
+      preflight release reserves UID `51310`, stages its runtime Cloudflare
+      token, applies the host low-port policy, and records the live rootful
+      state without generating or starting a rootless Caddy Quadlet. After the
+      preflight is deployed and validated, implement the guarded ownership,
+      SELinux, static-config, and reboot-based service cutover.
       Each migration: new TOML + UID allocation, secrets move from Podman
       `Secret=` to runtime files, then delete the rootful quadlet. When the
       last `Secret=` consumer is gone, delete the shell secret driver
