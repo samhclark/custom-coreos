@@ -28,6 +28,7 @@ ROLLBACK_SNAPSHOT="pre-rootless-v1"
 PREFLIGHT_COMPLETE="/var/lib/nas-migrations/garage-rootless-preflight-v1/complete"
 MIGRATION_DIR="/var/lib/nas-migrations/garage-rootless-ownership-v1"
 MIGRATION_COMPLETE="${MIGRATION_DIR}/complete"
+REPAIR_REQUEST="${MIGRATION_DIR}/repair-required"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -52,7 +53,7 @@ sample_descendant() {
     local path="$1"
 
     find "${path}" -xdev -mindepth 1 -maxdepth 1 \
-        ! -path "${path}/.zfs" -print -quit 2>/dev/null
+        ! -path "${path}/.zfs" -print -quit
 }
 
 labels_are_ready() {
@@ -63,8 +64,44 @@ labels_are_ready() {
         return 1
     fi
 
-    sample="$(sample_descendant "${path}")"
+    if ! sample="$(sample_descendant "${path}")"; then
+        return 1
+    fi
     [[ -z "${sample}" || "$(stat -c '%C' "${sample}")" == "${EXPECTED_LABEL}" ]]
+}
+
+sample_owner_is_ready() {
+    local path="$1"
+    local sample
+
+    if ! sample="$(sample_descendant "${path}")"; then
+        return 1
+    fi
+    [[ -z "${sample}" || "$(stat -c '%u:%g' "${sample}")" == "${SERVICE_UID}:${SERVICE_GID}" ]]
+}
+
+bounded_state_is_ready() {
+    local path="$1"
+
+    if [[ "$(stat -c '%u:%g' "${path}")" != "${SERVICE_UID}:${SERVICE_GID}" ]]; then
+        log "ERROR: ${path} root is not owned by ${SERVICE_UID}:${SERVICE_GID}"
+        return 1
+    fi
+
+    if [[ "$(stat -c '%a' "${path}")" != "750" ]]; then
+        log "ERROR: ${path} root mode is not 0750"
+        return 1
+    fi
+
+    if ! labels_are_ready "${path}"; then
+        log "ERROR: ${path} root or bounded sample has an unexpected SELinux label"
+        return 1
+    fi
+
+    if ! sample_owner_is_ready "${path}"; then
+        log "ERROR: ${path} bounded sample has unexpected ownership"
+        return 1
+    fi
 }
 
 restorecon_recursive() {
@@ -114,16 +151,57 @@ validate_root_owner() {
     fi
 }
 
-ensure_garage_stopped() {
-    local rootful_running
+rootless_podman() {
+    runuser -u "${SERVICE_USER}" -- env \
+        HOME="/var/home/${SERVICE_USER}" \
+        XDG_RUNTIME_DIR="/run/user/${SERVICE_UID}" \
+        podman "$@"
+}
 
-    rootful_running="$(podman inspect garage --format '{{.State.Running}}' 2>/dev/null || true)"
-    if [[ "${rootful_running}" == "true" ]]; then
-        log "ERROR: Refusing to mutate Garage storage while the rootful container is running"
-        exit 1
+ensure_garage_stopped() {
+    local exists_status
+    local listeners
+    local running
+
+    if podman container exists garage >/dev/null 2>&1; then
+        if ! running="$(podman inspect garage --format '{{.State.Running}}')"; then
+            log "ERROR: Unable to inspect the rootful Garage container"
+            exit 1
+        fi
+        if [[ "${running}" == "true" ]]; then
+            log "ERROR: Refusing to mutate Garage storage while the rootful container is running"
+            exit 1
+        fi
+    else
+        exists_status=$?
+        if [[ "${exists_status}" -ne 1 ]]; then
+            log "ERROR: Unable to query the rootful Podman store for Garage"
+            exit 1
+        fi
     fi
 
-    if ss -H -ltn | awk '$4 ~ /:390(0|2|3)$/ { found=1 } END { exit !found }'; then
+    if rootless_podman container exists garage >/dev/null 2>&1; then
+        if ! running="$(rootless_podman inspect garage --format '{{.State.Running}}')"; then
+            log "ERROR: Unable to inspect the rootless Garage container"
+            exit 1
+        fi
+        if [[ "${running}" == "true" ]]; then
+            log "ERROR: Refusing to mutate Garage storage while the rootless container is running"
+            exit 1
+        fi
+    else
+        exists_status=$?
+        if [[ "${exists_status}" -ne 1 ]]; then
+            log "ERROR: Unable to query ${SERVICE_USER}'s Podman store for Garage"
+            exit 1
+        fi
+    fi
+
+    if ! listeners="$(ss -H -ltn)"; then
+        log "ERROR: Unable to inspect Garage host ports"
+        exit 1
+    fi
+    if awk '$4 ~ /:390(0|2|3)$/ { found=1 } END { exit !found }' <<< "${listeners}"; then
         log "ERROR: Refusing to mutate Garage storage while a process listens on a Garage host port"
         exit 1
     fi
@@ -166,19 +244,6 @@ verify_descendant_owners() {
     local path="$1"
     local unexpected
 
-    unexpected="$(find "${path}" -xdev -path "${path}/.zfs" -prune -o \
-        -mindepth 1 \( ! -uid "${SERVICE_UID}" -o ! -gid "${SERVICE_GID}" \) \
-        -print -quit 2>/dev/null)"
-    if [[ -n "${unexpected}" ]]; then
-        log "ERROR: ${unexpected} does not have expected owner ${SERVICE_UID}:${SERVICE_GID}"
-        exit 1
-    fi
-}
-
-descendant_owners_are_ready() {
-    local path="$1"
-    local unexpected
-
     if ! unexpected="$(find "${path}" -xdev -path "${path}/.zfs" -prune -o \
         -mindepth 1 \( ! -uid "${SERVICE_UID}" -o ! -gid "${SERVICE_GID}" \) \
         -print -quit)"; then
@@ -186,7 +251,10 @@ descendant_owners_are_ready() {
         exit 1
     fi
 
-    [[ -z "${unexpected}" ]]
+    if [[ -n "${unexpected}" ]]; then
+        log "ERROR: ${unexpected} does not have expected owner ${SERVICE_UID}:${SERVICE_GID}"
+        exit 1
+    fi
 }
 
 prepare_dataset() {
@@ -304,48 +372,43 @@ validate_root_owner "${META_PATH}"
 validate_root_owner "${DATA_PATH}"
 ensure_garage_stopped
 
-migration_needed=0
-repair_meta_descendants=0
-repair_data_descendants=0
-if [[ "$(stat -c '%u:%g' "${META_PATH}")" != "${SERVICE_UID}:${SERVICE_GID}" || \
-      "$(stat -c '%u:%g' "${DATA_PATH}")" != "${SERVICE_UID}:${SERVICE_GID}" ]]; then
-    migration_needed=1
-fi
-if ! descendant_owners_are_ready "${META_PATH}"; then
-    log "Ownership drift detected under ${META_PATH}; scheduling a full repair"
-    repair_meta_descendants=1
-    migration_needed=1
-fi
-if ! descendant_owners_are_ready "${DATA_PATH}"; then
-    log "Ownership drift detected under ${DATA_PATH}; scheduling a full repair"
-    repair_data_descendants=1
-    migration_needed=1
-fi
-
+preparation_mode="normal"
 if [[ ! -e "${MIGRATION_COMPLETE}" ]]; then
+    preparation_mode="initial"
     if { path_has_entries "${META_PATH}" || path_has_entries "${DATA_PATH}"; } && \
        [[ ! -e "${PREFLIGHT_COMPLETE}" ]]; then
         log "ERROR: Existing Garage data requires the completed rootless preflight report"
         exit 1
     fi
     ensure_rollback_snapshot
-elif [[ "${migration_needed}" -eq 1 ]]; then
-    log "Repairing an interrupted post-migration ownership or label operation"
+elif [[ -e "${REPAIR_REQUEST}" ]]; then
+    preparation_mode="requested-repair"
+elif [[ "$(stat -c '%u:%g' "${META_PATH}")" == "0:0" || \
+        "$(stat -c '%u:%g' "${DATA_PATH}")" == "0:0" ]]; then
+    preparation_mode="interrupted-repair"
 fi
 
-# A bootc rollback can run rootful Garage against roots that retain UID 51110,
-# creating new root-owned descendants. Re-arm only the affected root markers
-# after Garage is confirmed stopped so the normal root-last transaction repairs
-# those trees before readiness is published.
-if [[ "${repair_meta_descendants}" -eq 1 ]]; then
-    chown root:root "${META_PATH}"
-fi
-if [[ "${repair_data_descendants}" -eq 1 ]]; then
-    chown root:root "${DATA_PATH}"
-fi
+if [[ "${preparation_mode}" == "normal" ]]; then
+    # Static service IDs make a recursive ownership scan unnecessary during an
+    # ordinary rootless boot. Check roots and one immediate descendant only.
+    # Deep repair is an explicit operation because it can take tens of minutes.
+    for path in "${META_PATH}" "${DATA_PATH}"; do
+        if ! bounded_state_is_ready "${path}"; then
+            log "ERROR: Refusing an implicit full-tree scan. To request repair, create ${REPAIR_REQUEST} and restart this service"
+            exit 1
+        fi
+    done
+    log "Garage dataset roots and bounded samples are ready; skipped recursive ownership scan"
+else
+    log "Running full Garage dataset preparation (${preparation_mode})"
 
-prepare_dataset "${META_PATH}"
-prepare_dataset "${DATA_PATH}"
+    # Arm both dataset roots before a requested or initial full pass. Their
+    # root ownership remains the durable incomplete-operation marker until all
+    # descendant ownership and labels have been verified.
+    chown root:root "${META_PATH}" "${DATA_PATH}"
+    prepare_dataset "${META_PATH}"
+    prepare_dataset "${DATA_PATH}"
+fi
 
 for path in "${META_PATH}" "${DATA_PATH}"; do
     if [[ "$(stat -c '%u:%g' "${path}")" != "${SERVICE_UID}:${SERVICE_GID}" || \
@@ -358,6 +421,10 @@ done
 if [[ ! -e "${MIGRATION_COMPLETE}" ]]; then
     install -d -m 0700 -o root -g root "${MIGRATION_DIR}"
     touch "${MIGRATION_COMPLETE}"
+fi
+
+if [[ "${preparation_mode}" == "requested-repair" ]]; then
+    rm -f "${REPAIR_REQUEST}"
 fi
 
 log "Garage ZFS datasets ready"
