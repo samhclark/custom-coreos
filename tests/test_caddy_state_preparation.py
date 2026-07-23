@@ -86,6 +86,16 @@ class CaddyStatePreparationTests(unittest.TestCase):
             "caddy-rootless-ownership-v1/complete",
             QUADLET,
         )
+        self.assertIn(
+            "ExecStartPre=/usr/bin/test -w /var/lib/caddy\n",
+            QUADLET,
+        )
+        self.assertIn(
+            "ExecStartPre=/usr/bin/test -w /var/lib/caddy-config\n",
+            QUADLET,
+        )
+        self.assertNotIn("${path}", QUADLET)
+        self.assertNotIn("ss -H", QUADLET)
         self.assertIn("Volume=/var/lib/caddy:/data\n", QUADLET)
         self.assertIn("Volume=/var/lib/caddy-config:/config\n", QUADLET)
         self.assertNotIn("Volume=/var/lib/caddy:/data:Z", QUADLET)
