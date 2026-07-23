@@ -80,11 +80,12 @@ The repo now has six concrete rootless examples:
   mounts, ownership, write access, secrets, and host-port availability before
   starting.
 
-- Caddy is the staged-migration example. Its `quadlets/caddy.toml` entry uses
-  `enabled = false` during the rootful preflight release. This reserves the
-  identity and routes a runtime secret without generating a user Quadlet. Do
-  not flip that setting alone: Caddy's two persistent paths require a guarded
-  cutover-specific ownership and SELinux preparation service first.
+- Caddy is the two-release migration example. Its first release used
+  `enabled = false` to reserve the identity, route a runtime secret, and run a
+  production preflight without generating a user Quadlet. Phase two generates
+  the user Quadlet and uses `prepare-caddy-rootless-state.service` to archive
+  and migrate its two small persistent paths before Caddy's retrying start
+  guards can pass.
 
 Read those first if you want the exact concrete implementation.
 

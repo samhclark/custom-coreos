@@ -41,13 +41,6 @@ COPY --from=sops /usr/local/bin/sops /usr/local/bin/sops
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
-      "d /var/lib/caddy 0755 root root -" \
-      "d /var/lib/caddy/secrets 0700 root root -" \
-      "d /var/lib/caddy-config 0755 root root -" \
-      > /usr/lib/tmpfiles.d/caddy.conf'
-
-RUN /bin/bash -c 'set -euo pipefail; \
-    printf "%s\n" \
       "d /var/lib/prometheus 0755 prometheus prometheus -" \
       "d /var/lib/prometheus/node-exporter 0755 prometheus prometheus -" \
       > /usr/lib/tmpfiles.d/prometheus-node-exporter.conf'
@@ -91,8 +84,8 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         ensure-nas-victoriametrics-account.service \
         ensure-nas-vmalert-account.service \
         bootc-fetch-apply-updates.timer \
-        caddy-rootless-preflight.timer \
         nftables.service \
+        prepare-caddy-rootless-state.service \
         tailscaled.service \
         sops-distribute-secrets.service \
         zfs-create-garage-datasets.service \
@@ -115,12 +108,13 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 RUN /bin/bash -c 'set -euo pipefail; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/alertmanager(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/blackbox-exporter(/.*)?"; \
+    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/caddy(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/garage(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/victoria-metrics(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/vmalert(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R /usr/share/custom-coreos/alertmanager /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/garage /usr/share/custom-coreos/grafana /usr/share/custom-coreos/victoria-metrics /usr/share/custom-coreos/vmalert'
+    restorecon -F -R /usr/share/custom-coreos/alertmanager /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/caddy /usr/share/custom-coreos/garage /usr/share/custom-coreos/grafana /usr/share/custom-coreos/victoria-metrics /usr/share/custom-coreos/vmalert'
 
 RUN ["bootc", "container", "lint"]
 

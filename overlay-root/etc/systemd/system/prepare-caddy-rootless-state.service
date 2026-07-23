@@ -1,0 +1,19 @@
+[Unit]
+Description=Prepare persistent Caddy state for its rootless service account
+Requires=ensure-nas-caddy-account.service
+After=local-fs.target ensure-nas-caddy-account.service
+ConditionPathExists=!/var/lib/nas-migrations/caddy-rootless-ownership-v1/complete
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/prepare-caddy-rootless-state.sh
+TimeoutStartSec=infinity
+Restart=on-failure
+RestartSec=30
+StandardOutput=journal
+StandardError=journal
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -3,8 +3,8 @@
 > **Production status (2026-07-21):** The preflight completed successfully on
 > the NAS. Rootful Caddy remained healthy throughout, and the successful report
 > is recorded under `/var/lib/nas-migrations/caddy-rootless-preflight-v1/`.
-> Phase two is the guarded reboot-based rootless cutover described at the end of
-> this document.
+> Phase two is now implemented in the repository and awaits deployment. Use
+> `docs/rootless-caddy-checklist.md` for rollout, validation, and rollback.
 
 Caddy is being migrated in two releases because it is the host's TLS edge,
 owns ACME account and certificate state, and is the only remaining rootful
@@ -137,11 +137,10 @@ sudo rm -f /var/lib/nas-migrations/caddy-rootless-preflight-v1/complete
 sudo systemctl start caddy-rootless-preflight.service
 ```
 
-## Phase-Two Handoff
+## Phase-Two Handoff (Implemented)
 
-Do not chown, relabel, move, stop, or manually replace Caddy state before the
-cutover implementation is ready. Phase two should be one reviewable,
-reboot-based transition with these elements:
+The phase-two implementation follows this handoff as one reviewable,
+reboot-based transition:
 
 1. Archive the two small persistent trees before mutation and retain the
    preflight report as the comparison baseline.
@@ -151,7 +150,7 @@ reboot-based transition with these elements:
    use `restorecon -F -R` to clear the old private MCS categories.
 3. Move the static Caddyfile from `/etc/caddy/` into
    `/usr/share/custom-coreos/caddy/` so it remains image-controlled.
-4. Complete `quadlets/caddy.toml`: enable generation, mount the image-controlled
+4. Complete `quadlets/caddy.toml`: generate the service, mount the image-controlled
    Caddyfile, the two prepared state trees, and the runtime Cloudflare token;
    retain host networking and add bounded readiness guards for the secret and
    prepared state.
@@ -166,4 +165,4 @@ reboot-based transition with these elements:
    certificate state, logs, rootless Podman identity, state ownership, and
    `container_file_t:s0` labels. Provide a rollback procedure that restores the
    archived trees and the prior bootc deployment without mixing ownership
-   states.
+   states. The exact procedure is in `docs/rootless-caddy-checklist.md`.

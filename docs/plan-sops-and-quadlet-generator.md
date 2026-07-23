@@ -3,9 +3,9 @@
 > **Implementation status (2026-07-21):** The SOPS distributor and Quadlet
 > generator described here are deployed. Grafana, vmalert, blackbox exporter,
 > Alertmanager, VictoriaMetrics, and Garage run as production-validated
-> rootless user Quadlets. Caddy remains rootful, but its first-stage rootless
-> identity, runtime-secret, low-port, state, and route preflight is deployed and
-> production-validated; the guarded phase-two cutover is next.
+> rootless user Quadlets. Caddy's first-stage rootless identity,
+> runtime-secret, low-port, state, and route preflight is production-validated;
+> its guarded phase-two cutover is implemented pending NAS deployment.
 > Alertmanager's migration was production-validated through a successful
 > synthetic Pushover notification. Sections written in the present tense under
 > "Background" and the phased rollout steps preserve the pre-implementation design history;

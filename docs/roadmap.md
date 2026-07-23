@@ -67,9 +67,9 @@ maintaining it.
       VictoriaMetrics becomes the real rootless consumer of that token.
 - [ ] **2. Finish the Caddy rootless migration.** Alertmanager,
       VictoriaMetrics, and Garage are production-validated. Caddy's first-stage
-      preflight is also deployed and validated. Next, implement the guarded
-      ownership, SELinux, static-config, and reboot-based service cutover using
-      the handoff in `docs/rootless-caddy-preflight.md`.
+      preflight is deployed and validated, and the guarded phase-two cutover is
+      implemented in the repository. Deploy and validate it using
+      `docs/rootless-caddy-checklist.md`.
       Each migration: new TOML + UID allocation, secrets move from Podman
       `Secret=` to runtime files, then delete the rootful quadlet. When the
       last `Secret=` consumer is gone, delete the shell secret driver

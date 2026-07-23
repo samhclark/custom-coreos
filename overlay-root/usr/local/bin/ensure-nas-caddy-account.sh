@@ -11,6 +11,7 @@ USER_HOME="/var/home/_nas_caddy"
 USER_SHELL="/sbin/nologin"
 USER_SUBID_START="513100000"
 USER_SUBID_COUNT="65536"
+ASSETS_FCONTEXT="/usr/share/custom-coreos/caddy(/.*)?"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -80,6 +81,7 @@ fi
 
 ensure_subid_entry /etc/subuid
 ensure_subid_entry /etc/subgid
+ensure_fcontext_rule "${ASSETS_FCONTEXT}"
 
 if systemctl is-failed --quiet "user@${USER_UID}.service"; then
     log "Retrying user@${USER_UID}.service after account setup"

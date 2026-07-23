@@ -36,7 +36,7 @@ This repo is not just "CoreOS with ZFS". It currently defines a full single-node
 
 These are considered active and in use on the real machine unless explicitly stated otherwise:
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
-- `caddy.container` - reverse proxy / TLS termination for the user-facing services; still rootful after its rootless preflight completed successfully, with the guarded phase-two cutover next
+- `caddy.container` - reverse proxy / TLS termination for the user-facing services; the rootless phase-two cutover is implemented under `etc/containers/systemd/users/51310/` and awaits NAS deployment/validation
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
@@ -47,7 +47,7 @@ These are considered active and in use on the real machine unless explicitly sta
 
 Important non-container units:
 - `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and distributes Podman secrets at boot
-- `caddy-rootless-preflight.timer` - records the rootful Caddy baseline and verifies its staged rootless identity, runtime secret, and low-port policy
+- `prepare-caddy-rootless-state.service` - one-time archive, ownership migration, and SELinux preparation for Caddy's two persistent state trees
 - `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
 - `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
@@ -75,7 +75,7 @@ Important non-container units:
 - Distributed rootful Podman secret material is encrypted at rest with `systemd-creds` in `/var/lib/podman-secrets/*.cred`; rootless services should use per-service runtime files under `/run/nas-secrets/<service>/` instead of Podman `Secret=`
 - `nas-secrets` is the admin-facing wrapper for creating, rotating, showing, and deleting those Podman secrets
 - `test-podman-secret-driver.sh` is the host-level smoke test for `podman secret create/show/run/rm`; it requires a live TPM-backed host and is not part of CI
-- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, and Alertmanager secrets; Caddy intentionally receives both a rootful Podman secret and a staged runtime file during its preflight release
+- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, and Alertmanager secrets; Caddy receives a per-service runtime file and the phase-two image retires its former rootful Podman secret
 - Rootless Podman secrets are not a validated production path. NAS testing showed rootless Podman's shell secret-driver context cannot use meaningful `systemd-creds` key modes. The selected rootless design is for the rootful SOPS distributor to write per-service runtime files under `/run/nas-secrets/<service>/`; see `docs/plan-sops-and-quadlet-generator.md` Appendix D before adding rootless secrets.
 
 ### Manual Bootstrap Reality
@@ -258,7 +258,7 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy remains a rootful system Quadlet under `overlay-root/etc/containers/systemd/`; its rootless identity, runtime secret, low-port binding, state inventory, and representative routes were production-validated on 2026-07-21. `quadlets/caddy.toml` remains staged with `enabled = false`; the next task is the guarded phase-two cutover in `docs/rootless-caddy-preflight.md`.
+- Caddy's rootless identity, runtime secret, low-port binding, state inventory, and representative routes were production-validated on 2026-07-21. Its guarded phase-two user Quadlet and one-time state migration are implemented and await NAS deployment; use `docs/rootless-caddy-checklist.md`.
 - Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 

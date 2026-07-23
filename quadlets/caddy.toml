@@ -1,5 +1,5 @@
-# ABOUTME: Declarative identity and secret routing for Caddy's rootless
-# migration. The container stays disabled during the rootful preflight release.
+# ABOUTME: Declarative config for the rootless Caddy Quadlet; persistent state
+# is prepared once by prepare-caddy-rootless-state.service.
 
 [service]
 name = "caddy"
@@ -13,14 +13,41 @@ subid-start = 513100000
 display-name = "Caddy"
 
 [container]
-# Preflight only: generate the service identity and route its runtime secret,
-# but do not emit a rootless Quadlet or disturb the live rootful service.
-enabled = false
 image = "ghcr.io/samhclark/lab-caddy:2.11.3-cf-0.2.4"
 network = "host"
 auto-update = "registry"
 container-user = 0
 pull = "always"
 
+[[container.volumes]]
+comment = "Image-controlled configuration (read-only)"
+source = "/usr/share/custom-coreos/caddy/Caddyfile"
+target = "/etc/caddy/Caddyfile"
+options = "ro"
+
+[[container.volumes]]
+comment = "Persistent certificate and ACME state; ownership and SELinux labels are prepared by the host unit"
+source = "/var/lib/caddy"
+target = "/data"
+
+[[container.volumes]]
+comment = "Persistent Caddy runtime configuration state; ownership and SELinux labels are prepared by the host unit"
+source = "/var/lib/caddy-config"
+target = "/config"
+
 [[container.secrets]]
 name = "cf-api-token"
+
+[assets]
+path = "/usr/share/custom-coreos/caddy"
+
+[unit.extra]
+# The one-time host migration and the user manager intentionally have no
+# cross-manager ordering. A first-boot race is harmless: these immediate
+# guards fail closed and Restart=always retries after preparation completes.
+Service = [
+    '''ExecStartPre=/usr/bin/bash -lc 'if [[ -e /etc/containers/systemd/caddy.container ]]; then echo "Refusing to start while the retired rootful Caddy Quadlet still exists" >&2; exit 1; fi'''',
+    '''ExecStartPre=/usr/bin/test -e /var/lib/nas-migrations/caddy-rootless-ownership-v1/complete''',
+    '''ExecStartPre=/usr/bin/bash -lc 'for path in /var/lib/caddy /var/lib/caddy-config; do [[ "$(/usr/bin/stat -c %%u:%%g "${path}" 2>/dev/null)" == "51310:51310" ]] && [[ "$(/usr/bin/stat -c %%C "${path}" 2>/dev/null)" == "system_u:object_r:container_file_t:s0" ]] && /usr/bin/test -w "${path}" || { echo "${path} is not ready for rootless Caddy" >&2; exit 1; }; done'''',
+    '''ExecStartPre=/usr/bin/bash -lc 'if /usr/bin/ss -H -ltn | /usr/bin/grep -Eq ":(80|443)[[:space:]]" || /usr/bin/ss -H -lun | /usr/bin/grep -Eq ":(80|443)[[:space:]]"; then echo "Refusing to start while a process already owns a Caddy host port" >&2; exit 1; fi'''',
+]
