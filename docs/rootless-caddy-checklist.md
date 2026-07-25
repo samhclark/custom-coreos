@@ -180,9 +180,8 @@ The empty `/var/lib/caddy/secrets` directory may be removed after confirming
 it remains unused. Keep the migration archive until the rootless deployment
 has been stable for as long as desired.
 
-The shell secret-driver implementation is intentionally retained in the
-cutover image for easy bootc rollback. Remove it, `nas-secrets`, and the smoke
-test in a later cleanup release.
+The shell secret-driver implementation, `nas-secrets`, and its smoke test were
+removed after this checklist succeeded and the rollback window closed.
 
 ## Rollback
 

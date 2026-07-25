@@ -213,7 +213,7 @@ Root unlock is TPM-backed but deliberately not bound to PCR values. Binding only
 Some parts of the system are still intentionally bootstrapped by hand after installation:
 - Additional encrypted data volumes are enrolled with TPM manually.
 - The SOPS age private key credential is installed manually on the NAS at `/var/lib/nas-secrets/age-key.cred`.
-- Podman secrets are distributed at boot from the repo-managed SOPS file at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`.
+- Per-service runtime secret files are distributed at boot from the repo-managed SOPS file at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`.
 
 ### Host Service UIDs
 
@@ -222,7 +222,7 @@ Rootless service accounts use namespaced host usernames and a reserved high UID 
 - Reserve `51000-51999` for image-managed service accounts.
 - Use `511xx` for storage, `512xx` for observability, and `513xx` for ingress/edge.
 - Prefer names such as `_nas_grafana` over upstream defaults such as `grafana`.
-- Current allocations: Garage uses `_nas_garage` with host UID/GID `51110`, Grafana uses `_nas_grafana` with `51210`, vmalert uses `_nas_vmalert` with `51220`, blackbox exporter uses `_nas_blackbox` with `51230`, Alertmanager uses `_nas_alertmanager` with `51240`, VictoriaMetrics uses `_nas_victoriametrics` with `51250`, and Caddy's rootless phase-two cutover uses `_nas_caddy` with `51310`.
+- Current allocations: Garage uses `_nas_garage` with host UID/GID `51110`, Grafana uses `_nas_grafana` with `51210`, vmalert uses `_nas_vmalert` with `51220`, blackbox exporter uses `_nas_blackbox` with `51230`, Alertmanager uses `_nas_alertmanager` with `51240`, VictoriaMetrics uses `_nas_victoriametrics` with `51250`, and Caddy uses `_nas_caddy` with `51310`.
 - UIDs are allocate-only: never reuse a UID from a retired service, because numeric file ownership (especially inside ZFS snapshots) outlives the user.
 - Rootless Quadlets for image-managed service users belong under `/etc/containers/systemd/users/$UID/`, not under `/usr/share/containers/systemd/users/$UID/`.
 - See `docs/rootless-quadlet-playbook.md` for the full migration pattern and starter templates.
@@ -277,8 +277,7 @@ sudo tailscale up
 
 Additional post-install steps still happen manually over SSH:
 - Install the SOPS age private key credential at `/var/lib/nas-secrets/age-key.cred`
-- Verify `sops-distribute-secrets.service` populated the Podman secret store
-- Validate the Podman shell secret driver after secret-storage changes with `sudo test-podman-secret-driver.sh`
+- Verify `sops-distribute-secrets.service` populated the per-service files under `/run/nas-secrets/`
 - Enroll any non-root LUKS volumes with TPM and add them to `crypttab`
 - Import the ZFS pool if it is not imported automatically
 

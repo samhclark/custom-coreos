@@ -36,7 +36,7 @@ This repo is not just "CoreOS with ZFS". It currently defines a full single-node
 
 These are considered active and in use on the real machine unless explicitly stated otherwise:
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
-- `caddy.container` - reverse proxy / TLS termination for the user-facing services; the rootless phase-two cutover is implemented under `etc/containers/systemd/users/51310/` and awaits NAS deployment/validation
+- `caddy.container` - reverse proxy / TLS termination for the user-facing services; rootless under `etc/containers/systemd/users/51310/`, deployed and validated on the NAS
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
@@ -46,7 +46,7 @@ These are considered active and in use on the real machine unless explicitly sta
 ### Supporting Host Units
 
 Important non-container units:
-- `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and distributes Podman secrets at boot
+- `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and writes per-service runtime secret files at boot
 - `prepare-caddy-rootless-state.service` - one-time archive, ownership migration, and SELinux preparation for Caddy's two persistent state trees
 - `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
 - `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
@@ -69,14 +69,11 @@ Important non-container units:
 
 ### Secrets Model
 
-- Podman is configured to use the shell secret driver
 - Secret material is encrypted in the repo with SOPS at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`
 - The SOPS age private key is expected on the NAS as a `systemd-creds` file at `/var/lib/nas-secrets/age-key.cred`
-- Distributed rootful Podman secret material is encrypted at rest with `systemd-creds` in `/var/lib/podman-secrets/*.cred`; rootless services should use per-service runtime files under `/run/nas-secrets/<service>/` instead of Podman `Secret=`
-- `nas-secrets` is the admin-facing wrapper for creating, rotating, showing, and deleting those Podman secrets
-- `test-podman-secret-driver.sh` is the host-level smoke test for `podman secret create/show/run/rm`; it requires a live TPM-backed host and is not part of CI
-- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, and Alertmanager secrets; Caddy receives a per-service runtime file and the phase-two image retires its former rootful Podman secret
-- Rootless Podman secrets are not a validated production path. NAS testing showed rootless Podman's shell secret-driver context cannot use meaningful `systemd-creds` key modes. The selected rootless design is for the rootful SOPS distributor to write per-service runtime files under `/run/nas-secrets/<service>/`; see `docs/plan-sops-and-quadlet-generator.md` Appendix D before adding rootless secrets.
+- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, and Alertmanager secrets
+- The root-owned distributor writes per-service runtime files under `/run/nas-secrets/<service>/`; consuming rootless services mount those files read-only instead of using Podman `Secret=`
+- Rootless Podman secrets are not a validated production path. NAS testing showed that the former shell secret driver could not use meaningful `systemd-creds` key modes from rootless Podman's user-namespace context; see `docs/plan-sops-and-quadlet-generator.md` Appendix D before changing the runtime-file design.
 
 ### Manual Bootstrap Reality
 
@@ -258,7 +255,7 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy's rootless identity, runtime secret, low-port binding, state inventory, and representative routes were production-validated on 2026-07-21. Its guarded phase-two user Quadlet and one-time state migration are implemented and await NAS deployment; use `docs/rootless-caddy-checklist.md`.
+- Caddy's rootless identity, runtime secret, low-port binding, state migration, and representative routes are deployed and production-validated
 - Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
@@ -268,7 +265,7 @@ Useful reference points for future rootless work:
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
 - Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_garage`, `_nas_grafana`, `_nas_vmalert`, `_nas_blackbox`, `_nas_alertmanager`, and `_nas_victoriametrics` ranges in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
-- Do not assume Podman `Secret=` works for rootless services with the current shell driver. The helper can run inside a user namespace where `systemd-creds` cannot access the host key or TPM device. Rootless services that need secrets should consume per-service runtime files written by the rootful SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only with `:ro,Z` (validated on the NAS 2026-07-03: rootless Podman can relabel `/run` tmpfs files to `container_file_t`; unrelabeled `var_run_t` files are blocked by SELinux).
+- Do not use Podman `Secret=` for rootless services. Use per-service runtime files written by the root-owned SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only with `:ro,Z` (validated on the NAS 2026-07-03: rootless Podman can relabel `/run` tmpfs files to `container_file_t`; unrelabeled `var_run_t` files are blocked by SELinux).
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
 - Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently, or use a bounded `ExecStartPre=` readiness loop when startup requires a local dependency to answer first
 - Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned

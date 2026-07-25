@@ -51,6 +51,9 @@ maintaining it.
 - Caddy's rootless preflight completed on the NAS on 2026-07-21. UID `51310`,
   runtime-secret delivery, TCP/UDP low-port binding, rootful state inventory,
   listeners, metrics, redirect, and Garage routing are production-validated.
+- Caddy's phase-two rootless cutover was deployed and validated on the NAS.
+  The final rootful container residue and shell secret-driver stack were
+  retired on 2026-07-25.
 - Cockpit deleted (quadlet, packages, Caddy vhost).
 
 ## Remaining work (in order)
@@ -65,21 +68,13 @@ maintaining it.
       Restart=always retries every 30s) and was not observed live. This
       proof-only Grafana mount is removed by the VictoriaMetrics migration;
       VictoriaMetrics becomes the real rootless consumer of that token.
-- [ ] **2. Finish the Caddy rootless migration.** Alertmanager,
-      VictoriaMetrics, and Garage are production-validated. Caddy's first-stage
-      preflight is deployed and validated, and the guarded phase-two cutover is
-      implemented in the repository. Deploy and validate it using
-      `docs/rootless-caddy-checklist.md`.
-      Each migration: new TOML + UID allocation, secrets move from Podman
-      `Secret=` to runtime files, then delete the rootful quadlet. When the
-      last `Secret=` consumer is gone, delete the shell secret driver
-      (`/usr/local/lib/podman-secret-driver/`), `nas-secrets`, and
-      `test-podman-secret-driver.sh`. Until then: secret rotation goes
-      through `secrets.sops.yaml` + redeploy, never `nas-secrets` alone
-      (the distributor's hash check will not correct a manual rotation).
+- [x] **2. Finish the Caddy rootless migration.** Done 2026-07-25: the
+      guarded phase-two cutover was deployed and validated, the stopped
+      rootful container and legacy files were removed, and the unused shell
+      secret-driver stack was retired.
 - [ ] **3. Add Renovate** with a custom regex manager for image references
-      in `quadlets/*.toml` and the rootful `*.container` files, plus the
-      `FROM ghcr.io/getsops/sops:` pin in the Containerfile. Converge every
+      in `quadlets/*.toml`, plus the `FROM ghcr.io/getsops/sops:` pin in the
+      Containerfile. Converge every
       service on pinned tags/digests; drop the inert
       `AutoUpdate=`/`Pull=newer` mix. Matters more with every service added.
 - [ ] **4. New services** (the actual goal): immich, jellyfin,

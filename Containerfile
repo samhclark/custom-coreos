@@ -47,12 +47,9 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
-      "d /var/lib/podman-secrets 0711 root root -" \
-      > /usr/lib/tmpfiles.d/podman-secret-driver.conf'
-
-RUN /bin/bash -c 'set -euo pipefail; \
-    printf "%s\n" \
       "d /var/lib/nas-secrets 0700 root root -" \
+      "r /var/lib/nas-secrets/distributed-state.json - - - -" \
+      "R /var/lib/podman-secrets - - - -" \
       > /usr/lib/tmpfiles.d/nas-secrets.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
