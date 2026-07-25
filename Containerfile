@@ -48,8 +48,6 @@ RUN /bin/bash -c 'set -euo pipefail; \
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
       "d /var/lib/nas-secrets 0700 root root -" \
-      "r /var/lib/nas-secrets/distributed-state.json - - - -" \
-      "R /var/lib/podman-secrets - - - -" \
       > /usr/lib/tmpfiles.d/nas-secrets.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
@@ -82,7 +80,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         ensure-nas-vmalert-account.service \
         bootc-fetch-apply-updates.timer \
         nftables.service \
-        prepare-caddy-rootless-state.service \
+        prepare-caddy-state.service \
         tailscaled.service \
         sops-distribute-secrets.service \
         zfs-create-garage-datasets.service \

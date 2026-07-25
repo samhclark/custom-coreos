@@ -13,7 +13,7 @@ persists across upgrades.
 
 ## Reference Implementation
 
-The repo now has six concrete rootless examples:
+The repo now has seven concrete rootless examples:
 
 - Grafana is the fuller migration example with persistent service data:
   - `overlay-root/etc/containers/systemd/users/51210/grafana.container`
@@ -62,30 +62,28 @@ The repo now has six concrete rootless examples:
   - `overlay-root/usr/local/bin/zfs-create-victoria-metrics-dataset.sh`
 
   Its ZFS dataset is intentionally not declared with the generator's `[data]`
-  section. The dedicated host preparation unit performs the guarded one-time
-  ownership migration and conditional SELinux repair, then publishes a
-  current-boot readiness marker for the user service.
+  section. The dedicated host preparation unit creates, tunes, and verifies
+  the dataset, performs conditional SELinux and ownership repair, then
+  publishes a current-boot readiness marker for the user service.
 
-- Garage is the production-validated coordinated multi-dataset migration example:
+- Garage is the production-validated coordinated multi-dataset example:
   - `quadlets/garage.toml`
   - `overlay-root/etc/containers/systemd/users/51110/garage.container`
   - `overlay-root/usr/share/custom-coreos/garage/garage.toml`
   - `overlay-root/usr/local/bin/zfs-create-garage-datasets.sh`
 
-  Its fixed recursive ZFS snapshot establishes one rollback point for metadata
-  and blocks before either tree is changed. Both dataset roots act as durable
-  completion markers. Normal boots validate only roots and bounded samples;
-  full recursive repair requires an initial/interrupted migration or an
-  explicit durable repair request. The user service independently verifies
-  mounts, ownership, write access, secrets, and host-port availability before
-  starting.
+  Normal boots validate only dataset roots and bounded samples. Full recursive
+  ownership and SELinux repair requires an explicit durable repair request or
+  a root-owned dataset root left by an interrupted repair. The user service
+  independently verifies mounts, ownership, write access, secrets, and
+  host-port availability before starting.
 
-- Caddy is the two-release migration example. Its first release used
-  `enabled = false` to reserve the identity, route a runtime secret, and run a
-  production preflight without generating a user Quadlet. Phase two generates
-  the user Quadlet and uses `prepare-caddy-rootless-state.service` to archive
-  and migrate its two small persistent paths before Caddy's retrying start
-  guards can pass.
+- Caddy is the two-small-state-tree example. `prepare-caddy-state.service`
+  creates missing roots, maintains persistent SELinux policy, verifies the
+  complete trees, and publishes a current-boot readiness marker before the
+  user Quadlet starts. Its completed two-release migration is preserved in
+  `docs/rootless-caddy-preflight.md` and
+  `docs/rootless-caddy-checklist.md`.
 
 Read those first if you want the exact concrete implementation.
 

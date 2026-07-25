@@ -2,7 +2,8 @@
 Description=Create ZFS datasets for VictoriaMetrics time series storage
 Documentation=https://docs.victoriametrics.com/
 Requires=zfs.target
-After=zfs.target
+Requires=ensure-nas-victoriametrics-account.service
+After=zfs.target ensure-nas-victoriametrics-account.service
 ConditionPathIsDirectory=/sys/module/zfs
 
 [Service]

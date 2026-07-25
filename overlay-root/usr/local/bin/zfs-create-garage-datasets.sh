@@ -1,5 +1,6 @@
 #!/bin/bash
-# Creates ZFS datasets for Garage object storage with optimized settings
+# ABOUTME: Creates, tunes, and verifies the ZFS datasets used by rootless
+# Garage, with an explicit opt-in path for full ownership and SELinux repair.
 #
 # This script is idempotent - it only creates datasets that don't exist.
 #
@@ -24,11 +25,8 @@ SERVICE_USER="_nas_garage"
 SERVICE_UID="51110"
 SERVICE_GID="51110"
 EXPECTED_LABEL="system_u:object_r:container_file_t:s0"
-ROLLBACK_SNAPSHOT="pre-rootless-v1"
-PREFLIGHT_COMPLETE="/var/lib/nas-migrations/garage-rootless-preflight-v1/complete"
-MIGRATION_DIR="/var/lib/nas-migrations/garage-rootless-ownership-v1"
-MIGRATION_COMPLETE="${MIGRATION_DIR}/complete"
-REPAIR_REQUEST="${MIGRATION_DIR}/repair-required"
+REPAIR_DIR="/var/lib/nas-repairs/garage"
+REPAIR_REQUEST="${REPAIR_DIR}/repair-required"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -127,30 +125,6 @@ validate_mount() {
     fi
 }
 
-path_has_entries() {
-    local path="$1"
-    local first
-
-    if ! first="$(find "${path}" -xdev -path "${path}/.zfs" -prune -o \
-        -mindepth 1 -print -quit)"; then
-        log "ERROR: Unable to inspect ${path} before ownership migration"
-        exit 1
-    fi
-
-    [[ -n "${first}" ]]
-}
-
-validate_root_owner() {
-    local path="$1"
-    local owner
-
-    owner="$(stat -c '%u:%g' "${path}")"
-    if [[ "${owner}" != "0:0" && "${owner}" != "${SERVICE_UID}:${SERVICE_GID}" ]]; then
-        log "ERROR: ${path} has unexpected owner ${owner}; expected 0:0 or ${SERVICE_UID}:${SERVICE_GID}"
-        exit 1
-    fi
-}
-
 rootless_podman() {
     runuser -u "${SERVICE_USER}" -- env \
         HOME="/var/home/${SERVICE_USER}" \
@@ -162,23 +136,6 @@ ensure_garage_stopped() {
     local exists_status
     local listeners
     local running
-
-    if podman container exists garage >/dev/null 2>&1; then
-        if ! running="$(podman inspect garage --format '{{.State.Running}}')"; then
-            log "ERROR: Unable to inspect the rootful Garage container"
-            exit 1
-        fi
-        if [[ "${running}" == "true" ]]; then
-            log "ERROR: Refusing to mutate Garage storage while the rootful container is running"
-            exit 1
-        fi
-    else
-        exists_status=$?
-        if [[ "${exists_status}" -ne 1 ]]; then
-            log "ERROR: Unable to query the rootful Podman store for Garage"
-            exit 1
-        fi
-    fi
 
     if rootless_podman container exists garage >/dev/null 2>&1; then
         if ! running="$(rootless_podman inspect garage --format '{{.State.Running}}')"; then
@@ -207,39 +164,6 @@ ensure_garage_stopped() {
     fi
 }
 
-ensure_rollback_snapshot() {
-    local dataset
-    local present=0
-    local missing=0
-
-    for dataset in "${BASE_DATASET}" "${META_DATASET}" "${DATA_DATASET}"; do
-        if zfs list -H -t snapshot "${dataset}@${ROLLBACK_SNAPSHOT}" >/dev/null 2>&1; then
-            present=$((present + 1))
-        else
-            missing=$((missing + 1))
-        fi
-    done
-
-    if [[ "${present}" -ne 0 && "${missing}" -ne 0 ]]; then
-        log "ERROR: Recursive rollback snapshot is incomplete; expected ${ROLLBACK_SNAPSHOT} on all Garage datasets"
-        exit 1
-    fi
-
-    if [[ "${present}" -eq 3 ]]; then
-        log "Reusing coordinated rollback snapshot ${BASE_DATASET}@${ROLLBACK_SNAPSHOT}"
-        return
-    fi
-
-    if [[ "$(stat -c '%u:%g' "${META_PATH}")" != "0:0" || \
-          "$(stat -c '%u:%g' "${DATA_PATH}")" != "0:0" ]]; then
-        log "ERROR: Cannot establish the original rollback point after a dataset root changed ownership"
-        exit 1
-    fi
-
-    log "Creating coordinated rollback snapshot ${BASE_DATASET}@${ROLLBACK_SNAPSHOT}"
-    zfs snapshot -r "${BASE_DATASET}@${ROLLBACK_SNAPSHOT}"
-}
-
 verify_descendant_owners() {
     local path="$1"
     local unexpected
@@ -260,28 +184,28 @@ verify_descendant_owners() {
 prepare_dataset() {
     local path="$1"
     local owner
-    local ownership_migration=0
-    local relabel_migration=0
+    local ownership_repair=0
+    local relabel_repair=0
 
     owner="$(stat -c '%u:%g' "${path}")"
 
     # Rootless container UID 0 maps to the host service UID. Descendants are
-    # changed first; the dataset root remains the incomplete-migration marker.
+    # changed first; the dataset root remains the incomplete-repair marker.
     if [[ "${owner}" == "0:0" ]]; then
-        ownership_migration=1
-        log "Migrating ${path} ownership to ${SERVICE_USER} (${SERVICE_UID}:${SERVICE_GID})"
+        ownership_repair=1
+        log "Repairing ${path} ownership for ${SERVICE_USER} (${SERVICE_UID}:${SERVICE_GID})"
         find "${path}" -xdev -path "${path}/.zfs" -prune -o \
             -mindepth 1 -exec chown -h "${SERVICE_UID}:${SERVICE_GID}" {} +
     fi
 
-    if [[ "${ownership_migration}" -eq 1 ]] || ! labels_are_ready "${path}"; then
+    if [[ "${ownership_repair}" -eq 1 ]] || ! labels_are_ready "${path}"; then
         log "Restoring SELinux labels in ${path}"
 
-        # Temporarily clear a completed root marker so an interrupted relabel
-        # is retried as incomplete on the next preparation run.
-        if [[ "${ownership_migration}" -eq 0 ]]; then
+        # Temporarily clear a ready root so an interrupted relabel is retried
+        # as an incomplete repair on the next preparation run.
+        if [[ "${ownership_repair}" -eq 0 ]]; then
             chown root:root "${path}"
-            relabel_migration=1
+            relabel_repair=1
         fi
 
         restorecon_recursive "${path}"
@@ -292,11 +216,11 @@ prepare_dataset() {
         exit 1
     fi
 
-    if [[ "${ownership_migration}" -eq 1 ]]; then
+    if [[ "${ownership_repair}" -eq 1 ]]; then
         verify_descendant_owners "${path}"
     fi
 
-    if [[ "${ownership_migration}" -eq 1 || "${relabel_migration}" -eq 1 ]]; then
+    if [[ "${ownership_repair}" -eq 1 || "${relabel_repair}" -eq 1 ]]; then
         chown "${SERVICE_UID}:${SERVICE_GID}" "${path}"
     fi
     chmod 0750 "${path}"
@@ -368,20 +292,9 @@ fi
 
 ensure_fcontext_rule "${META_PATH}(/.*)?"
 ensure_fcontext_rule "${DATA_PATH}(/.*)?"
-validate_root_owner "${META_PATH}"
-validate_root_owner "${DATA_PATH}"
-ensure_garage_stopped
 
 preparation_mode="normal"
-if [[ ! -e "${MIGRATION_COMPLETE}" ]]; then
-    preparation_mode="initial"
-    if { path_has_entries "${META_PATH}" || path_has_entries "${DATA_PATH}"; } && \
-       [[ ! -e "${PREFLIGHT_COMPLETE}" ]]; then
-        log "ERROR: Existing Garage data requires the completed rootless preflight report"
-        exit 1
-    fi
-    ensure_rollback_snapshot
-elif [[ -e "${REPAIR_REQUEST}" ]]; then
+if [[ -e "${REPAIR_REQUEST}" ]]; then
     preparation_mode="requested-repair"
 elif [[ "$(stat -c '%u:%g' "${META_PATH}")" == "0:0" || \
         "$(stat -c '%u:%g' "${DATA_PATH}")" == "0:0" ]]; then
@@ -401,9 +314,10 @@ if [[ "${preparation_mode}" == "normal" ]]; then
     log "Garage dataset roots and bounded samples are ready; skipped recursive ownership scan"
 else
     log "Running full Garage dataset preparation (${preparation_mode})"
+    ensure_garage_stopped
 
-    # Arm both dataset roots before a requested or initial full pass. Their
-    # root ownership remains the durable incomplete-operation marker until all
+    # Arm both dataset roots before a requested or interrupted full pass. Their
+    # root ownership remains the durable incomplete-repair marker until all
     # descendant ownership and labels have been verified.
     chown root:root "${META_PATH}" "${DATA_PATH}"
     prepare_dataset "${META_PATH}"
@@ -418,13 +332,9 @@ for path in "${META_PATH}" "${DATA_PATH}"; do
     fi
 done
 
-if [[ ! -e "${MIGRATION_COMPLETE}" ]]; then
-    install -d -m 0700 -o root -g root "${MIGRATION_DIR}"
-    touch "${MIGRATION_COMPLETE}"
-fi
-
 if [[ "${preparation_mode}" == "requested-repair" ]]; then
     rm -f "${REPAIR_REQUEST}"
+    rmdir "${REPAIR_DIR}" 2>/dev/null || true
 fi
 
 log "Garage ZFS datasets ready"

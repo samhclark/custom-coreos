@@ -1,5 +1,9 @@
 # Rootless VictoriaMetrics Rollout Checklist
 
+> Historical record: this checklist describes the completed
+> rootful-to-rootless deployment. The active image retains only steady-state
+> dataset creation, verification, and repair behavior.
+
 Use this after the NAS boots an image containing the rootless VictoriaMetrics
 migration. The expected host identity is `_nas_victoriametrics` with UID/GID
 `51250`; the user Quadlet lives under

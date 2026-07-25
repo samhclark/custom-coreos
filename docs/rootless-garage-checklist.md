@@ -1,5 +1,9 @@
 # Rootless Garage Rollout Checklist
 
+> Historical record: this checklist describes Garage's completed
+> rootful-to-rootless ownership migration. The active preparation service no
+> longer uses the preflight marker, migration marker, or rollback snapshot.
+
 Use this after the NAS boots an image containing the rootless Garage cutover.
 The expected host identity is `_nas_garage` with UID/GID `51110`; the user
 Quadlet lives under `/etc/containers/systemd/users/51110/garage.container`.

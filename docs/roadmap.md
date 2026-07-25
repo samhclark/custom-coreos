@@ -7,7 +7,7 @@ maintaining it.
 ## Decisions (settled — do not re-litigate without new evidence)
 
 1. **Rootless secrets use runtime files, not Podman `Secret=`.**
-   The rootful `sops-distribute-secrets.service` decrypts SOPS once at boot
+   The root-owned `sops-distribute-secrets.service` decrypts SOPS once at boot
    and writes per-service files under `/run/nas-secrets/<service>/`, owned by
    the service user, mode 0400, mounted `:ro,Z` into containers (relabeling
    `/run` tmpfs files from rootless Podman is NAS-validated). Rootless Podman
@@ -26,10 +26,10 @@ maintaining it.
    CI fails on drift. The TOMLs double as the secret-routing manifest for
    the distributor.
 
-4. **Caddy will migrate rootless using the validated low-port policy.**
-   The production preflight confirmed that `_nas_caddy` can bind TCP and UDP
-   low ports with `net.ipv4.ip_unprivileged_port_start=80`. Phase two is a
-   guarded state/config/service cutover, not another feasibility decision.
+4. **Caddy uses the validated rootless low-port policy.**
+   `_nas_caddy` binds TCP and UDP low ports with
+   `net.ipv4.ip_unprivileged_port_start=80`; its persistent state is maintained
+   by a steady-state host preparation service.
 
 5. **Service UIDs are allocate-only.** Never reuse a retired UID; numeric
    file ownership (especially in ZFS snapshots) outlives the user. Scheme
@@ -54,6 +54,9 @@ maintaining it.
 - Caddy's phase-two rootless cutover was deployed and validated on the NAS.
   The final rootful container residue and shell secret-driver stack were
   retired on 2026-07-25.
+- Migration-only runtime scaffolding was replaced with steady-state Caddy,
+  Garage, and VictoriaMetrics preparation; historical details remain in the
+  migration checklists.
 - Cockpit deleted (quadlet, packages, Caddy vhost).
 
 ## Remaining work (in order)
@@ -86,7 +89,6 @@ maintaining it.
         `sudo podman rmi quay.io/cockpit/ws:latest`. The `cockpit-ws`
         passwd entry stays — it ships in Fedora CoreOS's static sysusers,
         not from this repo.
-      - Delete `test-systemd-creds.sh` (findings preserved in the plan doc).
       - De-duplicate README.md vs AGENTS.md.
       - Move `zfs-snapshot-*.sh` from `/etc/systemd/system/` to
         `/usr/local/bin/`.

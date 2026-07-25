@@ -1,5 +1,5 @@
 # ABOUTME: Declarative config for the rootless Caddy Quadlet; persistent state
-# is prepared once by prepare-caddy-rootless-state.service.
+# is verified each boot by prepare-caddy-state.service.
 
 [service]
 name = "caddy"
@@ -41,14 +41,13 @@ name = "cf-api-token"
 [assets]
 path = "/usr/share/custom-coreos/caddy"
 
+[unit]
+timeout-start-sec = 330
+
 [unit.extra]
-# The one-time host migration and the user manager intentionally have no
-# cross-manager ordering. The durable marker means the one-shot completed its
-# strict ownership and SELinux verification. These simple access checks fail
-# closed during a first-boot race, and Restart=always retries afterward.
+# The root service and user manager intentionally have no cross-manager
+# ordering. Wait for the current-boot readiness marker and independently
+# confirm both state roots remain writable.
 Service = [
-    '''ExecStartPre=/usr/bin/bash -lc 'if [[ -e /etc/containers/systemd/caddy.container ]]; then echo "Refusing to start while the retired rootful Caddy Quadlet still exists" >&2; exit 1; fi'''',
-    '''ExecStartPre=/usr/bin/test -e /var/lib/nas-migrations/caddy-rootless-ownership-v1/complete''',
-    "ExecStartPre=/usr/bin/test -w /var/lib/caddy",
-    "ExecStartPre=/usr/bin/test -w /var/lib/caddy-config",
+    '''ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do if /usr/bin/test -e /run/caddy-state/ready && /usr/bin/test -w /var/lib/caddy && /usr/bin/test -w /var/lib/caddy-config; then exit 0; fi; sleep 2; done; echo "Caddy state was not ready within 300 seconds" >&2; exit 1'''',
 ]

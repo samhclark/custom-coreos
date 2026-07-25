@@ -1,4 +1,5 @@
-# ABOUTME: Regression tests for Caddy's one-time guarded state migration.
+# ABOUTME: Regression tests for Caddy's steady-state rootless storage
+# preparation and boot-scoped readiness contract.
 
 import unittest
 from pathlib import Path
@@ -6,11 +7,10 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 SCRIPT = (
-    REPO / "overlay-root/usr/local/bin/prepare-caddy-rootless-state.sh"
+    REPO / "overlay-root/usr/local/bin/prepare-caddy-state.sh"
 ).read_text()
 SERVICE = (
-    REPO
-    / "overlay-root/etc/systemd/system/prepare-caddy-rootless-state.service"
+    REPO / "overlay-root/etc/systemd/system/prepare-caddy-state.service"
 ).read_text()
 QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51310/caddy.container"
@@ -18,88 +18,61 @@ QUADLET = (
 
 
 class CaddyStatePreparationTests(unittest.TestCase):
-    def test_archive_precedes_every_state_mutation(self):
-        migration = SCRIPT.split("ensure_caddy_stopped\n", 1)[1]
-
-        archive = migration.index("ensure_archive")
-        root_marker = migration.index('chown root:root "${STATE_PATHS[@]}"')
-        descendant_chown = migration.index(
-            '-exec chown -h "${SERVICE_UID}:${SERVICE_GID}"'
+    def test_missing_state_roots_are_created_for_service_identity(self):
+        self.assertIn('if [[ ! -e "${path}" ]]', SCRIPT)
+        self.assertIn(
+            'install -d -m 0750 -o "${SERVICE_UID}" -g "${SERVICE_GID}"',
+            SCRIPT,
         )
-        restorecon = migration.index('restorecon -F -R "${STATE_PATHS[@]}"')
+        self.assertIn('elif [[ ! -d "${path}" ]]', SCRIPT)
 
-        self.assertLess(archive, root_marker)
-        self.assertLess(archive, descendant_chown)
-        self.assertLess(archive, restorecon)
-
-    def test_archive_comparison_precedes_checksum_publication(self):
-        archive = SCRIPT.split("ensure_archive() {", 1)[1].split(
+    def test_existing_descendant_ownership_is_verified_not_rewritten(self):
+        verification = SCRIPT.split("verify_state() {", 1)[1].split(
             "\n}\n", 1
         )[0]
 
+        self.assertIn("find ", verification)
+        self.assertIn('! -uid "${SERVICE_UID}"', verification)
+        self.assertIn('! -gid "${SERVICE_GID}"', verification)
+        self.assertNotIn("chown", SCRIPT)
+
+    def test_persistent_selinux_policy_is_restored_and_verified(self):
         self.assertIn(
-            "compare_archive_to_original\n"
-            "            write_archive_checksum",
-            archive,
+            'ensure_fcontext_rule "/var/lib/caddy(/.*)?"',
+            SCRIPT,
         )
         self.assertIn(
-            "compare_archive_to_original\n"
-            "    write_archive_checksum",
-            archive,
+            'ensure_fcontext_rule "/var/lib/caddy-config(/.*)?"',
+            SCRIPT,
         )
+        self.assertIn('restorecon -F -R "${STATE_PATHS[@]}"', SCRIPT)
+        self.assertIn('! -context "${EXPECTED_LABEL}"', SCRIPT)
 
-    def test_completion_is_published_after_full_verification(self):
-        root_chown = SCRIPT.rindex(
-            'chown "${SERVICE_UID}:${SERVICE_GID}" "${STATE_PATHS[@]}"'
-        )
-        verification = SCRIPT.rindex("verify_prepared_state")
-        completion = SCRIPT.rindex(
-            'install -m 0644 -o root -g root /dev/null "${MIGRATION_COMPLETE}"'
-        )
-
-        self.assertLess(root_chown, verification)
-        self.assertLess(verification, completion)
-
-    def test_mutation_guard_checks_both_stores_and_host_ports(self):
-        guard = SCRIPT.split("ensure_caddy_stopped() {", 1)[1].split(
-            "\n}\n", 1
-        )[0]
-
-        self.assertIn("container_is_running rootful", guard)
-        self.assertIn("container_is_running rootless", guard)
-        self.assertIn("ss -H -ltn", guard)
-        self.assertIn("ss -H -lun", guard)
-        self.assertIn(":(80|443)", guard)
-
-    def test_one_shot_is_skipped_after_durable_completion(self):
+    def test_service_publishes_only_current_boot_readiness(self):
+        self.assertIn("RuntimeDirectory=caddy-state", SERVICE)
         self.assertIn(
-            "ConditionPathExists=!/var/lib/nas-migrations/"
-            "caddy-rootless-ownership-v1/complete",
+            "ExecStartPre=/usr/bin/rm -f /run/caddy-state/ready",
             SERVICE,
         )
-        self.assertIn("Restart=on-failure", SERVICE)
-        self.assertIn("TimeoutStartSec=infinity", SERVICE)
+        self.assertIn(
+            "ExecStartPost=/usr/bin/touch /run/caddy-state/ready",
+            SERVICE,
+        )
+        self.assertIn("TimeoutStartSec=300", SERVICE)
+        self.assertNotIn("nas-migrations", SERVICE)
 
-    def test_rootless_quadlet_guards_state_without_relabeling_it(self):
-        self.assertIn(
-            "ExecStartPre=/usr/bin/test -e /var/lib/nas-migrations/"
-            "caddy-rootless-ownership-v1/complete",
-            QUADLET,
-        )
-        self.assertIn(
-            "ExecStartPre=/usr/bin/test -w /var/lib/caddy\n",
-            QUADLET,
-        )
-        self.assertIn(
-            "ExecStartPre=/usr/bin/test -w /var/lib/caddy-config\n",
-            QUADLET,
-        )
-        self.assertNotIn("${path}", QUADLET)
-        self.assertNotIn("ss -H", QUADLET)
+    def test_quadlet_waits_for_readiness_and_keeps_large_state_unlabeled(self):
+        self.assertIn("/run/caddy-state/ready", QUADLET)
+        self.assertIn("/usr/bin/test -w /var/lib/caddy", QUADLET)
+        self.assertIn("/usr/bin/test -w /var/lib/caddy-config", QUADLET)
         self.assertIn("Volume=/var/lib/caddy:/data\n", QUADLET)
         self.assertIn("Volume=/var/lib/caddy-config:/config\n", QUADLET)
         self.assertNotIn("Volume=/var/lib/caddy:/data:Z", QUADLET)
         self.assertNotIn("Volume=/var/lib/caddy-config:/config:Z", QUADLET)
+        self.assertNotIn("nas-migrations", QUADLET)
+        self.assertNotIn("/etc/containers/systemd/caddy.container", QUADLET)
+
+    def test_runtime_secret_mount_is_unchanged(self):
         self.assertIn(
             "Volume=/run/nas-secrets/caddy/cf-api-token:"
             "/run/secrets/cf-api-token:ro,Z",

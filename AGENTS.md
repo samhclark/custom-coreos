@@ -47,7 +47,7 @@ These are considered active and in use on the real machine unless explicitly sta
 
 Important non-container units:
 - `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and writes per-service runtime secret files at boot
-- `prepare-caddy-rootless-state.service` - one-time archive, ownership migration, and SELinux preparation for Caddy's two persistent state trees
+- `prepare-caddy-state.service` - creates and verifies Caddy's two persistent state trees and publishes current-boot readiness
 - `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
 - `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
@@ -255,15 +255,14 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy's rootless identity, runtime secret, low-port binding, state migration, and representative routes are deployed and production-validated
-- Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets
+- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
 - In practice, placing a user Quadlet under `/usr/share/containers/systemd/users/${UID}/` caused Fedora 43 with Podman 5.8.1 to generate a system unit in `system.slice`, because that path is still underneath the rootful `/usr/share/containers/systemd/` tree. Use `/etc/containers/systemd/users/${UID}/` for rootless service users in this repo.
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
-- Rootless Podman expects subordinate ID ranges. This repo now ships explicit `_nas_garage`, `_nas_grafana`, `_nas_vmalert`, `_nas_blackbox`, `_nas_alertmanager`, and `_nas_victoriametrics` ranges in `/etc/subuid` and `/etc/subgid`
+- Rootless Podman expects subordinate ID ranges. This repo ships explicit ranges for all seven `_nas_*` service users in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - Do not use Podman `Secret=` for rootless services. Use per-service runtime files written by the root-owned SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only with `:ro,Z` (validated on the NAS 2026-07-03: rootless Podman can relabel `/run` tmpfs files to `container_file_t`; unrelabeled `var_run_t` files are blocked by SELinux).
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
@@ -271,9 +270,9 @@ Useful reference points for future rootless work:
 - Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
 - vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
 - Alertmanager's static config lives under `/usr/share/custom-coreos/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
-- VictoriaMetrics' scrape config lives under `/usr/share/custom-coreos/victoria-metrics/`; its large ZFS data path is prepared by `zfs-create-victoria-metrics-dataset.service`, not recursive generator-managed tmpfiles rules
-- Garage's config lives under `/usr/share/custom-coreos/garage/`; its two ZFS paths use a fixed recursive rollback snapshot and guarded root-last ownership migration in `zfs-create-garage-datasets.service`. Normal boots check only roots and bounded samples; create `/var/lib/nas-migrations/garage-rootless-ownership-v1/repair-required` before restarting the preparation service when an explicit full recursive ownership and SELinux repair is required.
-- Caddy's completed first-stage preflight must not declare its live state paths through the generator's `[data]` section; phase two needs a cutover-specific archive plus guarded descendant-first/root-last ownership and SELinux preparation service
+- VictoriaMetrics' scrape config lives under `/usr/share/custom-coreos/victoria-metrics/`; `zfs-create-victoria-metrics-dataset.service` creates, tunes, and verifies its large ZFS data path
+- Garage's config lives under `/usr/share/custom-coreos/garage/`; `zfs-create-garage-datasets.service` creates and tunes both ZFS datasets, checks only roots and bounded samples during normal boots, and reserves recursive work for explicit repair or an interrupted repair. To request a full ownership and SELinux repair, stop the rootless Garage service, create `/var/lib/nas-repairs/garage/repair-required`, and restart the preparation service.
+- Caddy's two small persistent state trees are created, labeled, and fully verified by `prepare-caddy-state.service`; its user Quadlet waits for that service's current-boot readiness marker
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance

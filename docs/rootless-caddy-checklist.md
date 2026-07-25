@@ -1,12 +1,16 @@
 # Rootless Caddy Rollout Checklist
 
+> Historical record: this checklist describes the completed 2026-07-25
+> rootful-to-rootless cutover. The active image now uses
+> `prepare-caddy-state.service` and has no dependency on these migration
+> markers or rollback artifacts.
+
 Use this after the NAS boots the image containing Caddy's phase-two rootless
 cutover. The expected host identity is `_nas_caddy` with UID/GID `51310`; the
 user Quadlet lives under
 `/etc/containers/systemd/users/51310/caddy.container`.
 
-Status: implemented in the repository, awaiting deployment and production
-validation on the NAS.
+Status: completed and production-validated on 2026-07-25.
 
 Deploy this release through the normal reboot-based bootc workflow. A small
 first-boot outage is expected. The state-preparation one-shot and Caddy's user

@@ -1,5 +1,8 @@
 # Rootless Alertmanager Rollout Checklist
 
+> Historical record: this checklist describes the completed
+> rootful-to-rootless deployment and its one-time cleanup checks.
+
 Use this after the NAS boots an image containing the rootless Alertmanager
 migration. The expected host identity is `_nas_alertmanager` with UID/GID
 `51240`; the user Quadlet lives under

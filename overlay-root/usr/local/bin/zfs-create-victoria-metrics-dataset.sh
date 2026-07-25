@@ -1,5 +1,6 @@
 #!/bin/bash
-# Creates ZFS datasets for VictoriaMetrics time series storage
+# ABOUTME: Creates, tunes, and verifies the ZFS dataset used by rootless
+# VictoriaMetrics.
 #
 # This script is idempotent - it only creates datasets that don't exist.
 #
@@ -41,6 +42,17 @@ sample_descendant() {
         ! -path "${DATA_PATH}/.zfs" -print -quit 2>/dev/null
 }
 
+owners_are_ready() {
+    local sample
+
+    if [[ "$(stat -c '%u:%g' "${DATA_PATH}")" != "${SERVICE_UID}:${SERVICE_GID}" ]]; then
+        return 1
+    fi
+
+    sample="$(sample_descendant)"
+    [[ -z "${sample}" || "$(stat -c '%u:%g' "${sample}")" == "${SERVICE_UID}:${SERVICE_GID}" ]]
+}
+
 labels_are_ready() {
     local sample
 
@@ -52,6 +64,47 @@ labels_are_ready() {
     [[ -z "${sample}" || "$(stat -c '%C' "${sample}")" == "${EXPECTED_LABEL}" ]]
 }
 
+rootless_podman() {
+    runuser -u "${SERVICE_USER}" -- env \
+        HOME="/var/home/${SERVICE_USER}" \
+        XDG_RUNTIME_DIR="/run/user/${SERVICE_UID}" \
+        podman "$@"
+}
+
+ensure_victoriametrics_stopped() {
+    local exists_status
+    local listeners
+    local running
+
+    if rootless_podman container exists victoria-metrics >/dev/null 2>&1; then
+        running="$(
+            rootless_podman inspect victoria-metrics --format '{{.State.Running}}'
+        )" || {
+            log "ERROR: Unable to inspect the rootless VictoriaMetrics container"
+            exit 1
+        }
+        if [[ "${running}" == "true" ]]; then
+            log "ERROR: Refusing to repair VictoriaMetrics storage while its container is running"
+            exit 1
+        fi
+    else
+        exists_status=$?
+        if [[ "${exists_status}" -ne 1 ]]; then
+            log "ERROR: Unable to query ${SERVICE_USER}'s Podman store"
+            exit 1
+        fi
+    fi
+
+    if ! listeners="$(ss -H -ltn)"; then
+        log "ERROR: Unable to inspect VictoriaMetrics host ports"
+        exit 1
+    fi
+    if awk '$4 ~ /:8428$/ { found=1 } END { exit !found }' <<< "${listeners}"; then
+        log "ERROR: Refusing to repair VictoriaMetrics storage while a process listens on port 8428"
+        exit 1
+    fi
+}
+
 restorecon_recursive() {
     local args=(-F -R)
 
@@ -61,6 +114,24 @@ restorecon_recursive() {
     fi
 
     restorecon "${args[@]}" "${DATA_PATH}"
+}
+
+verify_descendant_owners() {
+    local unexpected
+
+    if ! unexpected="$(
+        find "${DATA_PATH}" -xdev -path "${DATA_PATH}/.zfs" -prune -o \
+            -mindepth 1 \( ! -uid "${SERVICE_UID}" -o ! -gid "${SERVICE_GID}" \) \
+            -print -quit
+    )"; then
+        log "ERROR: Unable to verify ownership under ${DATA_PATH}"
+        exit 1
+    fi
+
+    if [[ -n "${unexpected}" ]]; then
+        log "ERROR: ${unexpected} does not have expected owner ${SERVICE_UID}:${SERVICE_GID}"
+        exit 1
+    fi
 }
 
 # Check if pool exists
@@ -112,42 +183,47 @@ fi
 ensure_fcontext_rule "${DATA_PATH}(/.*)?"
 restorecon -F "${DATA_PATH}"
 
-ownership_migration=0
-relabel_migration=0
+ownership_repair=0
+relabel_repair=0
 
-# Rootless container UID 0 maps to the host service UID. Change descendants
-# first, but leave the dataset root as the incomplete-migration marker until
-# both ownership and SELinux preparation have succeeded.
-if [[ "$(stat -c '%u:%g' "${DATA_PATH}")" != "${SERVICE_UID}:${SERVICE_GID}" ]]; then
-    ownership_migration=1
-    log "Migrating ${DATA_PATH} ownership to ${SERVICE_USER} (${SERVICE_UID}:${SERVICE_GID})"
-    find "${DATA_PATH}" -xdev -path "${DATA_PATH}/.zfs" -prune -o \
-        -mindepth 1 -exec chown -h "${SERVICE_UID}:${SERVICE_GID}" {} +
-fi
-
-if [[ "${ownership_migration}" -eq 1 ]] || ! labels_are_ready; then
-    log "SELinux labels incorrect in ${DATA_PATH}, relabeling..."
-
-    # If ownership was already migrated, temporarily clear the root marker so
-    # an interrupted relabel is retried as a full migration on the next run.
-    if [[ "${ownership_migration}" -eq 0 ]]; then
-        chown root:root "${DATA_PATH}"
-        relabel_migration=1
-    fi
-
-    # -F resets the full context, including stale Podman MCS categories.
-    restorecon_recursive
+if ! owners_are_ready; then
+    ownership_repair=1
 fi
 
 if ! labels_are_ready; then
-    log "ERROR: ${DATA_PATH} does not have the expected SELinux label ${EXPECTED_LABEL}"
-    exit 1
+    relabel_repair=1
 fi
 
-if [[ "${ownership_migration}" -eq 1 || "${relabel_migration}" -eq 1 ]]; then
+if [[ "${ownership_repair}" -eq 1 || "${relabel_repair}" -eq 1 ]]; then
+    ensure_victoriametrics_stopped
+
+    # Rootless container UID 0 maps to the host service UID. Leave the dataset
+    # root as the incomplete-repair marker until every requested pass succeeds.
+    chown root:root "${DATA_PATH}"
+
+    if [[ "${ownership_repair}" -eq 1 ]]; then
+        log "Repairing ${DATA_PATH} ownership for ${SERVICE_USER} (${SERVICE_UID}:${SERVICE_GID})"
+        find "${DATA_PATH}" -xdev -path "${DATA_PATH}/.zfs" -prune -o \
+            -mindepth 1 -exec chown -h "${SERVICE_UID}:${SERVICE_GID}" {} +
+        verify_descendant_owners
+    fi
+
+    log "Restoring SELinux labels in ${DATA_PATH}"
+    restorecon_recursive
+
+    if ! labels_are_ready; then
+        log "ERROR: ${DATA_PATH} does not have the expected SELinux label ${EXPECTED_LABEL}"
+        exit 1
+    fi
+
     chown "${SERVICE_UID}:${SERVICE_GID}" "${DATA_PATH}"
 fi
 chmod 0750 "${DATA_PATH}"
+
+if ! owners_are_ready; then
+    log "ERROR: ${DATA_PATH} root or bounded sample has unexpected ownership"
+    exit 1
+fi
 
 log "VictoriaMetrics ZFS datasets ready"
 zfs get recordsize,compression,atime,mountpoint "${BASE_DATASET}" "${DATA_DATASET}"

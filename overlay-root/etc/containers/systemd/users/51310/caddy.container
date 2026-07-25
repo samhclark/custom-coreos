@@ -26,12 +26,10 @@ Pull=always
 
 [Service]
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/caddy/cf-api-token
-ExecStartPre=/usr/bin/bash -lc 'if [[ -e /etc/containers/systemd/caddy.container ]]; then echo "Refusing to start while the retired rootful Caddy Quadlet still exists" >&2; exit 1; fi'
-ExecStartPre=/usr/bin/test -e /var/lib/nas-migrations/caddy-rootless-ownership-v1/complete
-ExecStartPre=/usr/bin/test -w /var/lib/caddy
-ExecStartPre=/usr/bin/test -w /var/lib/caddy-config
+ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do if /usr/bin/test -e /run/caddy-state/ready && /usr/bin/test -w /var/lib/caddy && /usr/bin/test -w /var/lib/caddy-config; then exit 0; fi; sleep 2; done; echo "Caddy state was not ready within 300 seconds" >&2; exit 1'
 Restart=always
 RestartSec=30
+TimeoutStartSec=330
 
 [Install]
 WantedBy=default.target

@@ -1,5 +1,8 @@
 # Rootless Grafana Rollout Checklist
 
+> Historical record: this checklist describes the first completed rootless
+> Quadlet conversion on the NAS.
+
 This checklist is for validating the first rootless Quadlet conversion after the
 machine boots into an image containing these changes.
 
