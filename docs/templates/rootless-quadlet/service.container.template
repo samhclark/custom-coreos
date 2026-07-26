@@ -19,8 +19,6 @@ Volume=ASSET_PATH:/etc/SERVICE_NAME:ro
 # Persistent mutable state.
 Volume=DATA_PATH:DATA_PATH
 
-Pull=newer
-
 [Service]
 Restart=always
 RestartSec=30

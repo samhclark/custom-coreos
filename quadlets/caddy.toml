@@ -13,11 +13,9 @@ subid-start = 513100000
 display-name = "Caddy"
 
 [container]
-image = "ghcr.io/samhclark/lab-caddy:2.11.3-cf-0.2.4"
+image = "ghcr.io/samhclark/lab-caddy:2.11.3-cf-0.2.4@sha256:9eb3b05df05a1a3bf1ae0afcbf51bc090c2934cfbde04faadf9361e9a9208a92"
 network = "host"
-auto-update = "registry"
 container-user = 0
-pull = "always"
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"

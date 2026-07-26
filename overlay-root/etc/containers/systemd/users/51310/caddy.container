@@ -5,9 +5,8 @@ Documentation=https://caddyserver.com/docs/
 
 [Container]
 ContainerName=caddy
-Image=ghcr.io/samhclark/lab-caddy:2.11.3-cf-0.2.4
+Image=ghcr.io/samhclark/lab-caddy:2.11.3-cf-0.2.4@sha256:9eb3b05df05a1a3bf1ae0afcbf51bc090c2934cfbde04faadf9361e9a9208a92
 Network=host
-AutoUpdate=registry
 User=0
 
 # Image-controlled configuration (read-only)
@@ -21,8 +20,6 @@ Volume=/var/lib/caddy-config:/config
 
 # Runtime secret written at boot by sops-distribute-secrets.service
 Volume=/run/nas-secrets/caddy/cf-api-token:/run/secrets/cf-api-token:ro,Z
-
-Pull=always
 
 [Service]
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/caddy/cf-api-token

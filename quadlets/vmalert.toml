@@ -13,7 +13,7 @@ subid-start = 512200000
 display-name = "vmalert"
 
 [container]
-image = "docker.io/victoriametrics/vmalert:v1.139.0"
+image = "docker.io/victoriametrics/vmalert:v1.139.0@sha256:26f877d5de545e9d7a9a80be10efcc5f3928ee36572d55281363efcc616cb3ad"
 network = "host"
 exec = "-datasource.url=http://127.0.0.1:8428 -remoteWrite.url=http://127.0.0.1:8428 -remoteRead.url=http://127.0.0.1:8428 -notifier.url=http://127.0.0.1:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=127.0.0.1:8880"
 

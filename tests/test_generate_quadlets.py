@@ -92,6 +92,8 @@ class PublishedPortTests(unittest.TestCase):
             "PublishPort=[::1]:3901:3901\n",
             unit,
         )
+        self.assertNotIn("AutoUpdate=", unit)
+        self.assertNotIn("Pull=", unit)
 
     def test_rejects_invalid_port_declarations(self):
         invalid_cases = {
@@ -186,6 +188,69 @@ image = "example.invalid/invalid:1"
                 io.StringIO()
             ):
                 GENERATOR.load_service(toml_path)
+
+
+class ImmutableImageTests(unittest.TestCase):
+    def write_service(self, directory: str, container_lines: str) -> Path:
+        toml_path = Path(directory) / "service.toml"
+        toml_path.write_text(
+            f"""
+[service]
+name = "service"
+description = "Test service"
+
+[host]
+username = "_nas_service"
+uid = 51999
+subid-start = 519990000
+display-name = "Service"
+
+[container]
+{container_lines}
+"""
+        )
+        return toml_path
+
+    def test_accepts_tag_and_sha256_digest(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            toml_path = self.write_service(
+                tmpdir,
+                'image = "example.invalid/service:1.2.3@sha256:'
+                + "a" * 64
+                + '"',
+            )
+
+            cfg = GENERATOR.load_service(toml_path)
+
+            self.assertEqual(cfg["service"]["name"], "service")
+
+    def test_rejects_tag_without_digest(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            toml_path = self.write_service(
+                tmpdir, 'image = "example.invalid/service:1.2.3"'
+            )
+
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                GENERATOR.load_service(toml_path)
+
+    def test_rejects_legacy_pull_and_auto_update_settings(self):
+        for key, value in (("pull", "always"), ("auto-update", "registry")):
+            with self.subTest(key=key), tempfile.TemporaryDirectory(
+                dir=REPO
+            ) as tmpdir:
+                toml_path = self.write_service(
+                    tmpdir,
+                    'image = "example.invalid/service:1.2.3@sha256:'
+                    + "a" * 64
+                    + f'"\n{key} = "{value}"',
+                )
+
+                with self.assertRaises(SystemExit), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    GENERATOR.load_service(toml_path)
 
 
 if __name__ == "__main__":

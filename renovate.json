@@ -1,0 +1,60 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "docker:pinDigests",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "enabledManagers": [
+    "custom.regex",
+    "github-actions"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update rootless Quadlet container images",
+      "managerFilePatterns": [
+        "/^quadlets\\/[^/]+\\.toml$/"
+      ],
+      "matchStrings": [
+        "image\\s*=\\s*\"(?<depName>[^\"@]+):(?<currentValue>[^\"@:]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the SOPS build-stage image",
+      "managerFilePatterns": [
+        "/^Containerfile$/"
+      ],
+      "matchStrings": [
+        "FROM\\s+(?<depName>ghcr\\.io/getsops/sops):(?<currentValue>[^\\s@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?\\s+[aA][sS]\\s+sops"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Remind maintainers to refresh committed Quadlet outputs",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "quadlets/*.toml"
+      ],
+      "prBodyNotes": [
+        "Run `python3 generate-quadlets.py` and commit the generated `overlay-root/` changes before merging."
+      ]
+    },
+    {
+      "description": "Keep VictoriaMetrics components on the same release",
+      "matchPackageNames": [
+        "docker.io/victoriametrics/victoria-metrics",
+        "docker.io/victoriametrics/vmalert"
+      ],
+      "groupName": "VictoriaMetrics components"
+    }
+  ]
+}

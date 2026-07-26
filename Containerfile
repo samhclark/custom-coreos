@@ -7,7 +7,7 @@ ARG ZFS_VERSION
 #  Stage 1: Pull SOPS binary
 #
 #####
-FROM ghcr.io/getsops/sops:v3.12.2 as sops
+FROM ghcr.io/getsops/sops:v3.12.2@sha256:96589a5e4c746809d50cda1d6c3f8f292818eb014a97322da03bad024ddefaba as sops
 
 
 #####

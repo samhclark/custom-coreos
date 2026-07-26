@@ -20,8 +20,6 @@ Volume=/run/nas-secrets/victoria-metrics/garage-metrics-token:/run/secrets/garag
 
 Exec=-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=127.0.0.1:8428
 
-Pull=newer
-
 [Service]
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/victoria-metrics/garage-metrics-token
 ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do if /usr/bin/test -e /run/victoria-metrics-dataset/ready && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/victoria-metrics 2>/dev/null)" == "tank/victoria-metrics/data" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/victoria-metrics 2>/dev/null)" == "51250:51250" ]] && /usr/bin/test -w /var/lib/victoria-metrics; then exit 0; fi; sleep 2; done; echo "VictoriaMetrics storage was not ready within 300 seconds" >&2; exit 1'

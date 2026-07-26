@@ -5,7 +5,7 @@ Documentation=https://prometheus.io/docs/alerting/latest/alertmanager/
 
 [Container]
 ContainerName=alertmanager
-Image=docker.io/prom/alertmanager:v0.28.1
+Image=docker.io/prom/alertmanager:v0.28.1@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
 Network=host
 User=0
 
@@ -22,8 +22,6 @@ Volume=/run/nas-secrets/alertmanager/pushover-user-key:/run/secrets/pushover-use
 Volume=/run/nas-secrets/alertmanager/pushover-api-token:/run/secrets/pushover-api-token:ro,Z
 
 Exec=--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
-
-Pull=newer
 
 [Service]
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/alertmanager/pushover-user-key

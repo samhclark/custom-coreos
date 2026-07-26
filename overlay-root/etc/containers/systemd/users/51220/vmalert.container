@@ -5,15 +5,13 @@ Documentation=https://docs.victoriametrics.com/vmalert/
 
 [Container]
 ContainerName=vmalert
-Image=docker.io/victoriametrics/vmalert:v1.139.0
+Image=docker.io/victoriametrics/vmalert:v1.139.0@sha256:26f877d5de545e9d7a9a80be10efcc5f3928ee36572d55281363efcc616cb3ad
 Network=host
 
 # Image-controlled alerting rules (read-only)
 Volume=/usr/share/custom-coreos/vmalert:/etc/vmalert:ro
 
 Exec=-datasource.url=http://127.0.0.1:8428 -remoteWrite.url=http://127.0.0.1:8428 -remoteRead.url=http://127.0.0.1:8428 -notifier.url=http://127.0.0.1:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=127.0.0.1:8880
-
-Pull=newer
 
 [Service]
 ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do /usr/bin/curl -fsS http://127.0.0.1:8428/-/healthy >/dev/null 2>&1 && exit 0; sleep 2; done; echo "VictoriaMetrics did not become ready on 127.0.0.1:8428 within 300 seconds" >&2; exit 1'

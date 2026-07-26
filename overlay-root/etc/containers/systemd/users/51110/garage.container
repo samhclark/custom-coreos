@@ -6,7 +6,6 @@ Documentation=https://garagehq.deuxfleurs.fr/
 [Container]
 ContainerName=garage
 Image=docker.io/dxflrs/garage:v2.2.0@sha256:45a61ce3f7c9c24fc23d9ed2b09b27ed560ab87b34605d175d5c588f539c24e4
-AutoUpdate=registry
 User=0
 
 Environment=GARAGE_LOG_TO_JOURNALD=1
@@ -35,8 +34,6 @@ Volume=/run/nas-secrets/garage/garage-metrics-token:/run/secrets/garage-metrics-
 PublishPort=127.0.0.1:3900:3900
 PublishPort=127.0.0.1:3902:3902
 PublishPort=127.0.0.1:3903:3903
-
-Pull=newer
 
 [Service]
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/garage/garage-rpc-secret

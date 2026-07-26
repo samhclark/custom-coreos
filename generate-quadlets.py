@@ -20,6 +20,7 @@ GENERATED_HEADER_SUFFIX = " — DO NOT EDIT"
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 USERNAME_RE = re.compile(r"^_nas_[a-z0-9]+$")
+PINNED_IMAGE_RE = re.compile(r"^[^@\s]+:[^@:\s]+@sha256:[0-9a-f]{64}$")
 
 
 def die(msg: str) -> None:
@@ -113,6 +114,18 @@ def load_service(toml_path: Path) -> dict:
     enabled = container.get("enabled", True)
     if type(enabled) is not bool:
         die(f"{toml_path.name}: [container].enabled must be a boolean")
+    image = container["image"]
+    if not isinstance(image, str) or not PINNED_IMAGE_RE.fullmatch(image):
+        die(
+            f"{toml_path.name}: [container].image must use an immutable "
+            "name:tag@sha256 digest"
+        )
+    for deprecated in ("auto-update", "pull"):
+        if deprecated in container:
+            die(
+                f"{toml_path.name}: [container].{deprecated} is incompatible "
+                "with Renovate-managed immutable images"
+            )
 
     if not NAME_RE.match(svc["name"]):
         die(f"{toml_path.name}: [service].name must match {NAME_RE.pattern}")
@@ -192,8 +205,6 @@ def container_unit(cfg: dict) -> str:
     lines.append(f"Image={container['image']}")
     if "network" in container:
         lines.append(f"Network={container['network']}")
-    if "auto-update" in container:
-        lines.append(f"AutoUpdate={container['auto-update']}")
     if "container-user" in container:
         lines.append(f"User={container['container-user']}")
 
@@ -223,7 +234,6 @@ def container_unit(cfg: dict) -> str:
     if "exec" in container:
         lines += ["", f"Exec={container['exec']}"]
 
-    lines += ["", f"Pull={container.get('pull', 'newer')}"]
     lines += extra.get("Container", [])
 
     lines += ["", "[Service]"]
