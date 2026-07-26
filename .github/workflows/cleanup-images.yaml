@@ -94,7 +94,7 @@ jobs:
           fi
 
       - name: Delete old package versions
-        uses: actions/delete-package-versions@v5
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5
         if: steps.versions.outputs.delete_versions != '' && inputs.dry_run != 'true'
         with:
           package-name: 'custom-coreos'
