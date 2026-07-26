@@ -17,6 +17,7 @@ PODMAN       ?= podman
 GH           ?= gh
 SKOPEO       ?= skopeo
 BUTANE_IMAGE ?= quay.io/coreos/butane:release
+PYTHON       ?= python3
 
 ## Colors
 COLOR_BLUE  = \033[34m
@@ -117,6 +118,12 @@ generate-ignition: ## Generate ignition.json from butane.yaml
 		--volume "$(PWD)":/pwd --workdir /pwd \
 		$(BUTANE_IMAGE) < butane.yaml > ignition.json
 	@printf "$(COLOR_GREEN)Generated ignition.json$(COLOR_RESET)\n"
+
+.PHONY: generate-quadlets
+generate-quadlets: ## Generate quadlet files using the custom generator
+	@printf "$(COLOR_BLUE)Generating quadlet files from config...$(COLOR_RESET)\n"
+	@$(PYTHON) generate-quadlets.py
+	@printf "$(COLOR_GREEN)Generated quadlet files$(COLOR_RESET)\n"
 
 ##@ GitHub Workflows
 
