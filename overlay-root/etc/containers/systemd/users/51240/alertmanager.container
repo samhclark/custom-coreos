@@ -5,7 +5,7 @@ Documentation=https://prometheus.io/docs/alerting/latest/alertmanager/
 
 [Container]
 ContainerName=alertmanager
-Image=docker.io/prom/alertmanager:v0.28.1@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+Image=docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d
 Network=host
 User=0
 
