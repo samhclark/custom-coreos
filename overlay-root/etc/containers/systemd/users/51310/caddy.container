@@ -5,7 +5,7 @@ Documentation=https://caddyserver.com/docs/
 
 [Container]
 ContainerName=caddy
-Image=ghcr.io/samhclark/lab-caddy:2.11.3-cf-0.2.4@sha256:9eb3b05df05a1a3bf1ae0afcbf51bc090c2934cfbde04faadf9361e9a9208a92
+Image=ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:82eea0fa48eef50f2a4667db7ce4b71b494f732e5636e0a4efce7649710d8251
 Network=host
 User=0
 
