@@ -14,7 +14,7 @@ subid-start = 512500000
 display-name = "VictoriaMetrics"
 
 [container]
-image = "docker.io/victoriametrics/victoria-metrics:v1.139.0@sha256:67c689e152183138ff68eb237ca53d236e92bbef314545733dcb40324829b7c4"
+image = "docker.io/victoriametrics/victoria-metrics:v1.148.0@sha256:407013e902f9a0ba1d4b2d4c077c47bbaf917c893c52ff39b19efe83a654afda"
 network = "host"
 container-user = 0
 exec = "-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=127.0.0.1:8428"
