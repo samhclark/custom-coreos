@@ -23,12 +23,12 @@ Also append a row to the session log at the bottom of this file.
 | Field | Value |
 | --- | --- |
 | Overall status | Planned; no production service uses libkrun |
-| Last completed work | 2026-07-28 repository review and feasibility research |
-| Current phase | Phase 0: NAS baseline and disposable smoke test |
-| Next concrete action | Collect the Phase 0 NAS baseline before changing the image |
+| Last completed work | 2026-07-28 Phase 0A capability check: `/dev/kvm` exists and `krun` is absent |
+| Current phase | Phase 1A: add the packaged krun runtime to the image |
+| Next concrete action | Add `crun-krun` to the `Containerfile`, build, deploy, and recheck `krun --version` |
 | Production libkrun services | None |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | Not yet started |
+| Last NAS validation | 2026-07-28: `/dev/kvm` exists; `krun` is not installed |
 
 ## Outcome
 
@@ -74,33 +74,84 @@ Primary references:
 - [Fedora `crun-krun` package](https://packages.fedoraproject.org/pkgs/crun/crun-krun/)
 - [Podman Quadlet `PodmanArgs=`](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html#podmanargs)
 
+## Single-NAS Working Style
+
+Optimize for one operator changing one nearby NAS in short evening sessions,
+not for an unattended fleet rollout.
+
+- Ask one concrete question at a time. Run the smallest command that decides
+  it, record the answer, and stop.
+- Gather evidence when a decision needs it, not because it might be useful in
+  a later phase.
+- Prefer a short copy-paste command over a checked-in diagnostic script. Add a
+  script only when the procedure is repeated, error-prone, or valuable as a
+  maintained repository tool.
+- Manual intervention and a brief planned outage are acceptable. Add
+  automation or zero-downtime preparation only when its benefit exceeds the
+  cost of doing the operation by hand once.
+- Recovery preparation should match the actual risk of the current change.
+  Do not build fleet-style guardrails around a reversible runtime experiment.
+
 ## Rules for Every Fresh Session
 
 A fresh agent should begin here, even if the requested task sounds narrow.
 
-1. Read `AGENTS.md`, this plan's Current Status, the latest session-log rows,
-   and the source TOML for the service in scope.
+1. Read `AGENTS.md`, Current Status, Single-NAS Working Style, the phase in
+   scope, the latest session-log rows, and the source TOML for the service in
+   scope. Other phases and evidence are optional until they become relevant.
 2. Run `git status --short --branch`. Preserve unrelated user changes.
-3. Confirm the deployed NAS state before assuming the previous repo step was
-   deployed. Repo state and NAS state are separate facts.
+3. Use Current Status as the handoff. Ask the operator for NAS evidence only
+   when the current decision depends on deployed state.
 4. State which single phase or service is in scope. Do not opportunistically
    convert the next service.
-5. Capture a before-state for the service's health, listeners, logs, and
-   resources.
+5. For a production-service phase, capture only the before-state needed to
+   recognize success or rollback. Collect resource measurements when choosing
+   resource limits, not automatically at the start of every session.
 6. Make source changes in `quadlets/*.toml` or the generator. Never hand-edit a
    file with a `GENERATED` header.
 7. Run the relevant local tests and build verification.
 8. Deploy with the normal bootc workflow. A manual stop/start or brief outage
    is acceptable when it makes the cutover easier to understand.
 9. Validate on the NAS using the phase checklist.
-10. Update Current Status and append a session-log row, including failures and
-    surprises. A failed experiment is useful progress when its evidence is
-    recorded.
+10. Update Current Status and append a session-log row after NAS evidence,
+    implementation changes, or a newly discovered blocker changes the handoff.
+    A repo-only reread that discovers nothing new should leave the plan clean.
 
 If a session ends before deployment, say so in Current Status. Do not leave the
 next agent to infer whether a checked-in change reached the NAS.
 
-## Common Evidence to Capture
+## NAS Operator-Execution Protocol
+
+Agents must never execute commands on the NAS, including through SSH. When NAS
+evidence or action is required, the agent prepares a reviewed copy-paste
+command and explains its expected effects. The operator runs it and returns
+the output.
+
+Follow Single-NAS Working Style: prefer the smallest command that answers the
+current question, and do not collect a general baseline. Keep state-changing
+operations separate and explain their effects, validation, and rollback before
+asking the operator to run them.
+
+Agents may inspect returned output and prepare the next command, but may not
+open or reuse an authenticated NAS session themselves. Do not substitute
+development-laptop evidence for NAS evidence.
+
+### Completed Phase 0A check
+
+```bash
+krun --version
+test -e /dev/kvm && echo "/dev/kvm exists"
+```
+
+The operator reported that `krun` is absent and `/dev/kvm` exists. Do not ask
+for a broader baseline or repeat these checks until the Phase 1A image is
+deployed.
+
+## Evidence Menu for Service Conversions
+
+This is a menu, not a preflight checklist. Select evidence that answers the
+current phase's question. By the end of a completed conversion, retain enough
+of it to prove the new runtime is in use and the service still works.
 
 Use the service account's environment when inspecting its user manager and
 Podman store:
@@ -121,7 +172,7 @@ sudo -u "${service_user}" env \
   podman inspect blackbox-exporter
 ```
 
-For every converted service, record:
+Depending on the phase, useful evidence includes:
 
 - generated `podman run` command from `systemctl --user cat`
 - `podman inspect` runtime and annotations
@@ -159,8 +210,10 @@ be boring to operate.
 
 | Phase | Scope | Production behavior changed? | Completion gate |
 | --- | --- | --- | --- |
-| 0 | NAS baseline and disposable krun smoke test | No | KVM, runtime, bind mount, and TSI TCP proven |
-| 1 | Image packages and generator schema | Packages only | Rebooted image exposes a working runtime; generated files stay stable |
+| 0A | Minimal capability check | No | Runtime presence and `/dev/kvm` existence recorded |
+| 1A | Image packages, if absent | Packages only | Rebooted image exposes a working krun runtime |
+| 0B | Disposable krun smoke test | No | KVM, runtime, bind mount, and TSI TCP proven |
+| 1B | Generator schema | No | Generated files without `[krun]` stay stable |
 | 2 | blackbox-exporter | Yes | Probe path and monitoring remain healthy |
 | 3 | vmalert | Yes | Rules evaluate and reach VictoriaMetrics/Alertmanager |
 | 4 | Alertmanager | Yes | Secrets, persistence, and real notification work |
@@ -177,37 +230,30 @@ be boring to operate.
 Answer the cheapest feasibility questions on the real NAS before committing
 the image or generator to a design.
 
-### Read-only baseline
+Phase 0 is deliberately split:
 
-Capture this output in the session notes. Do not assume the development
-workstation matches the NAS.
+- **0A** checks for the runtime and `/dev/kvm`.
+- If krun packages are absent, perform only the package portion of Phase 1
+  (**1A**), deploy it, and return here.
+- **0B** runs the disposable smoke test.
+- The generator portion of Phase 1 (**1B**) follows only after the manual
+  runtime syntax is proven.
 
-```bash
-date --iso-8601=seconds
-bootc status
-uname -a
-cat /etc/os-release
-podman version
-crun --version
-rpm -q podman crun crun-krun libkrun libkrunfw || true
-lscpu | grep -E 'Architecture|Virtualization|Model name'
-ls -lZ /dev/kvm
-sysctl net.ipv4.ip_unprivileged_port_start
-free -h
-```
+### Phase 0A: Minimal capability check
 
-Check KVM access as at least the canary user:
+Start with:
 
 ```bash
-sudo -u _nas_blackbox test -r /dev/kvm
-sudo -u _nas_blackbox test -w /dev/kvm
+krun --version
+test -e /dev/kvm && echo "/dev/kvm exists"
 ```
 
-If the krun packages are not installed yet, Phase 0 may stop after the
-baseline and resume after the package-only Phase 1 deployment. Do not install
-packages manually into the immutable host just to avoid one reboot.
+If `krun` is absent, move to the package-only Phase 1A. If `/dev/kvm` is absent,
+stop and investigate the host. User-specific access, SELinux, package details,
+and resource baselines can wait until a smoke test or service conversion
+actually requires them.
 
-### Disposable smoke test
+### Phase 0B: Disposable smoke test
 
 Use an already-trusted small image if practical. The smoke test must not use a
 production container name or production port.
@@ -223,8 +269,14 @@ Prove, in order:
 7. the process stops cleanly and leaves no disposable container behind
 
 Prefer a small manual command over adding a permanent test service at this
-stage. Record the exact command and output so later agents do not rediscover
-quoting, runtime, or network requirements.
+stage. Before running it, write down the proposed command and confirm that it
+uses a pinned or already-pulled trusted image, an explicit disposable name, an
+unused high loopback port, the `_nas_blackbox` HOME/XDG environment, resource
+annotations, and cleanup on exit. Do not invent an unpinned test dependency.
+
+The first successful session must record the exact reusable command and
+output here. Until the real NAS image inventory is available, do not freeze a
+speculative command into the plan.
 
 ### Stop conditions
 
@@ -239,7 +291,7 @@ These are platform questions. Do not compensate inside an individual service.
 
 ## Phase 1: Image and Generator Support
 
-### Image packages
+### Phase 1A: Image packages
 
 Add the Fedora-packaged krun runtime to the `Containerfile`. Prefer
 `crun-krun` and its packaged dependencies over COPRs or locally built
@@ -256,7 +308,7 @@ ldconfig -p | grep -E 'libkrun|libkrunfw'
 
 Repeat the disposable Phase 0 smoke test on the image-built installation.
 
-### Generator schema
+### Phase 1B: Generator schema
 
 After the manual syntax is proven, add first-class source configuration rather
 than making every service carry raw Quadlet strings. A reasonable shape is:
@@ -638,6 +690,9 @@ link a dedicated checklist or commit when more detail is needed.
 | Date | Phase/service | Repo change | NAS action and result | Decision / next action |
 | --- | --- | --- | --- | --- |
 | 2026-07-28 | Planning | Added phased libkrun plan | No NAS change | Start with Phase 0 baseline |
+| 2026-07-28 | Phase 0 cold handoff | Established operator-only NAS execution; reduced the initial check after review | Agent authentication reached a trusted host key but stopped at the TPM2/PKCS#11 PIN; no remote command ran | Operator checks `krun --version` and `/dev/kvm` |
+| 2026-07-28 | Phase 0A | Recorded the minimal capability result | Operator confirmed `/dev/kvm` exists and `krun` is absent | Proceed to package-only Phase 1A |
+| 2026-07-28 | Planning refinement | Added Single-NAS Working Style and made common evidence an optional menu | No NAS action | Use progressive evidence and short operator commands |
 
 ## Session Note Template
 

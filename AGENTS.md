@@ -84,6 +84,17 @@ This repository intentionally still has some manual host bootstrap:
 
 This is acceptable because the system has one real user and is published as a reference project, not as a turnkey product.
 
+## NAS Execution Boundary
+
+Agents must not SSH to or execute commands on the production NAS. When NAS
+evidence or an operational action is needed, prepare a reviewed copy-paste
+command for the operator, explain its effects, and wait for the operator to
+return the output.
+
+Prefer the smallest command that answers the current question. Keep
+state-changing commands separate and explain them before asking the operator
+to run them.
+
 ## Key Commands
 
 ### Version Discovery & Compatibility
