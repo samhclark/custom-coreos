@@ -225,6 +225,7 @@ Images include labels for future deduplication:
 - `docs/rootless-garage-preflight.md` - Historical first-stage evidence collection before Garage's rootless ownership migration
 - `docs/rootless-garage-checklist.md` - Post-boot validation and rollback steps for the Garage rootless, ZFS ownership, and runtime-secret migration
 - `docs/rootless-caddy-preflight.md` - Completed first-stage validation and phase-two handoff for Caddy's rootless identity, runtime secret, low-port policy, persistent state, and guarded cutover
+- `docs/plan-libkrun-quadlets.md` - Working phased plan and cross-session evidence log for evaluating libkrun one rootless service at a time
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 

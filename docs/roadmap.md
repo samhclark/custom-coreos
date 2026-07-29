@@ -14,12 +14,14 @@ maintaining it.
    secrets via the shell driver are a validated dead end. Full findings:
    `docs/plan-sops-and-quadlet-generator.md` Appendix D.
 
-2. **libkrun is deferred, and is a per-service dial, not an architecture.**
+2. **libkrun is a per-service dial, not an architecture.**
    Volumes cross into a libkrun microVM via virtiofs (host kernel keeps ZFS;
-   no NFS layer needed). Enabling it later is a per-unit runtime flag
+   no NFS layer needed). Enabling it is a per-unit runtime flag
    (`PodmanArgs=--runtime krun`), and bind-mounted secret files carry over
-   unchanged. Candidates later: small network-facing services. Likely never:
-   media-path services where virtiofs overhead lands on the hot path.
+   unchanged. Incremental feasibility and deployment work is now tracked in
+   `docs/plan-libkrun-quadlets.md`. Mixed crun/krun operation is an acceptable
+   final state; storage-heavy services and Caddy must earn the change through
+   NAS evidence.
 
 3. **Rootless boilerplate is generated, never hand-edited.**
    `quadlets/<service>.toml` + `generate-quadlets.py` produce everything;
