@@ -95,6 +95,11 @@ Prefer the smallest command that answers the current question. Keep
 state-changing commands separate and explain them before asking the operator
 to run them.
 
+Changes committed and pushed to `main` are picked up by the scheduled image
+build and NAS update. In a later session, assume such changes are deployed
+unless the operator or current evidence says otherwise; do not add a manual
+publish or deployment step by default.
+
 ## Key Commands
 
 ### Version Discovery & Compatibility

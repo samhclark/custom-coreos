@@ -22,10 +22,10 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phase 1A implemented locally but not deployed; no production service uses libkrun |
-| Last completed work | 2026-07-28 Phase 1A repo change: added `crun-krun`; local image build and runtime inspection passed |
-| Current phase | Phase 1A: deploy the package-only image and validate krun on the NAS |
-| Next concrete action | Publish and deploy the package-only image, reboot, and run `krun --version` |
+| Overall status | Phase 1A is committed and pushed; assume scheduled deployment; no production service uses libkrun |
+| Last completed work | 2026-07-28 Phase 1A: added `crun-krun`, passed local image validation, and pushed to `main` |
+| Current phase | Phase 1A: validate krun on the NAS |
+| Next concrete action | Operator runs `krun --version` on the NAS |
 | Production libkrun services | None |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
 | Last NAS validation | 2026-07-28: `/dev/kvm` exists; `krun` is not installed |
@@ -89,6 +89,9 @@ not for an unattended fleet rollout.
 - Manual intervention and a brief planned outage are acceptable. Add
   automation or zero-downtime preparation only when its benefit exceeds the
   cost of doing the operation by hand once.
+- A change committed and pushed to `main` is picked up by the scheduled image
+  build and NAS update. In a later session, assume it is deployed unless
+  evidence says otherwise; do not insert a manual publish or deployment step.
 - Recovery preparation should match the actual risk of the current change.
   Do not build fleet-style guardrails around a reversible runtime experiment.
 
@@ -693,7 +696,7 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-07-28 | Phase 0 cold handoff | Established operator-only NAS execution; reduced the initial check after review | Agent authentication reached a trusted host key but stopped at the TPM2/PKCS#11 PIN; no remote command ran | Operator checks `krun --version` and `/dev/kvm` |
 | 2026-07-28 | Phase 0A | Recorded the minimal capability result | Operator confirmed `/dev/kvm` exists and `krun` is absent | Proceed to package-only Phase 1A |
 | 2026-07-28 | Planning refinement | Added Single-NAS Working Style and made common evidence an optional menu | No NAS action | Use progressive evidence and short operator commands |
-| 2026-07-28 | Phase 1A | Added `crun-krun`; local image build and runtime inspection passed | Not deployed; production remains on the prior image | Publish, deploy, reboot, and run `krun --version` |
+| 2026-07-28 | Phase 1A | Added `crun-krun`; local image build and runtime inspection passed; committed and pushed to `main` | Assume the scheduled build and NAS update deploy it | Operator runs `krun --version` |
 
 ## Session Note Template
 
