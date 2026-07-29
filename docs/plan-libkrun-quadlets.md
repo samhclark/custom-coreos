@@ -22,10 +22,10 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Planned; no production service uses libkrun |
-| Last completed work | 2026-07-28 Phase 0A capability check: `/dev/kvm` exists and `krun` is absent |
-| Current phase | Phase 1A: add the packaged krun runtime to the image |
-| Next concrete action | Add `crun-krun` to the `Containerfile`, build, deploy, and recheck `krun --version` |
+| Overall status | Phase 1A implemented locally but not deployed; no production service uses libkrun |
+| Last completed work | 2026-07-28 Phase 1A repo change: added `crun-krun`; local image build and runtime inspection passed |
+| Current phase | Phase 1A: deploy the package-only image and validate krun on the NAS |
+| Next concrete action | Publish and deploy the package-only image, reboot, and run `krun --version` |
 | Production libkrun services | None |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
 | Last NAS validation | 2026-07-28: `/dev/kvm` exists; `krun` is not installed |
@@ -300,11 +300,11 @@ libraries.
 After the package-only image is deployed, verify:
 
 ```bash
-rpm -q crun-krun libkrun libkrunfw
-command -v krun
 krun --version
-ldconfig -p | grep -E 'libkrun|libkrunfw'
 ```
+
+Inspect packages or linker state only if that command fails. The local image
+build already confirmed the packaged dependency chain.
 
 Repeat the disposable Phase 0 smoke test on the image-built installation.
 
@@ -693,6 +693,7 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-07-28 | Phase 0 cold handoff | Established operator-only NAS execution; reduced the initial check after review | Agent authentication reached a trusted host key but stopped at the TPM2/PKCS#11 PIN; no remote command ran | Operator checks `krun --version` and `/dev/kvm` |
 | 2026-07-28 | Phase 0A | Recorded the minimal capability result | Operator confirmed `/dev/kvm` exists and `krun` is absent | Proceed to package-only Phase 1A |
 | 2026-07-28 | Planning refinement | Added Single-NAS Working Style and made common evidence an optional menu | No NAS action | Use progressive evidence and short operator commands |
+| 2026-07-28 | Phase 1A | Added `crun-krun`; local image build and runtime inspection passed | Not deployed; production remains on the prior image | Publish, deploy, reboot, and run `krun --version` |
 
 ## Session Note Template
 
