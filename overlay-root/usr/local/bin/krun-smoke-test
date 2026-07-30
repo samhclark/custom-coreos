@@ -1,0 +1,150 @@
+#!/usr/bin/bash
+# ABOUTME: Runs the disposable rootless libkrun feasibility test on the NAS.
+# ABOUTME: Uses _nas_blackbox's pinned image and never changes production services.
+
+set -euo pipefail
+
+readonly SERVICE_USER="_nas_blackbox"
+readonly SERVICE_HOME="/var/home/_nas_blackbox"
+readonly SERVICE_RUNTIME_DIR="/run/user/51230"
+readonly CONTAINER_NAME="krun-smoke-phase0b"
+readonly LISTEN_PORT="19115"
+readonly IMAGE="quay.io/prometheus/blackbox-exporter@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc"
+readonly CONFIG_MOUNT="/usr/share/custom-coreos/blackbox-exporter:/config:ro"
+
+if (( EUID != 0 )); then
+    exec sudo -- "$0" "$@"
+fi
+
+run_podman() {
+    runuser -u "${SERVICE_USER}" -- \
+        env \
+        HOME="${SERVICE_HOME}" \
+        XDG_RUNTIME_DIR="${SERVICE_RUNTIME_DIR}" \
+        podman "$@"
+}
+
+container_started=false
+
+cleanup() {
+    if "${container_started}"; then
+        run_podman rm --force "${CONTAINER_NAME}" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+fail() {
+    echo "FAIL: $*" >&2
+    exit 1
+}
+
+pass() {
+    echo "PASS: $*"
+}
+
+run_podman container exists "${CONTAINER_NAME}" &&
+    fail "container ${CONTAINER_NAME} already exists"
+
+run_podman image exists "${IMAGE}" ||
+    fail "pinned blackbox-exporter image is not present; refusing to pull"
+
+if ss -H -ltn "sport = :${LISTEN_PORT}" | grep -q .; then
+    fail "TCP port ${LISTEN_PORT} is already in use"
+fi
+
+[[ "$(getenforce)" == "Enforcing" ]] ||
+    fail "SELinux is not enforcing"
+pass "SELinux is enforcing"
+
+host_kernel="$(uname -r)"
+readonly host_kernel
+journal_start="$(date +%s)"
+readonly journal_start
+
+# The single-quoted program is intentionally expanded inside the guest.
+# shellcheck disable=SC2016
+run_podman run --detach --rm --pull=never \
+    --name "${CONTAINER_NAME}" \
+    --runtime=krun \
+    --annotation krun.cpus=1 \
+    --annotation krun.ram_mib=128 \
+    --network=host \
+    --volume "${CONFIG_MOUNT}" \
+    --entrypoint /bin/sh \
+    "${IMAGE}" \
+    -c '
+        set -eu
+        echo "guest-kernel=$(uname -r)"
+        test -r /config/blackbox.yml
+        echo "bind-mount=readable"
+        wget -qO /dev/null http://127.0.0.1:9115/
+        echo "host-loopback=reachable"
+        exec /bin/blackbox_exporter \
+            --config.file=/config/blackbox.yml \
+            --web.listen-address=127.0.0.1:19115
+    ' >/dev/null
+container_started=true
+
+listener_ready=false
+for _ in {1..20}; do
+    if curl --fail --silent --output /dev/null \
+        "http://127.0.0.1:${LISTEN_PORT}/"; then
+        listener_ready=true
+        break
+    fi
+    sleep 0.5
+done
+"${listener_ready}" ||
+    fail "guest TCP listener did not become reachable on port ${LISTEN_PORT}"
+pass "incoming TSI TCP is reachable"
+
+container_logs="$(run_podman logs "${CONTAINER_NAME}")"
+readonly container_logs
+guest_kernel="$(
+    sed -n 's/^guest-kernel=//p' <<<"${container_logs}" | head -n 1
+)"
+readonly guest_kernel
+[[ -n "${guest_kernel}" ]] || fail "guest kernel was not reported"
+[[ "${guest_kernel}" != "${host_kernel}" ]] ||
+    fail "guest kernel unexpectedly matches host kernel ${host_kernel}"
+pass "krun guest kernel ${guest_kernel} differs from host ${host_kernel}"
+
+grep -qx "bind-mount=readable" <<<"${container_logs}" ||
+    fail "read-only bind mount was not readable"
+pass "read-only bind mount is readable"
+
+grep -qx "host-loopback=reachable" <<<"${container_logs}" ||
+    fail "guest could not reach host-loopback blackbox-exporter"
+pass "outgoing TSI TCP reaches host loopback"
+
+inspect_json="$(run_podman inspect "${CONTAINER_NAME}")"
+readonly inspect_json
+jq -e '
+    .[0].OCIRuntime == "krun" and
+    .[0].Config.Annotations["krun.cpus"] == "1" and
+    .[0].Config.Annotations["krun.ram_mib"] == "128"
+' >/dev/null <<<"${inspect_json}" ||
+    fail "runtime or resource annotations did not match"
+pass "runtime is krun with 1 vCPU and 128 MiB RAM"
+
+run_podman stop --time 10 "${CONTAINER_NAME}" >/dev/null
+container_started=false
+
+run_podman container exists "${CONTAINER_NAME}" &&
+    fail "disposable container remains after stop"
+pass "container stopped and cleaned up"
+
+avc_output="$(
+    journalctl --since "@${journal_start}" --no-pager --output=cat |
+        grep -Ei 'avc:.*denied' || true
+)"
+readonly avc_output
+if [[ -n "${avc_output}" ]]; then
+    echo "${avc_output}" >&2
+    fail "SELinux AVC denial occurred during the smoke test"
+fi
+pass "no SELinux AVC denials appeared during the test"
+
+echo "krun smoke test passed"

@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phase 1A is committed and pushed; assume scheduled deployment; no production service uses libkrun |
-| Last completed work | 2026-07-28 Phase 1A: added `crun-krun`, passed local image validation, and pushed to `main` |
-| Current phase | Phase 1A: validate krun on the NAS |
-| Next concrete action | Operator runs `krun --version` on the NAS |
+| Overall status | Phase 0B smoke-test command is implemented and locally validated but not committed or deployed; no production service uses libkrun |
+| Last completed work | 2026-07-29 Phase 0B: added `krun-smoke-test`; Bash, ShellCheck, image inspection, and `make build` passed |
+| Current phase | Phase 0B: deploy and run the image-managed smoke test |
+| Next concrete action | Commit and push the smoke-test change; after the scheduled deployment, operator runs `krun-smoke-test` |
 | Production libkrun services | None |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-07-28: `/dev/kvm` exists; `krun` is not installed |
+| Last NAS validation | 2026-07-29: krun guest kernel `6.12.91` differs from host `7.1.3-200.fc44.x86_64` |
 
 ## Outcome
 
@@ -697,6 +697,10 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-07-28 | Phase 0A | Recorded the minimal capability result | Operator confirmed `/dev/kvm` exists and `krun` is absent | Proceed to package-only Phase 1A |
 | 2026-07-28 | Planning refinement | Added Single-NAS Working Style and made common evidence an optional menu | No NAS action | Use progressive evidence and short operator commands |
 | 2026-07-28 | Phase 1A | Added `crun-krun`; local image build and runtime inspection passed; committed and pushed to `main` | Assume the scheduled build and NAS update deploy it | Operator runs `krun --version` |
+| 2026-07-29 | Phase 1A validation | Recorded deployed runtime validation | `krun --version` reported crun 1.28 with `+LIBKRUN` | List `_nas_blackbox`'s pulled images, then construct Phase 0B smoke test |
+| 2026-07-29 | Phase 0B preparation | Selected the existing pinned blackbox-exporter image for the smoke test | `_nas_blackbox`'s store contains the production image at the expected digest | Run the reviewed disposable smoke test |
+| 2026-07-29 | Phase 0B runtime check | Recorded first disposable krun result | `_nas_blackbox` launched the pinned image with krun; guest `6.12.91` differs from host `7.1.3-200.fc44.x86_64` | Test the read-only bind mount |
+| 2026-07-29 | Phase 0B workflow refinement | Added one image-managed command; Bash, ShellCheck, image inspection, and `make build` passed | Manual multi-line commands proved awkward over SSH; no NAS change from this repo work yet | Commit and push `krun-smoke-test`; after scheduled deployment, operator runs that single command |
 
 ## Session Note Template
 
