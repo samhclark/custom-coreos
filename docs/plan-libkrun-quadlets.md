@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phase 1B is complete locally and not yet committed; no production service uses libkrun |
-| Last completed work | 2026-07-29 Phase 1B: added validated `[krun]` generator support, clean-stop rendering, and unit tests; generation and image build passed |
-| Current phase | Phase 2: blackbox-exporter canary, after the Phase 1B changes are committed and deployed |
-| Next concrete action | Review and commit the Phase 1B changes; then prepare the smallest Phase 2 before-state command in the operator-command file |
+| Overall status | Phase 2 blackbox-exporter canary is implemented and locally validated but not committed or deployed; no production service uses libkrun |
+| Last completed work | 2026-07-30: enabled krun for blackbox-exporter with 1 vCPU and 128 MiB; 32 tests, generation, diff checks, and image build passed |
+| Current phase | Phase 2: review, commit, and deploy the blackbox-exporter canary |
+| Next concrete action | Review and commit the Phase 2 changes; after the scheduled image build and NAS update, validate the deployed canary |
 | Production libkrun services | None |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-07-29: Phase 0B passed; SIGINT is required for clean stop, SELinux had no AVCs, and cleanup was complete |
+| Last NAS validation | 2026-07-30: blackbox metrics and direct Garage probe succeeded; VictoriaMetrics stored `probe_success=1` at 2026-07-30 07:54:48 CDT |
 
 ## Outcome
 
@@ -721,6 +721,9 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-07-29 | Phase 0B outgoing TCP | Prepared the final read-only SELinux and cleanup checks | Disposable guest reported `outgoing-host-loopback=reachable` against blackbox-exporter on `127.0.0.1:9115` | Confirm enforcing mode, inspect recent AVCs, and verify no disposable containers remain |
 | 2026-07-29 | Phase 0B completion | Closed the disposable smoke-test phase and cleared the operator-command handoff | SELinux reported `Enforcing`, `ausearch` reported no matches, and no `krun-smoke*` containers remained | Implement Phase 1B generator schema locally |
 | 2026-07-29 | Phase 1B generator schema | Added strict `[krun]` validation and rendering for the krun runtime, CPU/RAM annotations, and `StopSignal=SIGINT`; removed the obsolete image-managed smoke-test helper | 32 unit tests, generated-output verification, `git diff --check`, and `make build` passed; existing service output was unchanged and no production service was enabled | Review and commit these changes, then begin the blackbox-exporter canary with a small operator-command handoff |
+| 2026-07-30 | Phase 2 baseline start | Corrected the stale Phase 1B handoff and prepared the first read-only functional-baseline command | Operator confirmed the NAS runs the latest image from the latest `main` commit; baseline command not yet run | Confirm the blackbox metrics endpoint, direct Garage probe, and stored VictoriaMetrics probe result are healthy |
+| 2026-07-30 | Phase 2 functional baseline | Recorded the successful ordinary-crun functional baseline and prepared the resource/log check | Blackbox metrics were reachable, the direct Garage probe returned `1`, and VictoriaMetrics stored `probe_success=1` at 07:54:48 CDT | Capture ordinary-crun runtime identity, cgroup resource counters, and recent logs |
+| 2026-07-30 | Phase 2 implementation | Enabled krun only for blackbox-exporter with 1 vCPU, 128 MiB, and the generator-provided SIGINT stop signal; 32 tests, generation, diff checks, and `make build` passed | Ordinary-crun baseline was active/running at about 65.5 MiB current and 75.7 MiB peak; recent startup was healthy and the prior host-shutdown application stop was graceful | Review and commit; validate runtime, guest kernel, loopback listener, probes, restart, reboot, and memory after deployment |
 
 ## Session Note Template
 
