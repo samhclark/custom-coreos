@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phase 0B smoke-test command is implemented and locally validated but not committed or deployed; no production service uses libkrun |
-| Last completed work | 2026-07-29 Phase 0B: added `krun-smoke-test`; Bash, ShellCheck, image inspection, and `make build` passed |
-| Current phase | Phase 0B: deploy and run the image-managed smoke test |
-| Next concrete action | Commit and push the smoke-test change; after the scheduled deployment, operator runs `krun-smoke-test` |
+| Overall status | Phase 1B is complete locally and not yet committed; no production service uses libkrun |
+| Last completed work | 2026-07-29 Phase 1B: added validated `[krun]` generator support, clean-stop rendering, and unit tests; generation and image build passed |
+| Current phase | Phase 2: blackbox-exporter canary, after the Phase 1B changes are committed and deployed |
+| Next concrete action | Review and commit the Phase 1B changes; then prepare the smallest Phase 2 before-state command in the operator-command file |
 | Production libkrun services | None |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-07-29: krun guest kernel `6.12.91` differs from host `7.1.3-200.fc44.x86_64` |
+| Last NAS validation | 2026-07-29: Phase 0B passed; SIGINT is required for clean stop, SELinux had no AVCs, and cleanup was complete |
 
 ## Outcome
 
@@ -66,6 +66,9 @@ These are starting assumptions, not substitutes for NAS evidence.
 - Each krun service must have explicit resources. The upstream defaults are
   too broad for seven always-on services: 1024 MiB when no memory limit is
   supplied, and the process's available CPUs up to libkrun's limit.
+- krun services must initially declare `StopSignal=SIGINT`. On the NAS,
+  default SIGTERM timed out and required SIGKILL, while configured SIGINT
+  stopped the disposable blackbox-exporter guest immediately.
 
 Primary references:
 
@@ -81,6 +84,13 @@ not for an unattended fleet rollout.
 
 - Ask one concrete question at a time. Run the smallest command that decides
   it, record the answer, and stop.
+- Put operator commands that are long, multi-line, or likely to wrap in
+  `docs/libkrun-operator-command.txt`. Keep that file focused on the current
+  handoff, and have the operator copy from local `cat` output instead of from
+  chat formatting.
+- Do not package one-off diagnostic scripts into the image merely to work
+  around chat copy/paste formatting. That creates a fragile
+  commit/build/deploy/test loop for commands that can run directly on the NAS.
 - Gather evidence when a decision needs it, not because it might be useful in
   a later phase.
 - Prefer a short copy-paste command over a checked-in diagnostic script. Add a
@@ -329,6 +339,7 @@ Expected generated behavior:
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=1
 Annotation=krun.ram_mib=128
+StopSignal=SIGINT
 ```
 
 Requirements:
@@ -337,6 +348,7 @@ Requirements:
 - CPU and RAM values must be positive integers
 - reject `[krun]` fields when `enabled = false`
 - enforce at least 128 MiB because lower values are ignored upstream
+- render `StopSignal=SIGINT` whenever krun is enabled
 - do not add `krun.use_passt` to the normal service schema until a service
   actually proves it needs passt
 - services without `[krun]` must generate byte-for-byte identical output
@@ -701,6 +713,14 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-07-29 | Phase 0B preparation | Selected the existing pinned blackbox-exporter image for the smoke test | `_nas_blackbox`'s store contains the production image at the expected digest | Run the reviewed disposable smoke test |
 | 2026-07-29 | Phase 0B runtime check | Recorded first disposable krun result | `_nas_blackbox` launched the pinned image with krun; guest `6.12.91` differs from host `7.1.3-200.fc44.x86_64` | Test the read-only bind mount |
 | 2026-07-29 | Phase 0B workflow refinement | Added one image-managed command; Bash, ShellCheck, image inspection, and `make build` passed | Manual multi-line commands proved awkward over SSH; no NAS change from this repo work yet | Commit and push `krun-smoke-test`; after scheduled deployment, operator runs that single command |
+| 2026-07-29 | Phase 0B helper correction | Changed the helper to use a traversable working directory and resolve the untagged stored image ID by its pinned digest; added a plain operator-command handoff file; Bash, ShellCheck, image inspection, and `make build` passed | First deployed run inherited `/var/home/core` and could not resolve the repository-by-digest image name; no container started | Commit and redeploy, then copy the command from local `cat` output and rerun |
+| 2026-07-29 | Phase 0B workflow correction | Abandoned the image-managed diagnostic helper; replaced its handoff with the next direct operator command block | No new NAS action; the deployed helper failure demonstrated that iterating diagnostics through image deployments is too fragile | Copy commands from local `cat` output; test one question at a time without deploying diagnostics |
+| 2026-07-29 | Phase 0B bind mount | Updated the direct-command handoff for the next check | Disposable krun container reported `bind-mount=readable` for the image-controlled blackbox config | Test incoming TSI TCP on unused loopback port 19115 |
+| 2026-07-29 | Phase 0B incoming TCP | Updated the direct-command handoff to investigate shutdown behavior | Host reported `incoming-tcp=reachable`; SIGTERM timed out after 10 seconds and Podman used SIGKILL | Test `StopSignal=SIGINT`, which libkrun 1.19 forwards through the guest console |
+| 2026-07-29 | Phase 0B clean stop | Added `StopSignal=SIGINT` to the planned generator behavior and prepared the outgoing-TCP check | Disposable guest reported `listener=reachable` and `clean-stop-seconds=0` with SIGINT | Test outgoing TSI TCP to host loopback |
+| 2026-07-29 | Phase 0B outgoing TCP | Prepared the final read-only SELinux and cleanup checks | Disposable guest reported `outgoing-host-loopback=reachable` against blackbox-exporter on `127.0.0.1:9115` | Confirm enforcing mode, inspect recent AVCs, and verify no disposable containers remain |
+| 2026-07-29 | Phase 0B completion | Closed the disposable smoke-test phase and cleared the operator-command handoff | SELinux reported `Enforcing`, `ausearch` reported no matches, and no `krun-smoke*` containers remained | Implement Phase 1B generator schema locally |
+| 2026-07-29 | Phase 1B generator schema | Added strict `[krun]` validation and rendering for the krun runtime, CPU/RAM annotations, and `StopSignal=SIGINT`; removed the obsolete image-managed smoke-test helper | 32 unit tests, generated-output verification, `git diff --check`, and `make build` passed; existing service output was unchanged and no production service was enabled | Review and commit these changes, then begin the blackbox-exporter canary with a small operator-command handoff |
 
 ## Session Note Template
 
