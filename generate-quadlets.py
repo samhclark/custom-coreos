@@ -93,6 +93,40 @@ def validate_ports(toml_name: str, container: dict) -> None:
         seen.add(rendered)
 
 
+def validate_krun(toml_name: str, cfg: dict) -> None:
+    if "krun" not in cfg:
+        return
+
+    krun = cfg["krun"]
+    if not isinstance(krun, dict):
+        die(f"{toml_name}: [krun] must be a table")
+
+    unknown = sorted(set(krun) - {"enabled", "cpus", "ram-mib"})
+    if unknown:
+        die(f"{toml_name}: [krun] has unknown keys: {', '.join(unknown)}")
+
+    if "enabled" not in krun or type(krun["enabled"]) is not bool:
+        die(f"{toml_name}: [krun].enabled must be a boolean")
+
+    if not krun["enabled"]:
+        fields = sorted(set(krun) - {"enabled"})
+        if fields:
+            die(
+                f"{toml_name}: [krun] fields are not allowed when disabled: "
+                f"{', '.join(fields)}"
+            )
+        return
+
+    for key in ("cpus", "ram-mib"):
+        if key not in krun:
+            die(f"{toml_name}: missing [krun].{key}")
+        if type(krun[key]) is not int or krun[key] <= 0:
+            die(f"{toml_name}: [krun].{key} must be a positive integer")
+
+    if krun["ram-mib"] < 128:
+        die(f"{toml_name}: [krun].ram-mib must be at least 128")
+
+
 def load_service(toml_path: Path) -> dict:
     with open(toml_path, "rb") as f:
         cfg = tomllib.load(f)
@@ -132,6 +166,7 @@ def load_service(toml_path: Path) -> dict:
     if not USERNAME_RE.match(host["username"]):
         die(f"{toml_path.name}: [host].username must match {USERNAME_RE.pattern}")
     validate_ports(toml_path.name, container)
+    validate_krun(toml_path.name, cfg)
     cfg["_toml_path"] = toml_path
     cfg["_slug"] = host["username"].removeprefix("_nas_")
     return cfg
@@ -203,6 +238,12 @@ def container_unit(cfg: dict) -> str:
     lines += ["", "[Container]"]
     lines.append(f"ContainerName={svc['name']}")
     lines.append(f"Image={container['image']}")
+    krun = cfg.get("krun", {})
+    if krun.get("enabled", False):
+        lines.append("PodmanArgs=--runtime=krun")
+        lines.append(f"Annotation=krun.cpus={krun['cpus']}")
+        lines.append(f"Annotation=krun.ram_mib={krun['ram-mib']}")
+        lines.append("StopSignal=SIGINT")
     if "network" in container:
         lines.append(f"Network={container['network']}")
     if "container-user" in container:

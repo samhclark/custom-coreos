@@ -253,5 +253,103 @@ display-name = "Service"
                     GENERATOR.load_service(toml_path)
 
 
+class KrunTests(unittest.TestCase):
+    def write_service(self, directory: str, krun_lines: str | None) -> Path:
+        krun_section = ""
+        if krun_lines is not None:
+            krun_section = f"\n[krun]\n{krun_lines}\n"
+
+        toml_path = Path(directory) / "service.toml"
+        toml_path.write_text(
+            """
+[service]
+name = "service"
+description = "Test service"
+
+[host]
+username = "_nas_service"
+uid = 51999
+subid-start = 519990000
+display-name = "Service"
+
+[container]
+image = "example.invalid/service:1@sha256:"""
+            + "a" * 64
+            + '"\n'
+            + krun_section
+        )
+        return toml_path
+
+    def test_valid_krun_config_renders_runtime_resources_and_stop_signal(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            cfg = GENERATOR.load_service(
+                self.write_service(
+                    tmpdir,
+                    "enabled = true\ncpus = 2\nram-mib = 512",
+                )
+            )
+
+            unit = GENERATOR.container_unit(cfg)
+
+            self.assertIn(
+                "Image=example.invalid/service:1@sha256:"
+                + "a" * 64
+                + "\n"
+                "PodmanArgs=--runtime=krun\n"
+                "Annotation=krun.cpus=2\n"
+                "Annotation=krun.ram_mib=512\n"
+                "StopSignal=SIGINT\n",
+                unit,
+            )
+
+    def test_service_without_krun_has_no_runtime_output(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            cfg = GENERATOR.load_service(self.write_service(tmpdir, None))
+
+            unit = GENERATOR.container_unit(cfg)
+
+            self.assertNotIn("runtime=krun", unit)
+            self.assertNotIn("Annotation=krun.", unit)
+            self.assertNotIn("StopSignal=", unit)
+
+    def test_disabled_krun_accepts_no_other_fields_and_renders_nothing(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            cfg = GENERATOR.load_service(
+                self.write_service(tmpdir, "enabled = false")
+            )
+
+            unit = GENERATOR.container_unit(cfg)
+
+            self.assertNotIn("runtime=krun", unit)
+            self.assertNotIn("StopSignal=", unit)
+
+    def test_rejects_invalid_krun_config(self):
+        invalid_cases = {
+            "missing enabled": "cpus = 1\nram-mib = 128",
+            "non-boolean enabled": 'enabled = "true"\ncpus = 1\nram-mib = 128',
+            "fields while disabled": "enabled = false\ncpus = 1",
+            "missing cpus": "enabled = true\nram-mib = 128",
+            "boolean cpus": "enabled = true\ncpus = true\nram-mib = 128",
+            "zero cpus": "enabled = true\ncpus = 0\nram-mib = 128",
+            "missing RAM": "enabled = true\ncpus = 1",
+            "boolean RAM": "enabled = true\ncpus = 1\nram-mib = true",
+            "RAM below minimum": "enabled = true\ncpus = 1\nram-mib = 127",
+            "unknown key": (
+                "enabled = true\ncpus = 1\nram-mib = 128\nuse-passt = true"
+            ),
+        }
+
+        for label, krun_lines in invalid_cases.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory(
+                dir=REPO
+            ) as tmpdir:
+                with self.assertRaises(SystemExit), contextlib.redirect_stderr(
+                    io.StringIO()
+                ):
+                    GENERATOR.load_service(
+                        self.write_service(tmpdir, krun_lines)
+                    )
+
+
 if __name__ == "__main__":
     unittest.main()
