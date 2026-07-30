@@ -18,6 +18,11 @@ image = "quay.io/prometheus/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cc
 network = "host"
 exec = "--config.file=/config/blackbox.yml --web.listen-address=127.0.0.1:9115"
 
+[krun]
+enabled = true
+cpus = 1
+ram-mib = 128
+
 [[container.volumes]]
 comment = "Image-controlled local probe configuration (read-only)"
 source = "/usr/share/custom-coreos/blackbox-exporter"
