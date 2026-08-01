@@ -6,6 +6,10 @@ Documentation=https://prometheus.io/docs/alerting/latest/alertmanager/
 [Container]
 ContainerName=alertmanager
 Image=docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d
+PodmanArgs=--runtime=krun
+Annotation=krun.cpus=1
+Annotation=krun.ram_mib=256
+StopSignal=SIGINT
 Network=host
 User=0
 
@@ -21,7 +25,7 @@ Volume=/run/nas-secrets/alertmanager/pushover-user-key:/run/secrets/pushover-use
 # Runtime secret written at boot by sops-distribute-secrets.service
 Volume=/run/nas-secrets/alertmanager/pushover-api-token:/run/secrets/pushover-api-token:ro,Z
 
-Exec=--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager
+Exec=--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager --cluster.listen-address=
 
 [Service]
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/alertmanager/pushover-user-key

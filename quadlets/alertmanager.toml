@@ -16,7 +16,12 @@ display-name = "Alertmanager"
 image = "docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6708f472e56a5286b8863d080434ea065d"
 network = "host"
 container-user = 0
-exec = "--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager"
+exec = "--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager --cluster.listen-address="
+
+[krun]
+enabled = true
+cpus = 1
+ram-mib = 256
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"
