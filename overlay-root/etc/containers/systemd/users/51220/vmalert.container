@@ -6,6 +6,10 @@ Documentation=https://docs.victoriametrics.com/vmalert/
 [Container]
 ContainerName=vmalert
 Image=docker.io/victoriametrics/vmalert:v1.148.0@sha256:268ab5df69360a236e1382db0dbde44d5c32362b85501f761d61fc25c76f05ce
+PodmanArgs=--runtime=krun
+Annotation=krun.cpus=1
+Annotation=krun.ram_mib=256
+StopSignal=SIGINT
 Network=host
 
 # Image-controlled alerting rules (read-only)
