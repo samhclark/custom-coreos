@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phase 2 blackbox-exporter canary is complete; Phase 3 vmalert is implemented and locally validated but not committed or deployed |
-| Last completed work | 2026-08-01: enabled krun for vmalert with 1 vCPU and 256 MiB; generation, 32 tests, diff checks, and image build passed |
-| Current phase | Phase 3: review, commit, and deploy the vmalert conversion |
-| Next concrete action | Review and commit the Phase 3 changes; after the scheduled image build and NAS update, run the deployed check in `docs/libkrun-operator-command.txt` |
-| Production libkrun services | blackbox-exporter (validated) |
+| Overall status | Phases 2 and 3 are complete; Phase 4 Alertmanager is implemented and locally validated but not committed or deployed |
+| Last completed work | 2026-08-01: enabled krun for Alertmanager with 1 vCPU and 256 MiB and disabled unused HA clustering; generation, 32 tests, diff checks, and image build passed |
+| Current phase | Phase 4: review, commit, and deploy the Alertmanager conversion |
+| Next concrete action | Review and commit the Phase 4 changes; after scheduled deployment, run the first read-only check in `docs/libkrun-operator-command.txt` |
+| Production libkrun services | blackbox-exporter; vmalert (both validated) |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-08-01: vmalert ran healthy under ordinary crun at about 32 MiB current/41 MiB peak; all three rule groups and nine rules evaluated successfully, dependencies were healthy, and VictoriaMetrics stored `up=1` |
+| Last NAS validation | 2026-08-01: ordinary-crun Alertmanager was healthy at about 55 MiB current/56 MiB peak with no silences, intact notification/silence state files, readable 0400 runtime secrets, and graceful prior shutdowns; its default gossip startup previously failed once before retrying with `10.0.0.2:9094` |
 
 ## Outcome
 
@@ -73,6 +73,10 @@ These are starting assumptions, not substitutes for NAS evidence.
   therefore combines `podman inspect` with the Phase 0B guest-kernel result
   from the same packaged runtime stack rather than changing service startup
   commands solely to rerun `uname`.
+- This NAS runs one Alertmanager, so its default HA gossip listener is disabled
+  with `--cluster.listen-address=`. Alertmanager clustering requires both TCP
+  and UDP, while default TSI cannot host the UDP listener; the unused listener
+  had also caused a failed first startup when no advertise address was found.
 
 Primary references:
 
@@ -739,6 +743,9 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-01 | Phase 2 observation | Recorded stable runtime/resource use and prepared a focused failure-attribution check | krun was active/running at about 163 MiB current/164 MiB peak; current metrics, direct Garage probe, and a fresh stored probe passed. Blackbox logged repeated five-second Garage health timeouts from 00:57-03:09 UTC and one canceled probe at 18:53 UTC. | Compare historical failures across the krun cutover and inspect Garage's own journal during the main failure window before closing Phase 2 |
 | 2026-08-01 | Phase 2 completion | Closed the blackbox canary and prepared the vmalert ordinary-crun baseline | VictoriaMetrics recorded 2 failed Garage probes on July 30 and 70 on August 1; Garage's own unit emitted many broken-pipe and disconnected-flow messages while an overnight laptop backup generated unusually heavy traffic. Blackbox itself remained healthy and correctly exposed the target failures. | Capture vmalert rule state, evaluation progress, connectivity, resources, and warnings before enabling krun |
 | 2026-08-01 | Phase 3 implementation | Enabled krun for vmalert with 1 vCPU, 256 MiB, and the generator-provided SIGINT stop signal; generation, 32 tests, generated-output verification, diff checks, and `make build` passed | Ordinary-crun vmalert was active/running at about 32 MiB current/41 MiB peak; VictoriaMetrics and Alertmanager were healthy, all three groups and nine rules evaluated with healthy state and no errors, and VictoriaMetrics stored `up=1`. The journal showed a graceful host-shutdown stop and normal restart. | Review and commit; after scheduled deployment, prove krun runtime, rule evaluation, dependency communication, scrape health, and resources |
+| 2026-08-01 | Phase 3 deployment | Recorded successful deployed runtime and functional checks; prepared a focused notifier proof | vmalert reported `runtime=krun`, active/running at about 90 MiB current/91 MiB peak. All three groups and nine rules resumed healthy evaluation, both dependencies answered, VictoriaMetrics stored `up=1`, and the cutover stopped ordinary crun gracefully. The guest omitted optional PSI metrics because its cgroup view lacks `cpu.pressure`; this does not affect rule evaluation. | Confirm evaluation timestamps advance and vmalert's own counters show notifier traffic without send errors, then close Phase 3 |
+| 2026-08-01 | Phase 3 completion | Closed the vmalert conversion and prepared the Alertmanager baseline | Deployed krun vmalert was healthy: post-start evaluations advanced for all groups with no rule or connection errors, VictoriaMetrics and Alertmanager answered on host loopback, and VictoriaMetrics stored `up=1`. TSI outbound loopback was already proven by Phase 2; no synthetic alert was added solely to exercise an inactive notifier. | Capture Alertmanager silences, persistent data, runtime-secret presence, resources, and health under ordinary crun |
+| 2026-08-01 | Phase 4 implementation | Enabled krun for Alertmanager with 1 vCPU and 256 MiB and disabled its unused single-node HA listener; generation, 32 tests, generated-output verification, diff checks, and `make build` passed | Ordinary-crun Alertmanager was active/running at about 55 MiB current/56 MiB peak; health and metrics passed, no silences were listed, `nflog` and `silences` persisted with UID/GID 51240, both 0400 runtime secrets were readable, and prior stops were graceful. Its default gossip startup had failed once before retrying on `10.0.0.2:9094`; HA requires UDP that TSI cannot host. | Review and commit; after scheduled deployment, prove krun runtime, absent gossip listener, health, preserved state, and clean logs before sending the synthetic alert |
 
 ## Session Note Template
 
