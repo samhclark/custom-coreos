@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phase 2 blackbox-exporter canary is implemented and locally validated but not committed or deployed; no production service uses libkrun |
-| Last completed work | 2026-07-30: enabled krun for blackbox-exporter with 1 vCPU and 128 MiB; 32 tests, generation, diff checks, and image build passed |
-| Current phase | Phase 2: review, commit, and deploy the blackbox-exporter canary |
-| Next concrete action | Review and commit the Phase 2 changes; after the scheduled image build and NAS update, validate the deployed canary |
-| Production libkrun services | None |
+| Overall status | Phase 2 blackbox-exporter canary is complete; Phase 3 vmalert is implemented and locally validated but not committed or deployed |
+| Last completed work | 2026-08-01: enabled krun for vmalert with 1 vCPU and 256 MiB; generation, 32 tests, diff checks, and image build passed |
+| Current phase | Phase 3: review, commit, and deploy the vmalert conversion |
+| Next concrete action | Review and commit the Phase 3 changes; after the scheduled image build and NAS update, run the deployed check in `docs/libkrun-operator-command.txt` |
+| Production libkrun services | blackbox-exporter (validated) |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-07-30: blackbox metrics and direct Garage probe succeeded; VictoriaMetrics stored `probe_success=1` at 2026-07-30 07:54:48 CDT |
+| Last NAS validation | 2026-08-01: vmalert ran healthy under ordinary crun at about 32 MiB current/41 MiB peak; all three rule groups and nine rules evaluated successfully, dependencies were healthy, and VictoriaMetrics stored `up=1` |
 
 ## Outcome
 
@@ -69,6 +69,10 @@ These are starting assumptions, not substitutes for NAS evidence.
 - krun services must initially declare `StopSignal=SIGINT`. On the NAS,
   default SIGTERM timed out and required SIGKILL, while configured SIGINT
   stopped the disposable blackbox-exporter guest immediately.
+- The krun handler does not support `podman exec`. Production runtime proof
+  therefore combines `podman inspect` with the Phase 0B guest-kernel result
+  from the same packaged runtime stack rather than changing service startup
+  commands solely to rerun `uname`.
 
 Primary references:
 
@@ -88,6 +92,9 @@ not for an unattended fleet rollout.
   `docs/libkrun-operator-command.txt`. Keep that file focused on the current
   handoff, and have the operator copy from local `cat` output instead of from
   chat formatting.
+- When journal timestamps and metadata do not answer the current question, use
+  `journalctl --output=cat` to avoid clutter. Keep the default or an explicit
+  timestamped output mode when event timing matters, such as stop/start tests.
 - Do not package one-off diagnostic scripts into the image merely to work
   around chat copy/paste formatting. That creates a fragile
   commit/build/deploy/test loop for commands that can run directly on the NAS.
@@ -396,7 +403,8 @@ vCPU and 128 MiB. Regenerate and deploy normally.
 ### Validate
 
 - the user service and container are active
-- the runtime and guest kernel prove krun is in use
+- inspection reports the krun runtime; Phase 0B's guest-kernel proof remains
+  applicable because the handler does not support live `podman exec`
 - port 9115 remains loopback-only
 - direct probing of Garage succeeds
 - VictoriaMetrics continues receiving `probe_success`
@@ -724,6 +732,13 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-07-30 | Phase 2 baseline start | Corrected the stale Phase 1B handoff and prepared the first read-only functional-baseline command | Operator confirmed the NAS runs the latest image from the latest `main` commit; baseline command not yet run | Confirm the blackbox metrics endpoint, direct Garage probe, and stored VictoriaMetrics probe result are healthy |
 | 2026-07-30 | Phase 2 functional baseline | Recorded the successful ordinary-crun functional baseline and prepared the resource/log check | Blackbox metrics were reachable, the direct Garage probe returned `1`, and VictoriaMetrics stored `probe_success=1` at 07:54:48 CDT | Capture ordinary-crun runtime identity, cgroup resource counters, and recent logs |
 | 2026-07-30 | Phase 2 implementation | Enabled krun only for blackbox-exporter with 1 vCPU, 128 MiB, and the generator-provided SIGINT stop signal; 32 tests, generation, diff checks, and `make build` passed | Ordinary-crun baseline was active/running at about 65.5 MiB current and 75.7 MiB peak; recent startup was healthy and the prior host-shutdown application stop was graceful | Review and commit; validate runtime, guest kernel, loopback listener, probes, restart, reboot, and memory after deployment |
+| 2026-07-30 | Phase 2 deployment | No new implementation; prepared the first deployed-runtime proof | Operator pushed the two Phase 2 commits and confirmed the resulting image is deployed | Prove the container is running under krun and its guest kernel differs from the host |
+| 2026-07-30 | Phase 2 runtime proof | Recorded live `podman exec` as unsupported and retained Phase 0B's guest-kernel result as the kernel proof for this packaged stack | Host kernel was `7.1.3-200.fc44.x86_64`; production inspection reported `runtime=krun`, `status=running`; the handler rejected `exec` | Validate the loopback listener, direct Garage probe, and VictoriaMetrics probe result |
+| 2026-07-30 | Phase 2 networking validation | Recorded successful production listener and monitoring evidence; prepared the manual-restart gate | The krun VMM owned only `127.0.0.1:9115`; metrics and direct Garage probe succeeded; VictoriaMetrics stored `probe_success=1` at 08:31:38 CDT | Restart once; confirm clean SIGINT shutdown, krun recovery, health, and current memory |
+| 2026-07-30 | Phase 2 manual restart | Added concise-journal guidance and moved the canary into observation | Restart completed in about 0.36 seconds; krun returned active/running, metrics and Garage probe passed, and no timeout or SIGKILL occurred. The workload logged SIGTERM despite the host-side SIGINT stop configuration. Immediate memory was about 83 MiB current and 84 MiB peak; the prior krun invocation reported a 178.5 MiB peak. | Let it run for one normal evening or day, then check health, stored probe freshness, memory, and warning logs |
+| 2026-08-01 | Phase 2 observation | Recorded stable runtime/resource use and prepared a focused failure-attribution check | krun was active/running at about 163 MiB current/164 MiB peak; current metrics, direct Garage probe, and a fresh stored probe passed. Blackbox logged repeated five-second Garage health timeouts from 00:57-03:09 UTC and one canceled probe at 18:53 UTC. | Compare historical failures across the krun cutover and inspect Garage's own journal during the main failure window before closing Phase 2 |
+| 2026-08-01 | Phase 2 completion | Closed the blackbox canary and prepared the vmalert ordinary-crun baseline | VictoriaMetrics recorded 2 failed Garage probes on July 30 and 70 on August 1; Garage's own unit emitted many broken-pipe and disconnected-flow messages while an overnight laptop backup generated unusually heavy traffic. Blackbox itself remained healthy and correctly exposed the target failures. | Capture vmalert rule state, evaluation progress, connectivity, resources, and warnings before enabling krun |
+| 2026-08-01 | Phase 3 implementation | Enabled krun for vmalert with 1 vCPU, 256 MiB, and the generator-provided SIGINT stop signal; generation, 32 tests, generated-output verification, diff checks, and `make build` passed | Ordinary-crun vmalert was active/running at about 32 MiB current/41 MiB peak; VictoriaMetrics and Alertmanager were healthy, all three groups and nine rules evaluated with healthy state and no errors, and VictoriaMetrics stored `up=1`. The journal showed a graceful host-shutdown stop and normal restart. | Review and commit; after scheduled deployment, prove krun runtime, rule evaluation, dependency communication, scrape health, and resources |
 
 ## Session Note Template
 
