@@ -22,10 +22,10 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 and 3 are complete; deployed Phase 4 Alertmanager has passed runtime, health, readiness, state, listener, and SELinux gates |
-| Last completed work | 2026-08-01: validated deployed Alertmanager under krun with preserved state and no HA listener or relevant AVCs |
-| Current phase | Phase 4: real Alertmanager notification test |
-| Next concrete action | Operator runs the state-changing synthetic-alert handoff in `docs/libkrun-operator-command.txt` and confirms Pushover delivery |
+| Overall status | Phases 2 and 3 are complete; deployed Phase 4 Alertmanager passed read-only gates, and its krun-compatible synthetic-alert helper is locally validated but not deployed |
+| Last completed work | 2026-08-01: replaced unsupported `podman exec` with a host-side Alertmanager API POST; ShellCheck, Bash parsing, 32 tests, diff checks, and image build passed |
+| Current phase | Phase 4: deploy corrected synthetic-alert helper |
+| Next concrete action | Commit and deploy the helper fix; then rerun `docs/libkrun-operator-command.txt` and confirm Pushover delivery |
 | Production libkrun services | blackbox-exporter; vmalert (validated); Alertmanager (final validation in progress) |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
 | Last NAS validation | 2026-08-01: deployed Alertmanager reported `runtime=krun`, health and readiness passed, `nflog` and `silences` remained intact, port 9094 was absent, no relevant AVCs appeared, and host cgroup use was about 131 MiB current/132 MiB peak |
@@ -747,6 +747,7 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-01 | Phase 3 completion | Closed the vmalert conversion and prepared the Alertmanager baseline | Deployed krun vmalert was healthy: post-start evaluations advanced for all groups with no rule or connection errors, VictoriaMetrics and Alertmanager answered on host loopback, and VictoriaMetrics stored `up=1`. TSI outbound loopback was already proven by Phase 2; no synthetic alert was added solely to exercise an inactive notifier. | Capture Alertmanager silences, persistent data, runtime-secret presence, resources, and health under ordinary crun |
 | 2026-08-01 | Phase 4 implementation | Enabled krun for Alertmanager with 1 vCPU and 256 MiB and disabled its unused single-node HA listener; generation, 32 tests, generated-output verification, diff checks, and `make build` passed | Ordinary-crun Alertmanager was active/running at about 55 MiB current/56 MiB peak; health and metrics passed, no silences were listed, `nflog` and `silences` persisted with UID/GID 51240, both 0400 runtime secrets were readable, and prior stops were graceful. Its default gossip startup had failed once before retrying on `10.0.0.2:9094`; HA requires UDP that TSI cannot host. | Review and commit; after scheduled deployment, prove krun runtime, absent gossip listener, health, preserved state, and clean logs before sending the synthetic alert |
 | 2026-08-01 | Phase 4 deployed read-only validation | Recorded successful krun runtime, health, state, and listener checks; prepared the separate real-notification action | Alertmanager reported `runtime=krun`, active/running at about 131 MiB current/132 MiB peak; health, readiness, and metrics passed; `nflog` and `silences` remained intact; port 9094 was absent; the new startup had no gossip messages; and no relevant AVCs were returned. | Start the existing five-minute synthetic alert and confirm its real Pushover notification |
+| 2026-08-01 | Phase 4 synthetic-alert helper fix | Replaced the obsolete in-container `amtool` invocation with a host-side POST to Alertmanager's loopback API; ShellCheck, Bash parsing, 32 tests, generated-output verification, diff checks, and `make build` passed | The prior test exited before submission because the krun handler rejects `podman exec`; no alert was submitted and no notification was expected | Commit and deploy, then rerun the same five-minute synthetic alert |
 
 ## Session Note Template
 
