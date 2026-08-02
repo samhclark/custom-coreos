@@ -11,6 +11,9 @@ Annotation=krun.cpus=1
 Annotation=krun.ram_mib=256
 StopSignal=SIGINT
 Network=host
+DNS=100.100.100.100
+DNS=75.75.75.75
+DNS=75.75.76.76
 User=0
 
 # Image-controlled configuration (read-only)

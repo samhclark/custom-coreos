@@ -140,6 +140,51 @@ class PublishedPortTests(unittest.TestCase):
                     GENERATOR.validate_ports("service.toml", container)
 
 
+class DnsTests(unittest.TestCase):
+    def test_validates_and_renders_dns_servers_in_source_order(self):
+        container = {
+            "image": "example.invalid/service:1",
+            "network": "host",
+            "dns": ["100.100.100.100", "75.75.75.75", "2001:db8::53"],
+        }
+        GENERATOR.validate_dns("service.toml", container)
+
+        cfg = {
+            "_toml_path": Path("service.toml"),
+            "service": {"name": "service", "description": "Test service"},
+            "host": {"username": "_nas_service"},
+            "container": container,
+        }
+        unit = GENERATOR.container_unit(cfg)
+
+        self.assertIn(
+            "Network=host\n"
+            "DNS=100.100.100.100\n"
+            "DNS=75.75.75.75\n"
+            "DNS=2001:db8::53\n",
+            unit,
+        )
+
+    def test_rejects_invalid_dns_declarations(self):
+        invalid_cases = {
+            "not an array": {"dns": "100.100.100.100"},
+            "non-string": {"dns": [100]},
+            "hostname": {"dns": ["resolver.example.com"]},
+            "duplicate": {"dns": ["75.75.75.75", "75.75.75.75"]},
+        }
+
+        for label, container in invalid_cases.items():
+            with self.subTest(label=label), self.assertRaises(SystemExit):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    GENERATOR.validate_dns("service.toml", container)
+
+    def test_accepts_loopback_dns_for_ordinary_host_networking(self):
+        GENERATOR.validate_dns(
+            "service.toml",
+            {"network": "host", "dns": ["127.0.0.53"]},
+        )
+
+
 class StagedServiceTests(unittest.TestCase):
     def test_disabled_container_keeps_identity_outputs_but_omits_quadlet(self):
         cfg = {
@@ -349,6 +394,15 @@ image = "example.invalid/service:1@sha256:"""
                     GENERATOR.load_service(
                         self.write_service(tmpdir, krun_lines)
                     )
+
+    def test_rejects_loopback_dns_with_krun_host_networking(self):
+        cfg = {
+            "container": {"network": "host", "dns": ["127.0.0.53"]},
+            "krun": {"enabled": True, "cpus": 1, "ram-mib": 128},
+        }
+
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            GENERATOR.validate_krun("service.toml", cfg)
 
 
 if __name__ == "__main__":

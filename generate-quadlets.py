@@ -93,6 +93,25 @@ def validate_ports(toml_name: str, container: dict) -> None:
         seen.add(rendered)
 
 
+def validate_dns(toml_name: str, container: dict) -> None:
+    servers = container.get("dns", [])
+    if not isinstance(servers, list):
+        die(f"{toml_name}: [container].dns must be an array of IP addresses")
+
+    seen = set()
+    for index, server in enumerate(servers, start=1):
+        field = f"[container].dns[{index}]"
+        if not isinstance(server, str):
+            die(f"{toml_name}: {field} must be an IP address string")
+        try:
+            address = ipaddress.ip_address(server)
+        except ValueError:
+            die(f"{toml_name}: {field} must be a valid IP address")
+        if server in seen:
+            die(f"{toml_name}: duplicate DNS server {server!r}")
+        seen.add(server)
+
+
 def validate_krun(toml_name: str, cfg: dict) -> None:
     if "krun" not in cfg:
         return
@@ -125,6 +144,15 @@ def validate_krun(toml_name: str, cfg: dict) -> None:
 
     if krun["ram-mib"] < 128:
         die(f"{toml_name}: [krun].ram-mib must be at least 128")
+
+    container = cfg.get("container", {})
+    if container.get("network") == "host":
+        for server in container.get("dns", []):
+            if ipaddress.ip_address(server).is_loopback:
+                die(
+                    f"{toml_name}: krun with network = \"host\" cannot use "
+                    f"loopback DNS server {server!r}"
+                )
 
 
 def load_service(toml_path: Path) -> dict:
@@ -166,6 +194,7 @@ def load_service(toml_path: Path) -> dict:
     if not USERNAME_RE.match(host["username"]):
         die(f"{toml_path.name}: [host].username must match {USERNAME_RE.pattern}")
     validate_ports(toml_path.name, container)
+    validate_dns(toml_path.name, container)
     validate_krun(toml_path.name, cfg)
     cfg["_toml_path"] = toml_path
     cfg["_slug"] = host["username"].removeprefix("_nas_")
@@ -246,6 +275,8 @@ def container_unit(cfg: dict) -> str:
         lines.append("StopSignal=SIGINT")
     if "network" in container:
         lines.append(f"Network={container['network']}")
+    for server in container.get("dns", []):
+        lines.append(f"DNS={server}")
     if "container-user" in container:
         lines.append(f"User={container['container-user']}")
 
