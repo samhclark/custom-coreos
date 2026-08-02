@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 and 3 are complete; deployed Phase 4 Alertmanager passed read-only gates, and its krun-compatible synthetic-alert helper is locally validated but not deployed |
-| Last completed work | 2026-08-01: replaced unsupported `podman exec` with a host-side Alertmanager API POST; ShellCheck, Bash parsing, 32 tests, diff checks, and image build passed |
-| Current phase | Phase 4: deploy corrected synthetic-alert helper |
-| Next concrete action | Commit and deploy the helper fix; then rerun `docs/libkrun-operator-command.txt` and confirm Pushover delivery |
+| Overall status | Phases 2 and 3 are complete; the Phase 4 Alertmanager DNS fix is locally validated but not deployed |
+| Last completed work | 2026-08-02: added generated Quadlet DNS support and configured Alertmanager with MagicDNS plus two IPv4 fallbacks; 36 tests, regeneration, diff checks, and the image build passed |
+| Current phase | Phase 4: deploy the explicit DNS configuration and revalidate Pushover delivery |
+| Next concrete action | Review and commit the DNS fix; after scheduled deployment, rerun `docs/libkrun-operator-command.txt` and confirm the real Pushover notification |
 | Production libkrun services | blackbox-exporter; vmalert (validated); Alertmanager (final validation in progress) |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-08-01: deployed Alertmanager reported `runtime=krun`, health and readiness passed, `nflog` and `silences` remained intact, port 9094 was absent, no relevant AVCs appeared, and host cgroup use was about 131 MiB current/132 MiB peak |
+| Last NAS validation | 2026-08-02: a disposable krun guest using `100.100.100.100` resolved `api.pushover.net` to its current IPv4 and IPv6 addresses; the container removed itself on exit and production Alertmanager was unchanged |
 
 ## Outcome
 
@@ -56,8 +56,10 @@ These are starting assumptions, not substitutes for NAS evidence.
 - The intended first networking mode is libkrun's default Transparent Socket
   Impersonation (TSI), not passt. TSI best matches the current design in which
   services communicate through host `127.0.0.1`.
-- TSI supports incoming and outgoing TCP stream sockets. It does not support
-  a guest listening on a UDP socket. This matters for Caddy's HTTP/3 listener.
+- TSI supports outgoing TCP and UDP sockets and incoming TCP streams. It does
+  not support a guest listening on a UDP socket. This matters for Caddy's
+  HTTP/3 listener. A host-loopback DNS stub such as `127.0.0.53` is still not
+  reachable as host loopback from inside the guest; use a non-loopback resolver.
 - Bind mounts are presented through virtiofs. The host still owns ZFS; the
   guest does not need ZFS kernel support.
 - The VMM runs in the rootless service's host security context. libkrun adds a
@@ -748,6 +750,10 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-01 | Phase 4 implementation | Enabled krun for Alertmanager with 1 vCPU and 256 MiB and disabled its unused single-node HA listener; generation, 32 tests, generated-output verification, diff checks, and `make build` passed | Ordinary-crun Alertmanager was active/running at about 55 MiB current/56 MiB peak; health and metrics passed, no silences were listed, `nflog` and `silences` persisted with UID/GID 51240, both 0400 runtime secrets were readable, and prior stops were graceful. Its default gossip startup had failed once before retrying on `10.0.0.2:9094`; HA requires UDP that TSI cannot host. | Review and commit; after scheduled deployment, prove krun runtime, absent gossip listener, health, preserved state, and clean logs before sending the synthetic alert |
 | 2026-08-01 | Phase 4 deployed read-only validation | Recorded successful krun runtime, health, state, and listener checks; prepared the separate real-notification action | Alertmanager reported `runtime=krun`, active/running at about 131 MiB current/132 MiB peak; health, readiness, and metrics passed; `nflog` and `silences` remained intact; port 9094 was absent; the new startup had no gossip messages; and no relevant AVCs were returned. | Start the existing five-minute synthetic alert and confirm its real Pushover notification |
 | 2026-08-01 | Phase 4 synthetic-alert helper fix | Replaced the obsolete in-container `amtool` invocation with a host-side POST to Alertmanager's loopback API; ShellCheck, Bash parsing, 32 tests, generated-output verification, diff checks, and `make build` passed | The prior test exited before submission because the krun handler rejects `podman exec`; no alert was submitted and no notification was expected | Commit and deploy, then rerun the same five-minute synthetic alert |
+| 2026-08-02 | Phase 4 notification failure | Recorded that the corrected helper is deployed and prepared a focused Alertmanager log check | Alertmanager accepted four submissions of the same `ManualNotificationTest` alert, but no Pushover notification arrived after the first alert expired; repeated identical labels refreshed one alert rather than creating independent notifications | Inspect Alertmanager's own logs around 17:08-17:19 UTC for scheduling or Pushover delivery errors |
+| 2026-08-02 | Phase 4 DNS diagnosis | Recorded the notification failure's root cause and prepared a non-stub resolver check | Alertmanager attempted notification delivery at least 13 times, but every attempt failed before contacting Pushover because guest DNS pointed to the host's loopback-only `127.0.0.53` systemd-resolved stub | Identify the host's real upstream resolver, then test it from a disposable TSI guest before changing the production Quadlet |
+| 2026-08-02 | Phase 4 resolver selection | Recorded the NAS's non-stub resolver set and prepared a disposable TSI DNS test using Alertmanager's existing image | The host uses Tailscale MagicDNS (`100.100.100.100` and its IPv6 address), followed by Comcast IPv4/IPv6 resolvers, with the tailnet search domain | Test `100.100.100.100` from a disposable krun guest without pulling an image or changing Alertmanager |
+| 2026-08-02 | Phase 4 DNS implementation | Added validated `[container].dns` generation, rejected loopback resolvers specifically for host-network krun guests, and configured Alertmanager with MagicDNS plus two IPv4 fallbacks | The disposable guest resolved `api.pushover.net` through MagicDNS; 36 tests, regeneration, diff checks, and `make build` passed locally; production is unchanged | Review and commit; after scheduled deployment, submit one synthetic alert and confirm Pushover delivery |
 
 ## Session Note Template
 
