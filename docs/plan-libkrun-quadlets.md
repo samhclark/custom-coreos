@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 and 3 are complete; the Phase 4 Alertmanager DNS fix is locally validated but not deployed |
-| Last completed work | 2026-08-02: added generated Quadlet DNS support and configured Alertmanager with MagicDNS plus two IPv4 fallbacks; 36 tests, regeneration, diff checks, and the image build passed |
-| Current phase | Phase 4: deploy the explicit DNS configuration and revalidate Pushover delivery |
-| Next concrete action | Review and commit the DNS fix; after scheduled deployment, rerun `docs/libkrun-operator-command.txt` and confirm the real Pushover notification |
-| Production libkrun services | blackbox-exporter; vmalert (validated); Alertmanager (final validation in progress) |
+| Overall status | Phases 2 through 4 are complete; the Phase 5 Grafana krun change is locally validated but not deployed |
+| Last completed work | 2026-08-02: enabled Grafana krun with 2 vCPUs, 2 GiB RAM, and explicit DNS; 36 tests, regeneration, diff checks, and the image build passed |
+| Current phase | Phase 5: finish the visual baseline, then deploy Grafana under krun |
+| Next concrete action | Confirm the provisioned dashboards load over a Last 24 hours range; then review and commit the Grafana change for scheduled deployment |
+| Production libkrun services | blackbox-exporter; vmalert; Alertmanager (all validated) |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-08-02: a disposable krun guest using `100.100.100.100` resolved `api.pushover.net` to its current IPv4 and IPv6 addresses; the container removed itself on exit and production Alertmanager was unchanged |
+| Last NAS validation | 2026-08-02: Grafana's cgroup reported 720,125,952 bytes anonymous memory plus a large reclaimable file cache, while Podman reported 506.7 MB container use; 2 GiB was selected for comfortable guest headroom |
 
 ## Outcome
 
@@ -754,6 +754,11 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-02 | Phase 4 DNS diagnosis | Recorded the notification failure's root cause and prepared a non-stub resolver check | Alertmanager attempted notification delivery at least 13 times, but every attempt failed before contacting Pushover because guest DNS pointed to the host's loopback-only `127.0.0.53` systemd-resolved stub | Identify the host's real upstream resolver, then test it from a disposable TSI guest before changing the production Quadlet |
 | 2026-08-02 | Phase 4 resolver selection | Recorded the NAS's non-stub resolver set and prepared a disposable TSI DNS test using Alertmanager's existing image | The host uses Tailscale MagicDNS (`100.100.100.100` and its IPv6 address), followed by Comcast IPv4/IPv6 resolvers, with the tailnet search domain | Test `100.100.100.100` from a disposable krun guest without pulling an image or changing Alertmanager |
 | 2026-08-02 | Phase 4 DNS implementation | Added validated `[container].dns` generation, rejected loopback resolvers specifically for host-network krun guests, and configured Alertmanager with MagicDNS plus two IPv4 fallbacks | The disposable guest resolved `api.pushover.net` through MagicDNS; 36 tests, regeneration, diff checks, and `make build` passed locally; production is unchanged | Review and commit; after scheduled deployment, submit one synthetic alert and confirm Pushover delivery |
+| 2026-08-02 | Phase 4 completion | Closed the Alertmanager conversion and moved the handoff to Grafana | The explicit non-loopback DNS configuration was deployed; Alertmanager submitted the synthetic alert through Pushover and the operator received the notification | Capture the ordinary-crun Grafana functional and persistent-state baseline |
+| 2026-08-02 | Phase 5 baseline start | Recorded Grafana health, persistent database metadata, and installed plugin versions; prepared the resource/listener check | Grafana 13.1.1 reported database `ok`; its 2,203,648-byte SQLite file remained owned by 51210:51210; six plugins included VictoriaMetrics datasource 0.25.2 | Confirm ordinary crun, loopback-only port 3000, and current/peak host memory |
+| 2026-08-02 | Phase 5 runtime baseline | Recorded runtime, listener, cgroup resources, and startup time; deferred resource selection pending a memory breakdown | Grafana was active/running under crun on only `127.0.0.1:3000`; its cgroup reported about 871 MiB current/878 MiB peak and 11.45 CPU-seconds since its 17:39 UTC start | Determine whether the high memory charge is application RSS or reclaimable file cache before choosing krun RAM |
+| 2026-08-02 | Phase 5 resource selection | Chose 2 GiB rather than the initial 512 MiB starting point and recorded the overcommit rationale | The cgroup showed about 687 MiB anonymous memory and 6.2 GB file cache; Podman reported 506.7 MB container use on a 32 GB host. One GiB left little room for guest/kernel overhead, while file cache did not justify sizing above 2 GiB. | Enable Grafana alone with 2 vCPUs, 2 GiB, and explicit non-loopback DNS |
+| 2026-08-02 | Phase 5 implementation | Enabled krun for Grafana with 2 vCPUs and 2 GiB; added the validated DNS set for synchronous plugin installation | Generation, 36 tests, generated-output isolation, diff checks, and `make build` passed; only expected bootc cache warnings appeared; production remains on ordinary crun | Confirm the dashboard visual baseline, then review and commit for scheduled deployment |
 
 ## Session Note Template
 
