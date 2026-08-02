@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 through 4 are complete; the Phase 5 Grafana krun change is locally validated but not deployed |
-| Last completed work | 2026-08-02: enabled Grafana krun with 2 vCPUs, 2 GiB RAM, and explicit DNS; 36 tests, regeneration, diff checks, and the image build passed |
-| Current phase | Phase 5: finish the visual baseline, then deploy Grafana under krun |
-| Next concrete action | Confirm the provisioned dashboards load over a Last 24 hours range; then review and commit the Grafana change for scheduled deployment |
-| Production libkrun services | blackbox-exporter; vmalert; Alertmanager (all validated) |
+| Overall status | Phases 2 through 5 are complete; VictoriaMetrics remains on ordinary crun pending Phase 6 |
+| Last completed work | 2026-08-02: completed Grafana production validation after its clean krun restart; the provisioned dashboards continued to load normally with unchanged panels |
+| Current phase | Phase 6: VictoriaMetrics baseline not started |
+| Next concrete action | In a later session, capture the ordinary-crun VictoriaMetrics historical-data, ingestion, scrape, resource, and compaction baseline before selecting krun resources |
+| Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana (all validated) |
 | Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-08-02: Grafana's cgroup reported 720,125,952 bytes anonymous memory plus a large reclaimable file cache, while Podman reported 506.7 MB container use; 2 GiB was selected for comfortable guest headroom |
+| Last NAS validation | 2026-08-02: after a clean SIGINT restart under krun, Grafana remained healthy and its provisioned dashboards continued to load normally with panels matching the pre-cutover view |
 
 ## Outcome
 
@@ -759,6 +759,11 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-02 | Phase 5 runtime baseline | Recorded runtime, listener, cgroup resources, and startup time; deferred resource selection pending a memory breakdown | Grafana was active/running under crun on only `127.0.0.1:3000`; its cgroup reported about 871 MiB current/878 MiB peak and 11.45 CPU-seconds since its 17:39 UTC start | Determine whether the high memory charge is application RSS or reclaimable file cache before choosing krun RAM |
 | 2026-08-02 | Phase 5 resource selection | Chose 2 GiB rather than the initial 512 MiB starting point and recorded the overcommit rationale | The cgroup showed about 687 MiB anonymous memory and 6.2 GB file cache; Podman reported 506.7 MB container use on a 32 GB host. One GiB left little room for guest/kernel overhead, while file cache did not justify sizing above 2 GiB. | Enable Grafana alone with 2 vCPUs, 2 GiB, and explicit non-loopback DNS |
 | 2026-08-02 | Phase 5 implementation | Enabled krun for Grafana with 2 vCPUs and 2 GiB; added the validated DNS set for synchronous plugin installation | Generation, 36 tests, generated-output isolation, diff checks, and `make build` passed; only expected bootc cache warnings appeared; production remains on ordinary crun | Confirm the dashboard visual baseline, then review and commit for scheduled deployment |
+| 2026-08-02 | Phase 5 deployment and visual validation | Recorded the successful dashboard comparison and initial deployed runtime evidence; prepared the remaining read-only checks | Every provisioned dashboard was reviewed over Last 24 hours before and after deployment and all panels looked the same. Grafana was active/running under `[libcrun:krun]`; its service cgroup reported 1.6 GiB current and peak memory after seven minutes. | Verify health, plugin persistence, database metadata, loopback-only listener, and Podman runtime; then restart separately |
+| 2026-08-02 | Phase 5 deployed read-only validation | Recorded successful health, persistence, listener, and runtime checks; prepared the separate restart action | Grafana 13.1.1 reported database `ok`; the database remained 2,203,648 bytes with host ownership 51210:51210; the VictoriaMetrics plugin remained present; only `127.0.0.1:3000` listened; and Podman reported `runtime=krun status=running`. | Restart Grafana once, verify clean shutdown and recovery, and confirm dashboards still load |
+| 2026-08-02 | Phase 5 restart recovery | Recorded successful restart and functional recovery; corrected the failed journal diagnostic | Grafana restarted in one second, returned database `ok` under krun, and retained its database and plugin metadata. Only `journalctl --machine` failed because it tried an unsupported non-root machine connection; that did not affect Grafana. | Read the service journal through the service account and confirm one dashboard still loads |
+| 2026-08-02 | Phase 5 restart journal | Recorded clean shutdown and startup evidence; classified repeated startup messages as non-blocking configuration debt rather than krun failures | Grafana received `System signal: interrupt`, stopped without timeout or SIGKILL, and listened on `127.0.0.1:3000` about four seconds later. The missing optional provisioning directories, deprecated anonymous Admin setting, executable database mode, and other warnings appeared on both krun starts; the shutdown-only `context canceled` followed the intentional stop. | Confirm one dashboard loads after the restart, then close Phase 5 |
+| 2026-08-02 | Phase 5 completion | Closed the Grafana conversion and moved the handoff to VictoriaMetrics | After the validated restart, the provisioned dashboards continued to load normally and their panels still matched the pre-cutover Last 24 hours view. Health, krun runtime, loopback networking, SQLite state, plugin persistence, graceful shutdown, and recovery all passed. | Begin Phase 6 later by capturing the ordinary-crun VictoriaMetrics functional and resource baseline |
 
 ## Session Note Template
 
