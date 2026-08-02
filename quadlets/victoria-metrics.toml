@@ -19,6 +19,11 @@ network = "host"
 container-user = 0
 exec = "-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=127.0.0.1:8428"
 
+[krun]
+enabled = true
+cpus = 2
+ram-mib = 1024
+
 [[container.volumes]]
 comment = "Image-controlled scrape configuration (read-only)"
 source = "/usr/share/custom-coreos/victoria-metrics/promscrape.yml"

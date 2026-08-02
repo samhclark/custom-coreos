@@ -6,6 +6,10 @@ Documentation=https://docs.victoriametrics.com/
 [Container]
 ContainerName=victoria-metrics
 Image=docker.io/victoriametrics/victoria-metrics:v1.148.0@sha256:407013e902f9a0ba1d4b2d4c077c47bbaf917c893c52ff39b19efe83a654afda
+PodmanArgs=--runtime=krun
+Annotation=krun.cpus=2
+Annotation=krun.ram_mib=1024
+StopSignal=SIGINT
 Network=host
 User=0
 
