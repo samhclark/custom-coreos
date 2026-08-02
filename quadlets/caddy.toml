@@ -13,7 +13,7 @@ subid-start = 513100000
 display-name = "Caddy"
 
 [container]
-image = "ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:82eea0fa48eef50f2a4667db7ce4b71b494f732e5636e0a4efce7649710d8251"
+image = "ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:78331c4abc23f4f3f39675745af20b06d9aae97ae244772414e7933c8c1ab054"
 network = "host"
 container-user = 0
 
