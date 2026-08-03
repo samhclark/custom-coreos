@@ -21,14 +21,6 @@ enabled = true
 cpus = 2
 ram-mib = 1024
 
-[container.environment]
-GARAGE_LOG_TO_JOURNALD = "1"
-
-[[container.volumes]]
-comment = "Host journald socket for native Garage logs"
-source = "/run/systemd/journal/socket"
-target = "/run/systemd/journal/socket"
-
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"
 source = "/usr/share/custom-coreos/garage/garage.toml"

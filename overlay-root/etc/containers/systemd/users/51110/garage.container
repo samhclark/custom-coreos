@@ -12,11 +12,6 @@ Annotation=krun.ram_mib=1024
 StopSignal=SIGINT
 User=0
 
-Environment=GARAGE_LOG_TO_JOURNALD=1
-
-# Host journald socket for native Garage logs
-Volume=/run/systemd/journal/socket:/run/systemd/journal/socket
-
 # Image-controlled configuration (read-only)
 Volume=/usr/share/custom-coreos/garage/garage.toml:/etc/garage.toml:ro
 
