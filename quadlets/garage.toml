@@ -16,6 +16,11 @@ display-name = "Garage"
 image = "docker.io/dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690"
 container-user = 0
 
+[krun]
+enabled = true
+cpus = 2
+ram-mib = 1024
+
 [container.environment]
 GARAGE_LOG_TO_JOURNALD = "1"
 
