@@ -22,12 +22,12 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 through 7 are complete; the Caddy krun/TSI design is selected and implementation is intentionally deferred to a later session |
-| Last completed work | 2026-08-05: selected direct krun/TSI for Caddy with HTTP/3 disabled, the low-port sysctl retained, and restart-based operation |
-| Current phase | Phase 8 decision complete; Caddy implementation not started |
-| Next concrete action | In a later session, implement only the selected Caddy krun/TSI conversion with 2 vCPUs and 512 MiB, explicitly disable HTTP/3, retain the low-port sysctl, then run the Caddy completion gates |
+| Overall status | Phases 2 through 7 are complete; the selected Caddy krun/TSI conversion is implemented and committed locally, with deployment and production validation pending |
+| Last completed work | 2026-08-05: enabled krun for Caddy with 2 vCPUs, 512 MiB, non-loopback DNS, and HTTP/1.1 plus HTTP/2 only; generation, unit tests, diff checks, pinned-Caddy adaptation, and the full image build passed |
+| Current phase | Phase 8 implementation and local verification committed; push, deployment, and NAS validation pending |
+| Next concrete action | Push the Caddy conversion for normal deployment, then run the Caddy completion gates after the changed image reaches the NAS |
 | Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage (all validated) |
-| Known production exceptions | Caddy's selected krun/TSI design intentionally disables HTTP/3, retains `net.ipv4.ip_unprivileged_port_start=80`, and uses restart-based operation because the krun handler lacks `podman exec`; it is not deployed yet |
+| Known production exceptions | Caddy's selected krun/TSI design intentionally disables HTTP/3, retains `net.ipv4.ip_unprivileged_port_start=80`, and uses restart-based operation because the krun handler lacks `podman exec`; the implementation is not deployed yet |
 | Last NAS validation | 2026-08-04: both passt test units became `LoadState=not-found`, NAS TCP/UDP listener counts on 19445 were zero, and no leftover container was reported |
 
 ## Outcome
@@ -45,12 +45,12 @@ desired end state is:
 5. Caddy gets its own networking and socket-activation decision rather than
    forcing the rest of the migration to wait.
 
-## Selected Caddy Design (Implementation Deferred)
+## Selected Caddy Design (Implementation Pending Deployment)
 
-On 2026-08-05, the operator selected direct krun/TSI for Caddy. This is a
-recorded implementation decision, not a claim about the current deployment;
-production Caddy remains on ordinary rootless crun until a later session
-changes and validates it.
+On 2026-08-05, the operator selected direct krun/TSI for Caddy and the repo
+implementation was prepared later that day. This is not a claim about the
+current deployment; production Caddy remains on ordinary rootless crun until
+the changed image is deployed and validated.
 
 The implementation contract is:
 
@@ -910,6 +910,7 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-04 | Phase 8 passt port reservation | Confirmed the hard-coded all-port mapping creates a real startup-order hazard | In the isolated namespace, passt eagerly owned every tested free TCP port: Caddy admin 2019, Grafana 3000, Garage 3900/3903, and VictoriaMetrics 8428. This explains why the gateway test required the backend to bind first. Robust production ordering would have to cross several independent rootless user managers, conflicting with this repo's established avoidance of cross-manager ordering. UDP 443 was not bound in the private namespace, plausibly because that namespace did not inherit the host's lowered unprivileged-port floor; high-port UDP/QUIC had already passed. | Remove all disposable passt state, then compare the three validated Caddy designs |
 | 2026-08-04 | Phase 8 passt cleanup | Removed the complete isolated passt experiment without touching production | Both disposable system units reported `LoadState=not-found`, NAS TCP and UDP listener counts on 19445 were zero, and the empty filtered Podman output confirmed no leftover container. | Choose between the two serious finalists, or request the optional krun/TSI plus nftables spike |
 | 2026-08-05 | Phase 8 Caddy decision | Locked in direct krun/TSI as the implementation path and explicitly deferred code changes | No NAS or runtime state changed. Production Caddy remains on ordinary rootless crun. The selected future design uses 2 vCPUs, 512 MiB, HTTP/1.1 and HTTP/2 only, the existing low-port sysctl, persistent state, and restart-based operation without `podman exec`. | Commit documentation only; implement and validate Caddy in a later session |
+| 2026-08-05 | Phase 8 Caddy implementation | Enabled Caddy's generated Quadlet for krun with 2 vCPUs, 512 MiB, SIGINT, and explicit non-loopback DNS; limited the Caddyfile to HTTP/1.1 and HTTP/2; added focused regression coverage | No NAS action. Generation, all 38 unit tests, `git diff --check`, adaptation by the exact pinned Caddy binary, and the operator-run full image build passed. | Push for normal deployment, then execute the Caddy completion gates |
 
 ## Session Note Template
 

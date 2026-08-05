@@ -33,8 +33,8 @@ maintaining it.
    `net.ipv4.ip_unprivileged_port_start=80`; its persistent state is maintained
    by a steady-state host preparation service. Direct krun/TSI is selected for
    its next runtime, with HTTP/3 intentionally disabled and this low-port
-   policy retained. That runtime change is documented but not yet implemented;
-   production Caddy remains on ordinary rootless crun.
+   policy retained. The repo implementation is committed locally but not yet
+   deployed; production Caddy remains on ordinary rootless crun.
 
 5. **Service UIDs are allocate-only.** Never reuse a retired UID; numeric
    file ownership (especially in ZFS snapshots) outlives the user. Scheme
@@ -86,7 +86,9 @@ maintaining it.
       reverse proxies; do not rely on `podman exec`. Validate secrets, ACME and
       certificate reuse, all routes, metrics, client addresses, reboot, and
       restart behavior using `docs/plan-libkrun-quadlets.md`. This decision was
-      locked on 2026-08-05; implementation is intentionally deferred.
+      locked on 2026-08-05. The repo changes and focused tests are prepared;
+      the full image build passes, and deployment plus NAS validation remain
+      before completion.
 - [ ] **4. Add Renovate** with a custom regex manager for image references
       in `quadlets/*.toml`, plus the `FROM ghcr.io/getsops/sops:` pin in the
       Containerfile. Converge every
