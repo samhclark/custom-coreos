@@ -31,7 +31,10 @@ maintaining it.
 4. **Caddy uses the validated rootless low-port policy.**
    `_nas_caddy` binds TCP and UDP low ports with
    `net.ipv4.ip_unprivileged_port_start=80`; its persistent state is maintained
-   by a steady-state host preparation service.
+   by a steady-state host preparation service. Direct krun/TSI is selected for
+   its next runtime, with HTTP/3 intentionally disabled and this low-port
+   policy retained. That runtime change is documented but not yet implemented;
+   production Caddy remains on ordinary rootless crun.
 
 5. **Service UIDs are allocate-only.** Never reuse a retired UID; numeric
    file ownership (especially in ZFS snapshots) outlives the user. Scheme
@@ -77,7 +80,14 @@ maintaining it.
       guarded phase-two cutover was deployed and validated, the stopped
       rootful container and legacy files were removed, and the unused shell
       secret-driver stack was retired.
-- [ ] **3. Add Renovate** with a custom regex manager for image references
+- [ ] **3. Implement the selected Caddy krun/TSI conversion.** Use the existing
+      rootless user-Quadlet path with 2 vCPUs, 512 MiB, SIGINT shutdown, and
+      HTTP/1.1 plus HTTP/2 only. Retain the low-port sysctl and host-loopback
+      reverse proxies; do not rely on `podman exec`. Validate secrets, ACME and
+      certificate reuse, all routes, metrics, client addresses, reboot, and
+      restart behavior using `docs/plan-libkrun-quadlets.md`. This decision was
+      locked on 2026-08-05; implementation is intentionally deferred.
+- [ ] **4. Add Renovate** with a custom regex manager for image references
       in `quadlets/*.toml`, plus the `FROM ghcr.io/getsops/sops:` pin in the
       Containerfile. Converge every
       service on pinned tags/digests; drop the inert
@@ -87,10 +97,10 @@ maintaining it.
       PR before marking this item done. Renovate updates the source TOMLs;
       maintainers run `python3 generate-quadlets.py` and commit the generated
       outputs before merging its container-image PRs.
-- [ ] **4. New services** (the actual goal): immich, jellyfin,
+- [ ] **5. New services** (the actual goal): immich, jellyfin,
       audiobookshelf, *arr — each is one TOML + UID + Containerfile enable
       line + SOPS values + Caddy vhost, per the pipeline below.
-- [ ] **5. Small cleanups**, opportunistically:
+- [ ] **6. Small cleanups**, opportunistically:
       - NAS-local cockpit residue (manual, one-time):
         `sudo rm -rf /etc/cockpit` and
         `sudo podman rmi quay.io/cockpit/ws:latest`. The `cockpit-ws`

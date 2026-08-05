@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 through 6 are complete; Garage is healthy under krun via a temporary host override while the permanent logging fix is committed locally |
-| Last completed work | 2026-08-02: committed the permanent Garage logging fix that removes native-journald mode and its host socket mount |
-| Current phase | Phase 7: permanent journald fix committed; push and deployment pending |
-| Next concrete action | Push and deploy the logging fix; then delete the temporary NAS drop-in, reload/restart Garage, and prove the image works without host overrides |
-| Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics (all validated) |
-| Known production exceptions | None yet; Caddy is expected to need a separate decision |
-| Last NAS validation | 2026-08-02: with the temporary override, Garage was active and healthy under krun; SQLite and workers initialized cleanly, stderr logs reached journald, and only 3900, 3902, and 3903 listened on host loopback |
+| Overall status | Phases 2 through 7 are complete; the Caddy krun/TSI design is selected and implementation is intentionally deferred to a later session |
+| Last completed work | 2026-08-05: selected direct krun/TSI for Caddy with HTTP/3 disabled, the low-port sysctl retained, and restart-based operation |
+| Current phase | Phase 8 decision complete; Caddy implementation not started |
+| Next concrete action | In a later session, implement only the selected Caddy krun/TSI conversion with 2 vCPUs and 512 MiB, explicitly disable HTTP/3, retain the low-port sysctl, then run the Caddy completion gates |
+| Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage (all validated) |
+| Known production exceptions | Caddy's selected krun/TSI design intentionally disables HTTP/3, retains `net.ipv4.ip_unprivileged_port_start=80`, and uses restart-based operation because the krun handler lacks `podman exec`; it is not deployed yet |
+| Last NAS validation | 2026-08-04: both passt test units became `LoadState=not-found`, NAS TCP/UDP listener counts on 19445 were zero, and no leftover container was reported |
 
 ## Outcome
 
@@ -44,6 +44,35 @@ desired end state is:
    remain on ordinary crun, with the reason recorded here.
 5. Caddy gets its own networking and socket-activation decision rather than
    forcing the rest of the migration to wait.
+
+## Selected Caddy Design (Implementation Deferred)
+
+On 2026-08-05, the operator selected direct krun/TSI for Caddy. This is a
+recorded implementation decision, not a claim about the current deployment;
+production Caddy remains on ordinary rootless crun until a later session
+changes and validates it.
+
+The implementation contract is:
+
+- run Caddy through the existing rootless user-Quadlet path with runtime
+  `krun`, 2 vCPUs, 512 MiB RAM, and SIGINT shutdown
+- use direct TSI TCP listeners on 80 and 443 and keep the existing host-
+  loopback reverse-proxy destinations
+- explicitly limit Caddy to HTTP/1.1 and HTTP/2 because TSI cannot host a
+  guest UDP listener for QUIC/HTTP/3
+- retain `net.ipv4.ip_unprivileged_port_start=80`; inherited root-owned
+  sockets do not cross the current krun guest boundary
+- use service restarts for image-controlled configuration changes and do not
+  rely on `podman exec`, which the current krun handler does not support
+- preserve the existing Cloudflare secret, ACME/certificate state, config
+  state, metrics, client-address behavior, and all reverse-proxy routes
+
+Rootless crun with root-owned TCP/UDP system sockets remains the documented
+fallback if a later regression blocks krun. Passt is rejected for the current
+stack because crun's hard-coded all-port mapping eagerly reserves free backend
+ports and introduces fragile cross-user-manager startup ordering. A future
+libkrun/crun release may justify revisiting HTTP/3, inherited sockets, targeted
+port mappings, or runtime exec; the evidence and retest criteria remain below.
 
 ## Settled Working Assumptions
 
@@ -588,7 +617,9 @@ loopback binds plus TSI, or passt, as a separate networking change.
 - the known object reads with the same checksum
 - new PUT/GET/DELETE operations work
 - an unclean test is not required; a normal stop/start recovery is
-- journald logging still arrives through the mounted absolute socket
+- stderr logging still arrives in the user journal through Podman/systemd;
+  native journald socket logging is intentionally disabled because the host
+  socket is not usable across the krun guest boundary
 - metrics authorization still works
 - object throughput and metadata latency remain reasonable
 - dataset ownership and SELinux labels remain unchanged
@@ -605,8 +636,18 @@ Caddy is a separate design exercise. Do not block earlier services on it.
 - Caddy currently uses host networking and binds TCP 80/443 and UDP 443.
 - `net.ipv4.ip_unprivileged_port_start=80` allows `_nas_caddy` to bind those
   ports.
+- The custom Caddy image is patched for inherited stream and datagram file
+  descriptors and includes `certmagic@v0.25.3`. Treat application support as
+  settled; do not use older Caddy socket-activation bug reports to reopen it.
+- HTTP/3 is optional for this single home NAS. Disabling it is acceptable if
+  direct TCP 80/443 over TSI makes krun materially simpler and remains reliable.
 - Default libkrun TSI cannot support a guest UDP listener, so HTTP/3 is not
   directly compatible with the simplest krun conversion.
+- In the installed crun 1.28 implementation, `krun.use_passt=1` starts passt
+  with `-t all -u all --no-dhcp-dns --fd ...`; it does not pass
+  `--no-map-gw`. Passt was evaluated as a broad networking change rather than
+  a targeted UDP-443 toggle and rejected for the current stack because its
+  all-port mapping reserves unrelated free host ports.
 - Caddy can consume inherited descriptors using `fd/N` for streams and
   `fdgram/N` for datagrams.
 - Podman supports passing socket-activated descriptors through
@@ -615,7 +656,8 @@ Caddy is a separate design exercise. Do not block earlier services on it.
 References:
 
 - [Podman socket activation tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/socket_activation.md)
-- [Caddy inherited TCP/UDP descriptor example](https://github.com/caddyserver/caddy/issues/6833)
+- [Red Hat: socket activation with Podman](https://www.redhat.com/en/blog/socket-activation-podman)
+- [Rootless Quadlet Caddy TCP/UDP example](https://github.com/eriksjolund/podman-caddy-socket-activation/blob/main/examples/example4/README.md)
 - [systemd socket units](https://www.man7.org/linux/man-pages/man5/systemd.socket.5.html)
 
 ### Important distinction
@@ -633,6 +675,22 @@ running. In this project, descriptor ownership is the interesting part of
 socket activation; avoiding an always-on Caddy process is not a goal.
 
 ### Decision spike A: Can activated FDs cross krun?
+
+Result: inherited host descriptors do not cross krun. On 2026-08-04, the disposable krun test generated and triggered
+correctly and Caddy loaded its configuration, but every start found `fd/3`
+absent with `fcntl: bad file descriptor`. The otherwise identical ordinary-
+crun control served the expected response through `fd/3` and remained active.
+This proves the failure is at the krun guest boundary, not in Caddy, Quadlet,
+systemd socket activation, or Podman's ordinary OCI-runtime FD forwarding.
+The follow-up initial-process probe made the boundary explicit: Podman invoked
+krun with `--preserve-fds 1`, and the guest retained `LISTEN_FDS=1` plus the
+socket-unit name, but its PID was 417 while `LISTEN_PID` remained 1 and its
+descriptor table contained no fd 3. The identical crun process was PID 1 and
+received the socket as fd 3. Thus the metadata crosses but the host-kernel
+socket does not in the currently packaged stack.
+This result rules out socket inheritance under krun; it does not rule out Caddy
+using guest-created listeners through TSI or passt. There is no reason to
+repeat the inherited-descriptor mechanism with UDP under krun.
 
 Before designing production units, use disposable high ports to answer:
 
@@ -677,6 +735,19 @@ Evaluate these in order:
 
 It is acceptable for the final answer to be "Caddy stays on crun." Record the
 security and maintenance tradeoff, then remove unused experiments.
+
+### Evidence-based Caddy comparison
+
+| Design | Proven behavior | Main cost | Status |
+| --- | --- | --- | --- |
+| krun with direct TSI TCP | HTTP/2, loopback bind, host-loopback reverse proxy, TLS state reuse, clean restart, DNS, and Let's Encrypt HTTPS egress | No guest UDP listener, so disable HTTP/3; direct low ports retain the current unprivileged-port sysctl | **Selected; implementation deferred** |
+| Rootless crun with root-owned system sockets | Inherited TCP and UDP, HTTP/2, QUIC with `h3`, rootless Podman, and system-owned listeners | Caddy is the production runtime exception and needs a hand-written system service rather than the user-Quadlet path | Valid fallback, not selected |
+| krun with passt | HTTP/2, QUIC with `h3`, guest-to-host gateway reverse proxy, state, and restart | Current crun hardcodes all TCP/UDP mappings; passt eagerly reserved every tested free backend/admin TCP port, creating fragile cross-user-manager startup ordering | Rejected for the current stack |
+| krun with direct TSI TCP plus root nftables redirect | Components are individually plausible but the combined path has not been tested | Disables HTTP/3 and adds root-managed redirect policy, but could remove the unprivileged-port sysctl while retaining krun | Not selected; revisit only with new requirements |
+
+The current production design—rootless crun with direct host-network binds—is
+also valid as the lowest-change fallback, but it retains both the low-port
+sysctl and the absence of a microVM boundary.
 
 ### Caddy completion gates
 
@@ -804,6 +875,41 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-02 | Phase 7 temporary override proof | Confirmed the permanent logging design and retained an explicit host-cleanup obligation | Garage became fully operational under krun; SQLite and all workers initialized cleanly, stderr logs arrived in the user journal, and pasta published only 3900, 3902, and 3903 on `127.0.0.1`. Temporary file `/etc/containers/systemd/users/51110/garage.container.d/90-disable-native-journald.conf` remains required by the currently deployed image. | Remove native journald configuration and socket mount in the repo; after deployment, delete the drop-in before further validation |
 | 2026-08-02 | Phase 7 permanent journald fix | Removed the native-journald environment and host socket mount from Garage's source TOML and regenerated its Quadlet | All 36 tests, generated-output verification, diff checks, and `make build` passed with only the documented bootc warnings. The NAS remains healthy through the temporary drop-in, which must be deleted only after this fix deploys. | Commit and deploy; remove the drop-in, reload/restart Garage, and verify no host override remains |
 | 2026-08-02 | Phase 7 permanent-fix commit | Committed the locally validated Garage logging correction | No additional NAS state changed; Garage remains healthy under krun through the temporary drop-in | Push and deploy, then remove the temporary drop-in and validate the image-controlled configuration |
+| 2026-08-02 | Phase 7 host-override cleanup | Removed the only temporary NAS file and validated the permanent image-controlled logging configuration | The cleanup refused to run until the deployed base Quadlet lacked both native-journald settings. It then deleted the drop-in and empty directory, restarted Garage, and confirmed health, `runtime=krun`, no journald environment/socket mount, stderr logs, and loopback-only 3900/3902/3903. Garage received SIGINT, all workers exited peacefully, and SQLite plus all servers recovered in about one second. | Verify storage, secret, authenticated metrics, and resource contracts |
+| 2026-08-02 | Phase 7 storage and secret proof | Verified virtiofs-facing storage, runtime secrets, authenticated metrics, and initial krun resources | Both datasets retained exact ZFS sources, 51110:51110 ownership, mode 0750, and `container_file_t:s0`; all three 0400 runtime secrets were readable by `_nas_garage`; authenticated metrics returned HTTP 200. The service used about 151 MiB current/157 MiB peak cgroup memory and Podman reported 142.1 MB. | Verify the existing object checksum and repeat the self-cleaning object mutation test through Caddy |
+| 2026-08-02 | Phase 7 object-integrity proof | Verified preserved object data and new S3 mutations through Caddy under krun | Existing object `config` remained 155 bytes with exact pre-krun SHA-256 `259cdf67289b6a111d0d27ec2dbc9df1900b12ab3a3cb3828c9e84cb03e639c9`. A unique 73-byte object passed PUT, GET with matching SHA-256, DELETE, and absence verification. | Verify Caddy health routing and fresh monitoring data in VictoriaMetrics |
+| 2026-08-02 | Phase 7 monitoring proof | Verified both the user-facing route and Garage's two monitoring paths | Caddy's public Garage health route returned HTTP 200. Blackbox `probe_success` and the `garage-health` scrape `up` were 1 with samples no more than one second old; authenticated Garage `cluster_healthy` was 1 and one second old. | Capture post-krun latency, internal queues, and a concise storage/I/O error count |
+| 2026-08-02 | Phase 7 performance point | Recorded fast post-krun request latency and healthy internal queues; corrected a no-match journal-count helper failure | Nine requests completed at 2.5 ms p50, 86.5 ms p95, and 97.3 ms p99. Resync length, errored blocks, and Merkle queue were zero; table-GC queue was 25 versus the idle crun point's 24. One S3 error likely represents the intentional HEAD-after-DELETE absence check. The journal-count line did not run because `journalctl --grep` returned nonzero for no matches under `pipefail`. | Inspect the error series labels and rerun the corrected journal count |
+| 2026-08-02 | Phase 7 error attribution | Cleared the apparent S3 error and completed the focused journal scan | The sole error series was `HeadObject` status 404 with increase 1, exactly matching the intentional absence check after deleting the smoke object. The corrected focused journal scan returned zero corruption, SQLite, permission, or I/O matches. | Exercise real block-file reads and writes with one self-cleaning 16 MiB object |
+| 2026-08-02 | Phase 7 block-file proof | Exercised Garage object-block writes and reads over virtiofs with deterministic incompressible data | A 16 MiB object uploaded, downloaded with exact SHA-256 `f64bf0297adfdfcb575975d37d2b82f5bf79b426d3a774f13558fc7f42d905b3`, deleted, and was confirmed absent. End-to-end laptop-through-Caddy wall times were 19.366 seconds upload and 8.975 seconds download, about 0.83 MiB/s and 1.78 MiB/s respectively. No pre-krun large-object baseline exists, so this is correctness proof and a post-krun timing point, not evidence by itself of improvement or regression. | Confirm block metrics, queues, resources, and focused journal state before deciding whether real-workload observation is needed |
+| 2026-08-02 | Phase 7 post-block state | Recorded clean error/resource evidence and retained newly queued background work for one follow-up | No block-read timeout series, resync errors, or relevant journal matches appeared. The service used about 193 MiB current/203 MiB peak memory. Resync and table-GC queues were both 36 after writing and deleting sixteen 1 MiB blocks; the ordinary-crun idle points were 0 and 24-25 respectively. Local single-node reads/writes did not increment the exported block-byte counters. | Recheck after about 10 minutes and confirm queued work drains without errors |
+| 2026-08-04 | Phase 7 completion | Closed Garage production validation after the bounded background-work follow-up | Resync and Merkle queues reached zero, table-GC queue drained from 36 to 5, resync errors remained zero, and cluster health remained 1. Together with the prior runtime, storage, secret, object-integrity, monitoring, performance, journal, and restart evidence, this completes Garage's krun gate. | Begin Phase 8 with a disposable high-port inherited-socket test |
+| 2026-08-04 | Phase 8 Caddy orientation | Recorded the operator-confirmed application capability and added relevant Podman/Quadlet examples | No NAS action. The custom Caddy build supports inherited TCP/UDP descriptors and includes `certmagic@v0.25.3`; the remaining first-spike question is whether those descriptors cross krun. | Test an inherited TCP socket first on a disposable high port without changing production Caddy |
+| 2026-08-04 | Phase 8 krun TCP spike | Recorded a repeatable missing-descriptor failure and corrected the operator handoff's interactive-shell behavior | The runtime-only Quadlet and matching socket generated and triggered correctly. Four krun guest starts loaded the pinned image and Caddy config, then each failed on inherited `fd/3` with `fcntl: bad file descriptor`; production Caddy was untouched. The prior handoff's top-level `exit` also closed the operator's SSH shell after failure. | Repeat the same test with ordinary crun; if it succeeds, classify inherited host descriptors as unsupported across krun |
+| 2026-08-04 | Phase 8 crun TCP control | Proved the socket-activation harness and isolated the inherited-descriptor failure | The otherwise identical control returned `crun-caddy-tcp-ok`, reported `runtime=crun status=running`, and showed an active service with `Result=success`. This isolates the missing descriptor to krun rather than Caddy, Quadlet, systemd, or ordinary Podman FD forwarding. | Explore direct krun listeners before making the Caddy runtime decision |
+| 2026-08-04 | Phase 8 scope correction | Reopened the Caddy runtime decision after distinguishing one failed mechanism from krun as a whole | No NAS action. The operator did not select a crun exception. Existing blackbox evidence and libkrun's model show that guest-created TCP listeners over TSI remain viable; passt may additionally provide guest UDP. HTTP/3 is optional for this home NAS, so a reliable TSI TCP design may intentionally disable it. | Test a disposable Caddy-created TCP listener under krun/TSI |
+| 2026-08-04 | Phase 8 krun TSI TCP | Proved that Caddy itself runs under krun and accepts a guest-created TCP listener through TSI | The first curl raced startup and was refused, then its retry returned `krun-caddy-tsi-tcp-ok`. Podman reported `runtime=krun status=running`, systemd remained active with `Result=success`, and the listener appeared on the host. The wildcard listener came from the test Caddyfile lacking an explicit `bind`, not from a demonstrated TSI limitation. | Add an explicit loopback bind and reverse-proxy Garage health through host loopback |
+| 2026-08-04 | Phase 8 inherited-FD probe refinement | Replaced the application-level retry with a paired runtime introspection test | No NAS action. The same initial shell process will print `LISTEN_PID`, `LISTEN_FDS`, `LISTEN_FDNAMES`, and every open descriptor under both krun and crun, distinguishing a dropped, renumbered, or unexpectedly preserved socket without relying on Caddy behavior. | Run the paired probe and compare the two FD tables |
+| 2026-08-04 | Phase 8 inherited-FD probe attempt | Confirmed the crun control and identified a timing hole in the krun observation | The crun initial process reported PID 1, `LISTEN_FDS=1`, `LISTEN_FDNAMES=crun-fd-probe.socket`, and socket `fd=3`. The krun section was completely empty, including the unconditional PID line, so it cannot yet distinguish missing FDs from a probe that had not started before cleanup. | Rerun after a three-second wait; collect full krun status and journal only if output remains absent |
+| 2026-08-04 | Phase 8 inherited-FD conclusion | Proved exactly how socket inheritance fails in the current krun stack | Podman invoked krun with `--preserve-fds 1`. The guest process ran as PID 417 and retained `LISTEN_PID=1`, `LISTEN_FDS=1`, and the socket-unit name, but its full descriptor table had no fd 3. The identical crun process ran as PID 1 with the socket at fd 3. | Treat inherited sockets as unavailable under current krun; resume guest-created TSI listener testing |
+| 2026-08-04 | Phase 8 TSI proxy path | Proved explicit loopback binding plus Caddy's production-style backend direction under krun | After one expected startup-race refusal, Caddy returned Garage's real health response with HTTP 200. Podman reported krun, systemd remained healthy, and the host listener was exactly `127.0.0.1:19083`, not wildcard. | Test TLS/HTTP2 and disposable persistent Caddy state across a restart |
+| 2026-08-04 | Phase 8 TSI TLS and state | Proved TLS/HTTP2, virtiofs-backed state creation and reuse, graceful restart, and initial resources | Both pre- and post-restart requests returned HTTP/2 200. Ten files were retained across the restart; the second start reused the certificate and skipped recent storage cleanup. SIGINT shut down cleanly, the listener remained `127.0.0.1:19443`, and krun used about 112 MiB current/132 MiB peak memory. | Test DNS resolution plus outbound HTTPS to the Let's Encrypt directory through TSI |
+| 2026-08-04 | Phase 8 TSI egress | Proved the candidate DNS and outbound HTTPS path used by ACME | A disposable process in the pinned Caddy image under krun resolved and fetched the Let's Encrypt production directory, reporting `letsencrypt_dns_and_https=ok`. Review of crun 1.28 also found that `krun.use_passt=1` hardcodes all TCP and UDP port forwarding, so passt needs a deliberately isolated experiment rather than a casual production-like start. | Compare a root-owned high-port system socket handed to rootless Podman/crun |
+| 2026-08-04 | Phase 8 system-socket TCP | Proved a root-owned listener can feed a genuinely rootless Caddy container under crun | The test returned `system-socket-rootless-crun-ok`; Podman reported `rootless=true`, crun, and running state, while the system service remained active with `Result=success` and `User=_nas_caddy`. This makes removal of the global low-port sysctl viable for TCP without making Caddy rootful. | Check for an HTTP/3-capable client, then test paired system TCP/UDP sockets |
+| 2026-08-04 | Phase 8 HTTP/3 client inventory | Ruled out the installed curl as an end-to-end HTTP/3 validator | curl 8.18.0 reported HTTP2 but no HTTP3 feature or QUIC backend. This says nothing about Caddy's server capability; it only means curl cannot prove the UDP/QUIC request path. | Check whether the installed OpenSSL `s_client` exposes a QUIC client |
+| 2026-08-04 | Phase 8 QUIC probe capability | Identified a transport-level QUIC validator already installed on the NAS | OpenSSL 3.5.7's `s_client` reported `-quic`. It can prove a QUIC handshake and `h3` ALPN over UDP, but it does not itself issue an HTTP/3 request. | Calibrate the probe against the current production Caddy |
+| 2026-08-04 | Phase 8 QUIC probe calibration | Proved the transport-level probe against the known-good production listener | OpenSSL connected to production Caddy over QUIC using TLS 1.3 with `TLS_AES_128_GCM_SHA256` and negotiated `h3`. The missing curl HTTP/3 feature no longer prevents direct validation of the UDP/QUIC handshake path. | Test paired root-owned TCP/UDP sockets passed to rootless Podman/crun |
+| 2026-08-04 | Phase 8 system-socket TCP/UDP | Proved the complete root-owned-listener path into genuinely rootless Caddy under crun | The inherited TCP socket returned the expected body with HTTP/2 200, while the inherited UDP socket completed a QUIC/TLS 1.3 handshake and negotiated `h3`. Podman reported `rootless=true`, `runtime=crun status=running`; the system service was active as `_nas_caddy`; and `ss` showed systemd, conmon, and Caddy retaining the expected TCP and UDP descriptors. The internal-CA verification warning was expected and unrelated to transport. | Remove all disposable paired-socket test state from `/run` |
+| 2026-08-04 | Phase 8 paired-socket cleanup | Removed the complete disposable crun test without touching production Caddy | The system service became `LoadState=not-found`, TCP and UDP listener counts on 19444 were both zero, and the empty filtered Podman output confirmed no leftover test container. | Design the krun/passt test inside a private host network namespace |
+| 2026-08-04 | Phase 8 passt prerequisite and source correction | Confirmed the required host tools and corrected the exact crun 1.28 passt invocation | `passt`, `ip`, and `nsenter` were installed; packages were passt `0^20260611.ga9c61ff-1.fc44` and crun-krun `1.28-1.fc44`. Exact crun 1.28 source passes `-t all -u all --no-dhcp-dns --fd ...`, not the previously recorded `--no-map-gw`; default gateway-to-host mapping may therefore remain available. | Run only the ingress TLS/HTTP2/QUIC probe inside an isolated host network namespace |
+| 2026-08-04 | Phase 8 isolated passt ingress | Proved krun/passt TCP and UDP ingress without touching the live NAS network namespace | The private-namespace listener returned the expected body with HTTP/2 200 and completed a QUIC/TLS 1.3 handshake with `h3`. Podman reported rootless krun and running state under `_nas_caddy`. The NAS namespace had zero TCP and UDP listeners on 19445, while the service namespace showed only passt owning both listeners. The internal-CA verification warning was expected. | Inspect the guest route and client tools, then test passt gateway-to-host access |
+| 2026-08-04 | Phase 8 krun exec limitation | Recorded a runtime-management limitation and replaced the failed inspection method | `podman exec` returned `the handler does not support exec`. This does not affect the already-proven ingress path, and production Caddy currently has no exec-based reload contract, but arbitrary in-guest exec cannot be part of a krun operational design. | Use an initial-process wrapper to print the evidence, then exec Caddy |
+| 2026-08-04 | Phase 8 passt restart proof | Proved restart recovery but did not yet recover the wrapper evidence | The disposable service returned to active/running with `Result=success` and served HTTP/2 200 after restart. The system-journal extraction printed no route/client block, so the guest evidence remains uncollected. | Confirm the configured command and query Podman's container log directly |
+| 2026-08-04 | Phase 8 passt guest inventory | Recovered the guest evidence without relying on unsupported runtime exec | Podman inspect confirmed the wrapper as the initial command. Podman's stored log showed an `eth0` default route with gateway hex `010200C0`, i.e. `192.0.2.1`, plus `/usr/bin/wget` and `/bin/busybox`. | Bind a host-loopback backend before passt, then test reverse proxy through the guest gateway |
+| 2026-08-04 | Phase 8 passt backend path | Proved the production-direction network path from Caddy's guest to a host-loopback service | A backend bound to `127.0.0.1:19086` before passt started. It returned HTTP 200 directly in the shared private namespace and through Caddy reverse-proxying to `192.0.2.1:19086`. Both services stayed active/successful and Podman reported krun running. | Measure whether `-t all` reserves the real backend port numbers when initially free |
+| 2026-08-04 | Phase 8 passt port reservation | Confirmed the hard-coded all-port mapping creates a real startup-order hazard | In the isolated namespace, passt eagerly owned every tested free TCP port: Caddy admin 2019, Grafana 3000, Garage 3900/3903, and VictoriaMetrics 8428. This explains why the gateway test required the backend to bind first. Robust production ordering would have to cross several independent rootless user managers, conflicting with this repo's established avoidance of cross-manager ordering. UDP 443 was not bound in the private namespace, plausibly because that namespace did not inherit the host's lowered unprivileged-port floor; high-port UDP/QUIC had already passed. | Remove all disposable passt state, then compare the three validated Caddy designs |
+| 2026-08-04 | Phase 8 passt cleanup | Removed the complete isolated passt experiment without touching production | Both disposable system units reported `LoadState=not-found`, NAS TCP and UDP listener counts on 19445 were zero, and the empty filtered Podman output confirmed no leftover container. | Choose between the two serious finalists, or request the optional krun/TSI plus nftables spike |
+| 2026-08-05 | Phase 8 Caddy decision | Locked in direct krun/TSI as the implementation path and explicitly deferred code changes | No NAS or runtime state changed. Production Caddy remains on ordinary rootless crun. The selected future design uses 2 vCPUs, 512 MiB, HTTP/1.1 and HTTP/2 only, the existing low-port sysctl, persistent state, and restart-based operation without `podman exec`. | Commit documentation only; implement and validate Caddy in a later session |
 
 ## Session Note Template
 
