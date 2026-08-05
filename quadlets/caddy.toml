@@ -15,7 +15,16 @@ display-name = "Caddy"
 [container]
 image = "ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:78331c4abc23f4f3f39675745af20b06d9aae97ae244772414e7933c8c1ab054"
 network = "host"
+# Avoid the host's loopback-only systemd-resolved stub inside the krun guest.
+# MagicDNS preserves tailnet resolution; Comcast resolvers provide fallbacks
+# for ACME and Cloudflare DNS API access.
+dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
 container-user = 0
+
+[krun]
+enabled = true
+cpus = 2
+ram-mib = 512
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"

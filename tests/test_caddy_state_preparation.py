@@ -15,6 +15,9 @@ SERVICE = (
 QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51310/caddy.container"
 ).read_text()
+CADDYFILE = (
+    REPO / "overlay-root/usr/share/custom-coreos/caddy/Caddyfile"
+).read_text()
 
 
 class CaddyStatePreparationTests(unittest.TestCase):
@@ -78,6 +81,21 @@ class CaddyStatePreparationTests(unittest.TestCase):
             "/run/secrets/cf-api-token:ro,Z",
             QUADLET,
         )
+
+    def test_quadlet_uses_selected_krun_resources_and_non_loopback_dns(self):
+        self.assertIn("PodmanArgs=--runtime=krun", QUADLET)
+        self.assertIn("Annotation=krun.cpus=2", QUADLET)
+        self.assertIn("Annotation=krun.ram_mib=512", QUADLET)
+        self.assertIn("StopSignal=SIGINT", QUADLET)
+        self.assertIn("Network=host", QUADLET)
+        self.assertIn("DNS=100.100.100.100", QUADLET)
+        self.assertIn("DNS=75.75.75.75", QUADLET)
+        self.assertIn("DNS=75.75.76.76", QUADLET)
+        self.assertNotIn("DNS=127.", QUADLET)
+
+    def test_caddyfile_disables_http3_for_direct_tsi(self):
+        self.assertIn("servers {\n\t\tprotocols h1 h2\n\t}", CADDYFILE)
+        self.assertNotIn("protocols h1 h2 h3", CADDYFILE)
 
 
 if __name__ == "__main__":

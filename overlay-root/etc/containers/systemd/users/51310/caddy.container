@@ -6,7 +6,14 @@ Documentation=https://caddyserver.com/docs/
 [Container]
 ContainerName=caddy
 Image=ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:78331c4abc23f4f3f39675745af20b06d9aae97ae244772414e7933c8c1ab054
+PodmanArgs=--runtime=krun
+Annotation=krun.cpus=2
+Annotation=krun.ram_mib=512
+StopSignal=SIGINT
 Network=host
+DNS=100.100.100.100
+DNS=75.75.75.75
+DNS=75.75.76.76
 User=0
 
 # Image-controlled configuration (read-only)

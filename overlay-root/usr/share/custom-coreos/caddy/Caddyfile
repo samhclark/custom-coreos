@@ -6,6 +6,12 @@
 		per_host
 	}
 
+	# Direct libkrun TSI supports incoming TCP but not a guest UDP listener.
+	# Keep HTTP/1.1 and HTTP/2; HTTP/3 can be reconsidered if that changes.
+	servers {
+		protocols h1 h2
+	}
+
 	# Let's Encrypt Staging Endpoint, for testing
 	#acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
