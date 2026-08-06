@@ -38,7 +38,7 @@ These are considered active and in use on the real machine unless explicitly sta
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services; rootless under `etc/containers/systemd/users/51310/`, deployed and validated under libkrun with direct TSI TCP
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
-- `jellyfin.container` - media library and streaming server; rootless under `etc/containers/systemd/users/51120/`, image-defined and awaiting production validation
+- `jellyfin.container` - media library and streaming server; rootless under `etc/containers/systemd/users/51120/`, deployed under libkrun with software media processing while VM-isolated hardware transcoding remains under investigation
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
 - `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/`, deployed and validated on the NAS
@@ -246,6 +246,7 @@ Images include labels for future deduplication:
 - `docs/rootless-caddy-preflight.md` - Completed first-stage validation and phase-two handoff for Caddy's rootless identity, runtime secret, low-port policy, persistent state, and guarded cutover
 - `docs/plan-libkrun-quadlets.md` - Working phased plan and cross-session evidence log for evaluating libkrun one rootless service at a time
 - `docs/jellyfin-checklist.md` - First-deployment validation for Jellyfin storage, rootless libkrun runtime, health, and Caddy routing
+- `docs/plan-jellyfin-libkrun-hardware-transcoding.md` - Current evidence and decision log for preserving a VM boundary while pursuing Intel hardware transcoding
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
@@ -276,7 +277,7 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets; Jellyfin is image-defined and awaits production validation
+- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, Garage, and Jellyfin are deployed as rootless admin-managed user Quadlets; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work
 - All eight image-defined rootless services run under libkrun with explicit CPU and RAM annotations plus `StopSignal=SIGINT`
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
@@ -297,6 +298,7 @@ Useful reference points for future rootless work:
 - Caddy's two small persistent state trees are created, labeled, and fully verified by `prepare-caddy-state.service`; its user Quadlet waits for that service's current-boot readiness marker
 - Caddy uses direct libkrun TSI with 2 vCPUs and 512 MiB. It serves HTTP/1.1 and HTTP/2 only because TSI cannot host the UDP listener required by HTTP/3; retain `net.ipv4.ip_unprivileged_port_start=80`. The current krun handler also lacks `podman exec`, so Caddy configuration changes use service restarts. Rootless crun with root-owned TCP/UDP sockets remains the documented fallback.
 - Jellyfin uses a 4-vCPU, 4-GiB libkrun guest with loopback-only TCP 8096 behind Caddy. The initial deployment deliberately omits `/dev/dri` hardware acceleration and UDP discovery; `/var/zfs/tank/videos/{movies,tv-shows}` is mounted read-only without Podman `:z`/`:Z` relabeling.
+- Ordinary rootless crun with direct `/dev/dri/renderD128` proved that the host, Jellyfin image, permissions, and Intel media stack can expose VA-API codecs, but it is not an acceptable production fallback for this deployment because it removes the required VM boundary around Jellyfin and its plugins.
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance

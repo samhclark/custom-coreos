@@ -1,0 +1,4 @@
+{
+  "kernel_path": "/usr/lib/jellyfin-krun/vmlinux",
+  "kernel_format": 1
+}

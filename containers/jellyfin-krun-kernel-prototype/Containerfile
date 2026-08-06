@@ -1,0 +1,70 @@
+# ABOUTME: Builds a disposable Fedora probe with an image-contained Linux
+# 6.18 kernel for testing Intel DRM native context under libkrun.
+
+ARG FEDORA_VERSION=44
+ARG KERNEL_VERSION=6.18.42
+ARG KERNEL_SHA256=35a8ef5e8fb44467e56a42b40c23c4c10a61d1e95ff8d738f285230e8bed63e7
+ARG LIBKRUNFW_VERSION=5.5.0
+ARG LIBKRUNFW_CONFIG_SHA256=ceb2ccebaf279b302f3e2c52b66dc350025d982e23ba653da911188d46f3ba35
+
+FROM quay.io/fedora/fedora:${FEDORA_VERSION} AS kernel-builder
+
+ARG KERNEL_VERSION
+ARG KERNEL_SHA256
+ARG LIBKRUNFW_VERSION
+ARG LIBKRUNFW_CONFIG_SHA256
+
+RUN dnf install --assumeyes --setopt=install_weak_deps=False \
+        bc \
+        binutils \
+        bison \
+        curl \
+        dwarves \
+        elfutils-libelf-devel \
+        findutils \
+        flex \
+        gcc \
+        make \
+        openssl-devel \
+        perl \
+        tar \
+        xz \
+    && dnf clean all
+
+WORKDIR /build
+
+RUN curl --fail --location --show-error --silent \
+        "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-${KERNEL_VERSION}.tar.xz" \
+        --output linux.tar.xz \
+    && echo "${KERNEL_SHA256}  linux.tar.xz" | sha256sum --check - \
+    && curl --fail --location --show-error --silent \
+        "https://raw.githubusercontent.com/containers/libkrunfw/v${LIBKRUNFW_VERSION}/config-libkrunfw_x86_64" \
+        --output config-libkrunfw_x86_64 \
+    && echo "${LIBKRUNFW_CONFIG_SHA256}  config-libkrunfw_x86_64" \
+        | sha256sum --check - \
+    && tar --extract --xz --file linux.tar.xz \
+    && cp config-libkrunfw_x86_64 "linux-${KERNEL_VERSION}/.config" \
+    && make --directory="linux-${KERNEL_VERSION}" olddefconfig \
+    && make --directory="linux-${KERNEL_VERSION}" --jobs="$(nproc)" vmlinux
+
+FROM quay.io/fedora/fedora:${FEDORA_VERSION}
+
+ARG KERNEL_VERSION
+
+RUN dnf install --assumeyes --setopt=install_weak_deps=False \
+        libva-utils \
+        mesa-dri-drivers \
+        pciutils \
+        virglrenderer \
+    && dnf clean all
+
+COPY --from=kernel-builder \
+    /build/linux-${KERNEL_VERSION}/vmlinux \
+    /usr/lib/jellyfin-krun/vmlinux
+COPY --from=kernel-builder \
+    /build/linux-${KERNEL_VERSION}/.config \
+    /usr/lib/jellyfin-krun/config-${KERNEL_VERSION}
+COPY krun_vm.json /.krun_vm.json
+COPY probe.sh /usr/local/bin/jellyfin-krun-kernel-probe
+
+ENTRYPOINT ["/usr/local/bin/jellyfin-krun-kernel-probe"]
