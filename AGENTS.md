@@ -36,7 +36,7 @@ This repo is not just "CoreOS with ZFS". It currently defines a full single-node
 
 These are considered active and in use on the real machine unless explicitly stated otherwise:
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
-- `caddy.container` - reverse proxy / TLS termination for the user-facing services; rootless under `etc/containers/systemd/users/51310/`, deployed and validated on the NAS
+- `caddy.container` - reverse proxy / TLS termination for the user-facing services; rootless under `etc/containers/systemd/users/51310/`, deployed and validated under libkrun with direct TSI TCP
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
@@ -273,6 +273,7 @@ Images include labels for future deduplication:
 
 Current state:
 - Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets
+- All seven active rootless services run under libkrun with explicit CPU and RAM annotations plus `StopSignal=SIGINT`
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
@@ -290,6 +291,7 @@ Useful reference points for future rootless work:
 - VictoriaMetrics' scrape config lives under `/usr/share/custom-coreos/victoria-metrics/`; `zfs-create-victoria-metrics-dataset.service` creates, tunes, and verifies its large ZFS data path
 - Garage's config lives under `/usr/share/custom-coreos/garage/`; `zfs-create-garage-datasets.service` creates and tunes both ZFS datasets, checks only roots and bounded samples during normal boots, and reserves recursive work for explicit repair or an interrupted repair. To request a full ownership and SELinux repair, stop the rootless Garage service, create `/var/lib/nas-repairs/garage/repair-required`, and restart the preparation service.
 - Caddy's two small persistent state trees are created, labeled, and fully verified by `prepare-caddy-state.service`; its user Quadlet waits for that service's current-boot readiness marker
+- Caddy uses direct libkrun TSI with 2 vCPUs and 512 MiB. It serves HTTP/1.1 and HTTP/2 only because TSI cannot host the UDP listener required by HTTP/3; retain `net.ipv4.ip_unprivileged_port_start=80`. The current krun handler also lacks `podman exec`, so Caddy configuration changes use service restarts. Rootless crun with root-owned TCP/UDP sockets remains the documented fallback.
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance

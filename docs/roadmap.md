@@ -29,12 +29,11 @@ maintaining it.
    the distributor.
 
 4. **Caddy uses the validated rootless low-port policy.**
-   `_nas_caddy` binds TCP and UDP low ports with
+   `_nas_caddy` binds TCP low ports with
    `net.ipv4.ip_unprivileged_port_start=80`; its persistent state is maintained
-   by a steady-state host preparation service. Direct krun/TSI is selected for
-   its next runtime, with HTTP/3 intentionally disabled and this low-port
-   policy retained. The repo implementation is committed locally but not yet
-   deployed; production Caddy remains on ordinary rootless crun.
+   by a steady-state host preparation service. Direct krun/TSI is deployed and
+   validated with HTTP/3 intentionally disabled and this low-port policy
+   retained. Rootless crun with root-owned TCP/UDP sockets is the fallback.
 
 5. **Service UIDs are allocate-only.** Never reuse a retired UID; numeric
    file ownership (especially in ZFS snapshots) outlives the user. Scheme
@@ -80,15 +79,14 @@ maintaining it.
       guarded phase-two cutover was deployed and validated, the stopped
       rootful container and legacy files were removed, and the unused shell
       secret-driver stack was retired.
-- [ ] **3. Implement the selected Caddy krun/TSI conversion.** Use the existing
-      rootless user-Quadlet path with 2 vCPUs, 512 MiB, SIGINT shutdown, and
-      HTTP/1.1 plus HTTP/2 only. Retain the low-port sysctl and host-loopback
-      reverse proxies; do not rely on `podman exec`. Validate secrets, ACME and
-      certificate reuse, all routes, metrics, client addresses, reboot, and
-      restart behavior using `docs/plan-libkrun-quadlets.md`. This decision was
-      locked on 2026-08-05. The repo changes and focused tests are prepared;
-      the full image build passes, and deployment plus NAS validation remain
-      before completion.
+- [x] **3. Implement the selected Caddy krun/TSI conversion.** Done 2026-08-05:
+      used the existing rootless user-Quadlet path with 2 vCPUs, 512 MiB,
+      SIGINT shutdown, and HTTP/1.1 plus HTTP/2 only. The low-port sysctl and
+      host-loopback reverse proxies remain; operations do not rely on
+      `podman exec`. The build, bootc deployment boot, krun runtime,
+      resources, TCP-only listener topology, all routes, metrics, secret/state
+      contracts, exact state preservation, bounded recovery, and clean SIGINT
+      shutdown all passed production validation.
 - [ ] **4. Add Renovate** with a custom regex manager for image references
       in `quadlets/*.toml`, plus the `FROM ghcr.io/getsops/sops:` pin in the
       Containerfile. Converge every

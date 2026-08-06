@@ -918,10 +918,15 @@ subid-start = 123450000    # First subordinate ID
 enabled = true             # false reserves identity/secrets without emitting a Quadlet
 image = "string"            # Full image reference
 network = "string"          # "host" or omit for default
+dns = ["192.0.2.53"]        # Explicit non-loopback resolver IPs (optional)
 container-user = 0          # User= inside container (optional)
-pull = "string"             # "newer" or "always" (default: "newer")
-auto-update = "string"      # "registry" (optional)
 exec = "string"             # Exec= args (optional)
+
+# Optional: libkrun microVM runtime and explicit resources
+[krun]
+enabled = true              # false permits no other keys and emits no runtime settings
+cpus = 1                    # Positive integer
+ram-mib = 128               # Integer; minimum 128 MiB
 
 # Optional: environment variables
 [container.environment]
@@ -973,6 +978,13 @@ exposing a service on every interface. They cannot be combined with
 below the host's `net.ipv4.ip_unprivileged_port_start` require an explicit host
 policy decision. Port ranges, dynamic host ports, and non-TCP protocols are
 deferred until a service requires them.
+
+When `[krun].enabled = true`, the generator emits `--runtime=krun`, CPU and
+RAM annotations, and `StopSignal=SIGINT`. A host-network krun service must not
+use a loopback DNS server because the guest cannot reach the host's
+loopback-only resolver stub. Passt is intentionally not part of the shared
+schema. Legacy `pull` and `auto-update` keys are rejected; image references
+must include both a tag and a SHA-256 digest.
 
 **Conventions baked into the generator** (not configurable per service):
 - `subid-count` is always `65536`

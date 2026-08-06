@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 through 7 are complete; the selected Caddy krun/TSI conversion is implemented and committed locally, with deployment and production validation pending |
-| Last completed work | 2026-08-05: enabled krun for Caddy with 2 vCPUs, 512 MiB, non-loopback DNS, and HTTP/1.1 plus HTTP/2 only; generation, unit tests, diff checks, pinned-Caddy adaptation, and the full image build passed |
-| Current phase | Phase 8 implementation and local verification committed; push, deployment, and NAS validation pending |
-| Next concrete action | Push the Caddy conversion for normal deployment, then run the Caddy completion gates after the changed image reaches the NAS |
-| Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage (all validated) |
-| Known production exceptions | Caddy's selected krun/TSI design intentionally disables HTTP/3, retains `net.ipv4.ip_unprivileged_port_start=80`, and uses restart-based operation because the krun handler lacks `podman exec`; the implementation is not deployed yet |
-| Last NAS validation | 2026-08-04: both passt test units became `LoadState=not-found`, NAS TCP/UDP listener counts on 19445 were zero, and no leftover container was reported |
+| Overall status | Phases 2 through 9 are complete; all seven active rootless Quadlets are deployed and validated under libkrun |
+| Last completed work | 2026-08-05: finalized steady-state topology, Caddy exceptions, generator schema, roadmap status, and evidence; regeneration and all 38 unit tests passed |
+| Current phase | Migration complete; steady state |
+| Next concrete action | Push the final documentation commit; no NAS action is pending, and the next unrelated roadmap item is hosted Renovate onboarding |
+| Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage; Caddy (all validated) |
+| Known production exceptions | Caddy intentionally disables HTTP/3 under direct TSI, retains `net.ipv4.ip_unprivileged_port_start=80`, and uses restart-based operation because the krun handler lacks `podman exec`; rootless crun with root-owned TCP/UDP sockets remains its fallback |
+| Last NAS validation | 2026-08-05: Caddy restart shutdown logged SIGINT and exit code 0, exact persistent state survived, and the replacement recovered healthy under krun; the earlier bootc deployment boot had already exercised full-machine startup |
 
 ## Outcome
 
@@ -45,12 +45,13 @@ desired end state is:
 5. Caddy gets its own networking and socket-activation decision rather than
    forcing the rest of the migration to wait.
 
-## Selected Caddy Design (Implementation Pending Deployment)
+## Selected Caddy Design (Deployed and Validated)
 
-On 2026-08-05, the operator selected direct krun/TSI for Caddy and the repo
-implementation was prepared later that day. This is not a claim about the
-current deployment; production Caddy remains on ordinary rootless crun until
-the changed image is deployed and validated.
+On 2026-08-05, the operator selected direct krun/TSI for Caddy, deployed it,
+and completed production validation. The bootc deployment boot exercised
+full-machine startup; focused follow-up proved runtime/resources, listeners,
+all routes, metrics, secret and state contracts, exact state preservation,
+bounded restart recovery, and clean SIGINT shutdown.
 
 The implementation contract is:
 
@@ -65,7 +66,8 @@ The implementation contract is:
 - use service restarts for image-controlled configuration changes and do not
   rely on `podman exec`, which the current krun handler does not support
 - preserve the existing Cloudflare secret, ACME/certificate state, config
-  state, metrics, client-address behavior, and all reverse-proxy routes
+  state, metrics, and all reverse-proxy routes; evaluate client source
+  addresses when a configuration actually depends on them
 
 Rootless crun with root-owned TCP/UDP system sockets remains the documented
 fallback if a later regression blocks krun. Passt is rejected for the current
@@ -740,14 +742,14 @@ security and maintenance tradeoff, then remove unused experiments.
 
 | Design | Proven behavior | Main cost | Status |
 | --- | --- | --- | --- |
-| krun with direct TSI TCP | HTTP/2, loopback bind, host-loopback reverse proxy, TLS state reuse, clean restart, DNS, and Let's Encrypt HTTPS egress | No guest UDP listener, so disable HTTP/3; direct low ports retain the current unprivileged-port sysctl | **Selected; implementation deferred** |
+| krun with direct TSI TCP | HTTP/2, loopback bind, host-loopback reverse proxy, TLS state reuse, clean restart, DNS, and Let's Encrypt HTTPS egress | No guest UDP listener, so disable HTTP/3; direct low ports retain the current unprivileged-port sysctl | **Selected, deployed, and validated** |
 | Rootless crun with root-owned system sockets | Inherited TCP and UDP, HTTP/2, QUIC with `h3`, rootless Podman, and system-owned listeners | Caddy is the production runtime exception and needs a hand-written system service rather than the user-Quadlet path | Valid fallback, not selected |
 | krun with passt | HTTP/2, QUIC with `h3`, guest-to-host gateway reverse proxy, state, and restart | Current crun hardcodes all TCP/UDP mappings; passt eagerly reserved every tested free backend/admin TCP port, creating fragile cross-user-manager startup ordering | Rejected for the current stack |
 | krun with direct TSI TCP plus root nftables redirect | Components are individually plausible but the combined path has not been tested | Disables HTTP/3 and adds root-managed redirect policy, but could remove the unprivileged-port sysctl while retaining krun | Not selected; revisit only with new requirements |
 
-The current production design—rootless crun with direct host-network binds—is
-also valid as the lowest-change fallback, but it retains both the low-port
-sysctl and the absence of a microVM boundary.
+The former production design—rootless crun with direct host-network binds—
+remains the lowest-change fallback, but it retains both the low-port sysctl
+and the absence of a microVM boundary.
 
 ### Caddy completion gates
 
@@ -762,8 +764,14 @@ Whichever design wins must preserve:
 - Caddy metrics
 - reboot and reload behavior
 
-Only remove `90-custom-coreos-rootless-ports.conf` after the selected design
-has been rebooted and validated without it.
+The current Caddyfile has no source-IP matchers, trusted-proxy policy, rate
+limits, or access-log contract, so client source addresses are not an
+operational dependency in this deployment. A future source-IP-dependent policy
+must validate TSI behavior before relying on it.
+
+Retain `90-custom-coreos-rootless-ports.conf` for the selected direct-low-port
+design. Remove it only after selecting and validating a different listener or
+redirect design that does not require unprivileged TCP 80/443.
 
 ## Phase 9: Cleanup and Steady State
 
@@ -781,6 +789,14 @@ After the final service decision:
 
 Do not delete the session log. It is the evidence explaining why some services
 may intentionally remain on crun.
+
+Completion result (2026-08-05): every disposable Phase 8 unit/container was
+removed during its experiment and no passt, proxy, socket, or redirect
+experiment entered the repository. `AGENTS.md`, `docs/roadmap.md`, and the
+generator schema now describe the validated steady state and Caddy exceptions.
+Quadlet regeneration, all 38 unit tests, ShellCheck for the operator handoff,
+and `git diff --check` pass. The implementation image build passed before
+deployment, and the bootc deployment plus NAS evidence validated production.
 
 ## Session Log
 
@@ -911,6 +927,17 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-04 | Phase 8 passt cleanup | Removed the complete isolated passt experiment without touching production | Both disposable system units reported `LoadState=not-found`, NAS TCP and UDP listener counts on 19445 were zero, and the empty filtered Podman output confirmed no leftover container. | Choose between the two serious finalists, or request the optional krun/TSI plus nftables spike |
 | 2026-08-05 | Phase 8 Caddy decision | Locked in direct krun/TSI as the implementation path and explicitly deferred code changes | No NAS or runtime state changed. Production Caddy remains on ordinary rootless crun. The selected future design uses 2 vCPUs, 512 MiB, HTTP/1.1 and HTTP/2 only, the existing low-port sysctl, persistent state, and restart-based operation without `podman exec`. | Commit documentation only; implement and validate Caddy in a later session |
 | 2026-08-05 | Phase 8 Caddy implementation | Enabled Caddy's generated Quadlet for krun with 2 vCPUs, 512 MiB, SIGINT, and explicit non-loopback DNS; limited the Caddyfile to HTTP/1.1 and HTTP/2; added focused regression coverage | No NAS action. Generation, all 38 unit tests, `git diff --check`, adaptation by the exact pinned Caddy binary, and the operator-run full image build passed. | Push for normal deployment, then execute the Caddy completion gates |
+| 2026-08-05 | Phase 8 Caddy deployment | Recorded the deployed image and first functional evidence; prepared the runtime/resource proof command | Operator reports the changed image is deployed and `visualize.i.samhclark.com` still loads Grafana through Caddy. Runtime and remaining gates have not yet been checked. | Prove the active user service, krun runtime, and selected CPU/RAM annotations |
+| 2026-08-05 | Phase 8 Caddy runtime proof | Recorded the deployed runtime, resources, and healthy user-service state | Caddy reported active/running with `Result=success`; Podman reported `runtime=krun status=running cpus=2 ram_mib=512` | Verify TCP 80/443 listeners and the intentional absence of UDP 443 |
+| 2026-08-05 | Phase 8 Caddy listener proof | Recorded the selected direct-TSI network surface | `VM:nas` owned wildcard TCP listeners on ports 80 and 443; UDP 443 had no listener, as expected with HTTP/3 disabled | Verify the redirect, HTTP/2 reverse-proxy routes, and local Caddy metrics |
+| 2026-08-05 | Phase 8 Caddy route and metrics proof | Verified the redirect, three known reverse proxies, negotiated protocol, and local metrics | HTTP redirected with 308 to HTTPS. Garage, VictoriaMetrics, and Grafana each returned HTTP/2 200. Caddy metrics returned a live admin request counter; the subsequent curl 23 was only the expected early pipe close from `grep -m1`. | Verify the Cloudflare runtime secret and preserved ACME, certificate, and config state |
+| 2026-08-05 | Phase 8 Caddy secret and state proof | Verified the runtime-secret and persistent-state host contracts without exposing contents | The token remained `_nas_caddy:_nas_caddy` mode 0400, readable by `_nas_caddy`, and privately MCS-labeled. Both state roots remained `_nas_caddy:_nas_caddy` mode 0750 with `container_file_t:s0`. ACME, certificate, and config trees contained 4, 18, and 1 files. | Verify the S3 route reaches Garage, then prepare the restart preservation proof |
+| 2026-08-05 | Phase 8 Caddy S3 route proof | Verified the remaining configured reverse-proxy route without using credentials | The S3 endpoint returned the expected unauthenticated HTTP 403 over HTTP/2 from tailnet address `100.86.242.118:443`, proving the request crossed Caddy to Garage | Capture an aggregate persistent-state fingerprint before the separate restart action |
+| 2026-08-05 | Phase 8 Caddy pre-restart state | Captured a content-only aggregate fingerprint without exposing file names or contents | The combined persistent-state fingerprint was `5eb58091e9a3f15681e9cee47aafb71ca190c91fb89b3008834457c928c41f3f` | Restart only Caddy, prove bounded recovery, compare the fingerprint, and inspect the focused journal |
+| 2026-08-05 | Phase 8 Caddy restart recovery | Restarted only the rootless Caddy user service and compared exact state | Recovery completed within 30 seconds; service and krun container were active/running/successful; the state fingerprint remained exactly `5eb58091e9a3f15681e9cee47aafb71ca190c91fb89b3008834457c928c41f3f`. Startup logged 2 CPUs, a 487091404-byte Go memory limit, and h1/h2 on `srv0`. The tailed journal began after shutdown evidence. | Recover the preceding focused shutdown lines and confirm SIGINT clean exit |
+| 2026-08-05 | Phase 8 Caddy clean shutdown | Closed the missing half of the restart evidence | Caddy received SIGINT, logged `shutdown complete` with exit code 0, and stopped its HTTP/admin servers; Podman reported the old container died and was removed before systemd marked the service stopped | Reboot the NAS when convenient, then run a separate post-boot recovery check |
+| 2026-08-05 | Phase 8 completion | Counted the bootc deployment boot as the full-boot gate and closed the service phase | The changed image-managed Quadlet could only become active after booting the deployment. Subsequent evidence proved krun/resources, TCP-only listeners, all routes, metrics, secret/state contracts, exact state preservation, recovery, and clean shutdown. The current Caddyfile has no operational source-IP policy. | Begin Phase 9 steady-state documentation and final repository verification; no NAS command is pending |
+| 2026-08-05 | Phase 9 completion | Finalized topology, exceptions, schema, roadmap, and evidence; regenerated outputs and ran all 38 tests | No NAS action. Disposable experiments were already removed, the implementation build/deployment passed, and production validation is complete. | Commit and push the final documentation; return to ordinary roadmap work |
 
 ## Session Note Template
 
