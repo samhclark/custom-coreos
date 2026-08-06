@@ -87,16 +87,15 @@ maintaining it.
       resources, TCP-only listener topology, all routes, metrics, secret/state
       contracts, exact state preservation, bounded recovery, and clean SIGINT
       shutdown all passed production validation.
-- [ ] **4. Add Renovate** with a custom regex manager for image references
-      in `quadlets/*.toml`, plus the `FROM ghcr.io/getsops/sops:` pin in the
-      Containerfile. Converge every
-      service on pinned tags/digests; drop the inert
-      `AutoUpdate=`/`Pull=newer` mix. Matters more with every service added.
-      Repository-side configuration was completed on 2026-07-25. Install the
-      hosted Renovate GitHub App on this repository and validate its onboarding
-      PR before marking this item done. Renovate updates the source TOMLs;
-      maintainers run `python3 generate-quadlets.py` and commit the generated
-      outputs before merging its container-image PRs.
+- [x] **4. Add Renovate.** Done 2026-08-05: the hosted app is active and has
+      opened working GitHub Actions, Grafana, and grouped VictoriaMetrics
+      updates. Custom regex managers cover `quadlets/*.toml` and the SOPS build
+      stage; image references use pinned tags and digests. Major, minor, and
+      patch PRs wait for a three-day minimum release age where the datasource
+      supplies timestamps. Missing timestamps remain eligible so GHCR/Quay
+      dependencies do not become permanently blocked. Renovate updates source
+      TOMLs; maintainers regenerate and commit `overlay-root/` before merging
+      container-image PRs.
 - [ ] **5. New services** (the actual goal): immich, jellyfin,
       audiobookshelf, *arr — each is one TOML + UID + Containerfile enable
       line + SOPS values + Caddy vhost, per the pipeline below.

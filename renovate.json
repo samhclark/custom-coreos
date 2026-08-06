@@ -37,6 +37,18 @@
   ],
   "packageRules": [
     {
+      "description": "Wait three days before proposing version updates",
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "minimumReleaseAge": "3 days",
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "prCreation": "not-pending",
+      "internalChecksFilter": "strict"
+    },
+    {
       "description": "Remind maintainers to refresh committed Quadlet outputs",
       "matchManagers": [
         "custom.regex"
