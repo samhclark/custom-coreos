@@ -38,6 +38,7 @@ These are considered active and in use on the real machine unless explicitly sta
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services; rootless under `etc/containers/systemd/users/51310/`, deployed and validated under libkrun with direct TSI TCP
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
+- `jellyfin.container` - media library and streaming server; rootless under `etc/containers/systemd/users/51120/`, image-defined and awaiting production validation
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
 - `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/`, deployed and validated on the NAS
@@ -50,6 +51,7 @@ Important non-container units:
 - `prepare-caddy-state.service` - creates and verifies Caddy's two persistent state trees and publishes current-boot readiness
 - `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
 - `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
+- `zfs-prepare-jellyfin-storage.service` - creates Jellyfin config/cache datasets and verifies read-only access plus persistent SELinux labeling for `tank/videos`
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
 - `zfs-health-check.timer` - periodic pool health checks
 - `zfs-snapshots-*@.timer` - rolling snapshot retention for selected datasets
@@ -65,6 +67,7 @@ Important non-container units:
 - The main data pool is expected to be `tank`
 - Garage datasets live under `tank/garage/{meta,data}`
 - VictoriaMetrics data lives under `tank/victoria-metrics/data`
+- Jellyfin state lives under `tank/jellyfin/{config,cache}`; `tank/videos` is mounted at `/var/zfs/tank/videos`, with `movies` and `tv-shows` exposed read-only to Jellyfin
 - Large ZFS-backed container data paths are labeled persistently with `semanage fcontext` + `restorecon -F -R`; do not casually switch them to Podman `:Z` / `:z`
 
 ### Secrets Model
@@ -242,6 +245,7 @@ Images include labels for future deduplication:
 - `docs/rootless-garage-checklist.md` - Post-boot validation and rollback steps for the Garage rootless, ZFS ownership, and runtime-secret migration
 - `docs/rootless-caddy-preflight.md` - Completed first-stage validation and phase-two handoff for Caddy's rootless identity, runtime secret, low-port policy, persistent state, and guarded cutover
 - `docs/plan-libkrun-quadlets.md` - Working phased plan and cross-session evidence log for evaluating libkrun one rootless service at a time
+- `docs/jellyfin-checklist.md` - First-deployment validation for Jellyfin storage, rootless libkrun runtime, health, and Caddy routing
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
@@ -265,15 +269,15 @@ Images include labels for future deduplication:
 - Rootless service accounts should use namespaced host usernames such as `_nas_grafana` rather than upstream/vendor defaults like `grafana`
 - Reserve `51000-51999` for image-managed service accounts in this repo
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
-- Current allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_caddy` uses `51310`
+- Current allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_jellyfin` uses `51120`; `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_caddy` uses `51310`
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
 - UIDs are allocate-only: never reuse a UID from a retired service. File ownership is numeric and outlives the user — ZFS snapshots in particular can hand a retired UID's files to whatever service reuses it. `quadlets/*.toml` is the registry of active allocations; when the first service is actually retired, record its UID here as retired and add a `retired-uids` check to `generate-quadlets.py`.
 
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets
-- All seven active rootless services run under libkrun with explicit CPU and RAM annotations plus `StopSignal=SIGINT`
+- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, and Garage are deployed and validated as rootless admin-managed user Quadlets; Jellyfin is image-defined and awaits production validation
+- All eight image-defined rootless services run under libkrun with explicit CPU and RAM annotations plus `StopSignal=SIGINT`
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
@@ -292,6 +296,7 @@ Useful reference points for future rootless work:
 - Garage's config lives under `/usr/share/custom-coreos/garage/`; `zfs-create-garage-datasets.service` creates and tunes both ZFS datasets, checks only roots and bounded samples during normal boots, and reserves recursive work for explicit repair or an interrupted repair. To request a full ownership and SELinux repair, stop the rootless Garage service, create `/var/lib/nas-repairs/garage/repair-required`, and restart the preparation service.
 - Caddy's two small persistent state trees are created, labeled, and fully verified by `prepare-caddy-state.service`; its user Quadlet waits for that service's current-boot readiness marker
 - Caddy uses direct libkrun TSI with 2 vCPUs and 512 MiB. It serves HTTP/1.1 and HTTP/2 only because TSI cannot host the UDP listener required by HTTP/3; retain `net.ipv4.ip_unprivileged_port_start=80`. The current krun handler also lacks `podman exec`, so Caddy configuration changes use service restarts. Rootless crun with root-owned TCP/UDP sockets remains the documented fallback.
+- Jellyfin uses a 4-vCPU, 4-GiB libkrun guest with loopback-only TCP 8096 behind Caddy. The initial deployment deliberately omits `/dev/dri` hardware acceleration and UDP discovery; `/var/zfs/tank/videos/{movies,tv-shows}` is mounted read-only without Podman `:z`/`:Z` relabeling.
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 
 ## Build Performance

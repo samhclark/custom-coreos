@@ -96,8 +96,9 @@ maintaining it.
       dependencies do not become permanently blocked. Renovate updates source
       TOMLs; maintainers regenerate and commit `overlay-root/` before merging
       container-image PRs.
-- [ ] **5. New services** (the actual goal): immich, jellyfin,
-      audiobookshelf, *arr — each is one TOML + UID + Containerfile enable
+- [ ] **5. New services** (the actual goal): Jellyfin is image-defined and
+      awaiting production validation; immich, audiobookshelf, and *arr remain.
+      Each service starts with one TOML + UID + Containerfile enable
       line + SOPS values + Caddy vhost, per the pipeline below.
 - [ ] **6. Small cleanups**, opportunistically:
       - NAS-local cockpit residue (manual, one-time):

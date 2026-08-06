@@ -77,6 +77,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         ensure-nas-caddy-account.service \
         ensure-nas-garage-account.service \
         ensure-nas-grafana-account.service \
+        ensure-nas-jellyfin-account.service \
         ensure-nas-victoriametrics-account.service \
         ensure-nas-vmalert-account.service \
         bootc-fetch-apply-updates.timer \
@@ -86,6 +87,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         sops-distribute-secrets.service \
         zfs-create-garage-datasets.service \
         zfs-create-victoria-metrics-dataset.service \
+        zfs-prepare-jellyfin-storage.service \
         zfs-health-check.timer \
         zfs-scrub-monthly@tank.timer \
         zfs-snapshots-frequently@videos.timer \
