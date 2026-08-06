@@ -39,6 +39,7 @@ These are considered active and in use on the real machine unless explicitly sta
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services; rootless under `etc/containers/systemd/users/51310/`, deployed and validated under libkrun with direct TSI TCP
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
 - `jellyfin.container` - media library and streaming server; rootless under `etc/containers/systemd/users/51120/`, deployed under libkrun with software media processing while VM-isolated hardware transcoding remains under investigation
+- `jellyfin-exporter.container` - privacy-bounded Sessions API exporter for playback/transcode dashboards; rootless under `etc/containers/systemd/users/51260/`
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
 - `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/`, deployed and validated on the NAS
@@ -246,6 +247,7 @@ Images include labels for future deduplication:
 - `docs/rootless-caddy-preflight.md` - Completed first-stage validation and phase-two handoff for Caddy's rootless identity, runtime secret, low-port policy, persistent state, and guarded cutover
 - `docs/plan-libkrun-quadlets.md` - Working phased plan and cross-session evidence log for evaluating libkrun one rootless service at a time
 - `docs/jellyfin-checklist.md` - First-deployment validation for Jellyfin storage, rootless libkrun runtime, health, and Caddy routing
+- `docs/jellyfin-monitoring-checklist.md` - API-key bootstrap, privacy contract, rollout checks, and interpretation guidance for the Jellyfin playback dashboard
 - `docs/plan-jellyfin-libkrun-hardware-transcoding.md` - Current evidence and decision log for preserving a VM boundary while pursuing Intel hardware transcoding
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 - `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
@@ -270,7 +272,7 @@ Images include labels for future deduplication:
 - Rootless service accounts should use namespaced host usernames such as `_nas_grafana` rather than upstream/vendor defaults like `grafana`
 - Reserve `51000-51999` for image-managed service accounts in this repo
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
-- Current allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_jellyfin` uses `51120`; `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_caddy` uses `51310`
+- Current allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_jellyfin` uses `51120`; `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_jellyfinmetrics` uses `51260`; `_nas_caddy` uses `51310`
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
 - UIDs are allocate-only: never reuse a UID from a retired service. File ownership is numeric and outlives the user — ZFS snapshots in particular can hand a retired UID's files to whatever service reuses it. `quadlets/*.toml` is the registry of active allocations; when the first service is actually retired, record its UID here as retired and add a `retired-uids` check to `generate-quadlets.py`.
 
@@ -278,14 +280,14 @@ Images include labels for future deduplication:
 
 Current state:
 - Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, Garage, and Jellyfin are deployed as rootless admin-managed user Quadlets; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work
-- All eight image-defined rootless services run under libkrun with explicit CPU and RAM annotations plus `StopSignal=SIGINT`
+- All nine image-defined rootless services run under libkrun with explicit CPU and RAM annotations plus `StopSignal=SIGINT`
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
 - In practice, placing a user Quadlet under `/usr/share/containers/systemd/users/${UID}/` caused Fedora 43 with Podman 5.8.1 to generate a system unit in `system.slice`, because that path is still underneath the rootful `/usr/share/containers/systemd/` tree. Use `/etc/containers/systemd/users/${UID}/` for rootless service users in this repo.
 - `sysusers.d` configuration belongs in `/usr/lib/sysusers.d` for packaged/vendor config; it is not a `/var` payload
-- Rootless Podman expects subordinate ID ranges. This repo ships explicit ranges for all seven `_nas_*` service users in `/etc/subuid` and `/etc/subgid`
+- Rootless Podman expects subordinate ID ranges. This repo ships explicit ranges for every `_nas_*` service user in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - Do not use Podman `Secret=` for rootless services. Use per-service runtime files written by the root-owned SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only with `:ro,Z` (validated on the NAS 2026-07-03: rootless Podman can relabel `/run` tmpfs files to `container_file_t`; unrelabeled `var_run_t` files are blocked by SELinux).
 - linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
@@ -298,6 +300,7 @@ Useful reference points for future rootless work:
 - Caddy's two small persistent state trees are created, labeled, and fully verified by `prepare-caddy-state.service`; its user Quadlet waits for that service's current-boot readiness marker
 - Caddy uses direct libkrun TSI with 2 vCPUs and 512 MiB. It serves HTTP/1.1 and HTTP/2 only because TSI cannot host the UDP listener required by HTTP/3; retain `net.ipv4.ip_unprivileged_port_start=80`. The current krun handler also lacks `podman exec`, so Caddy configuration changes use service restarts. Rootless crun with root-owned TCP/UDP sockets remains the documented fallback.
 - Jellyfin uses a 4-vCPU, 4-GiB libkrun guest with loopback-only TCP 8096 behind Caddy. The initial deployment deliberately omits `/dev/dri` hardware acceleration and UDP discovery; `/var/zfs/tank/videos/{movies,tv-shows}` is mounted read-only without Podman `:z`/`:Z` relabeling.
+- The Jellyfin exporter polls the authenticated local `/Sessions` API and exposes only loopback Prometheus metrics on TCP 9594. It intentionally omits usernames and remote addresses; current titles remain metric labels because immediate playback diagnosis is the feature's purpose.
 - Ordinary rootless crun with direct `/dev/dri/renderD128` proved that the host, Jellyfin image, permissions, and Intel media stack can expose VA-API codecs, but it is not an acceptable production fallback for this deployment because it removes the required VM boundary around Jellyfin and its plugins.
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`
 

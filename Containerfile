@@ -78,6 +78,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         ensure-nas-garage-account.service \
         ensure-nas-grafana-account.service \
         ensure-nas-jellyfin-account.service \
+        ensure-nas-jellyfinmetrics-account.service \
         ensure-nas-victoriametrics-account.service \
         ensure-nas-vmalert-account.service \
         bootc-fetch-apply-updates.timer \
@@ -109,10 +110,11 @@ RUN /bin/bash -c 'set -euo pipefail; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/caddy(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/garage(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
+    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/jellyfin-exporter(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/victoria-metrics(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/vmalert(/.*)?"; \
     semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R /usr/share/custom-coreos/alertmanager /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/caddy /usr/share/custom-coreos/garage /usr/share/custom-coreos/grafana /usr/share/custom-coreos/victoria-metrics /usr/share/custom-coreos/vmalert'
+    restorecon -F -R /usr/share/custom-coreos/alertmanager /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/caddy /usr/share/custom-coreos/garage /usr/share/custom-coreos/grafana /usr/share/custom-coreos/jellyfin-exporter /usr/share/custom-coreos/victoria-metrics /usr/share/custom-coreos/vmalert'
 
 RUN ["bootc", "container", "lint"]
 

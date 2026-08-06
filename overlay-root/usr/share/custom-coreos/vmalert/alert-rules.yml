@@ -49,6 +49,15 @@ groups:
           summary: "jellyfin health probe is broken"
           description: "VictoriaMetrics cannot scrape the blackbox exporter probe for Jellyfin. This is a monitoring failure, not proof that Jellyfin itself is down."
 
+      - alert: JellyfinPlaybackExporterBroken
+        expr: absent(up{job="jellyfin-exporter"}) or up{job="jellyfin-exporter"} == 0 or jellyfin_exporter_up{job="jellyfin-exporter"} == 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "jellyfin playback telemetry is unavailable"
+          description: "The Jellyfin Sessions API exporter has been unreachable or unable to authenticate for 15 minutes. Jellyfin health is monitored separately."
+
   - name: filesystem-health
     rules:
       - alert: RootFilesystemFull

@@ -16,6 +16,9 @@ SCRAPE_CONFIG = (
 ALERT_RULES = (
     REPO / "overlay-root/usr/share/custom-coreos/vmalert/alert-rules.yml"
 ).read_text()
+DASHBOARD = (
+    REPO / "overlay-root/usr/share/custom-coreos/grafana/dashboards/jellyfin.json"
+).read_text()
 
 
 class JellyfinIntegrationTests(unittest.TestCase):
@@ -43,6 +46,19 @@ class JellyfinIntegrationTests(unittest.TestCase):
         )
         self.assertIn("alert: JellyfinHealthProbeBroken", ALERT_RULES)
         self.assertIn('up{job="jellyfin-health"} == 0', ALERT_RULES)
+
+    def test_victoria_metrics_scrapes_playback_exporter(self):
+        self.assertIn("job_name: 'jellyfin-exporter'", SCRAPE_CONFIG)
+        self.assertIn("targets: ['127.0.0.1:9594']", SCRAPE_CONFIG)
+
+    def test_playback_dashboard_contains_live_and_stall_diagnostics(self):
+        self.assertIn('"uid": "jellyfin-playback"', DASHBOARD)
+        self.assertIn("jellyfin_playback_info", DASHBOARD)
+        self.assertIn("jellyfin_transcode_speed_ratio", DASHBOARD)
+        self.assertIn("jellyfin_playback_position_seconds", DASHBOARD)
+        self.assertNotIn('{{username}}', DASHBOARD)
+        self.assertNotIn('"username":', DASHBOARD)
+        self.assertNotIn('"remote_endpoint":', DASHBOARD)
 
 
 if __name__ == "__main__":
