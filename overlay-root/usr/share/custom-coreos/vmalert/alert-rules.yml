@@ -5,7 +5,7 @@ groups:
   - name: service-health
     rules:
       - alert: ServiceDown
-        expr: up{job!~"garage|garage-health"} == 0
+        expr: up{job!~"garage|garage-health|jellyfin-health"} == 0
         for: 1h
         labels:
           severity: critical
@@ -30,6 +30,24 @@ groups:
         annotations:
           summary: "garage health probe is broken"
           description: "VictoriaMetrics cannot scrape the blackbox exporter probe for Garage. This is a monitoring failure, not proof that Garage itself is down."
+
+      - alert: JellyfinHealthDown
+        expr: probe_success{job="jellyfin-health",service="jellyfin"} == 0
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "jellyfin health endpoint is unreachable"
+          description: "Jellyfin health endpoint {{ $labels.instance }} is failing local HTTP probes. This alert fires after 1 hour of continuous failure."
+
+      - alert: JellyfinHealthProbeBroken
+        expr: up{job="jellyfin-health"} == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "jellyfin health probe is broken"
+          description: "VictoriaMetrics cannot scrape the blackbox exporter probe for Jellyfin. This is a monitoring failure, not proof that Jellyfin itself is down."
 
   - name: filesystem-health
     rules:

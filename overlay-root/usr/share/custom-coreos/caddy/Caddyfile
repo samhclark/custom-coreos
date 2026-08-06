@@ -38,3 +38,8 @@ metrics.i.samhclark.com {
 visualize.i.samhclark.com {
 	reverse_proxy 127.0.0.1:3000
 }
+
+# Jellyfin - media library and streaming
+jellyfin.i.samhclark.com {
+	reverse_proxy 127.0.0.1:8096
+}
