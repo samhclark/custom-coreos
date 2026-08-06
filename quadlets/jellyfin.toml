@@ -1,0 +1,62 @@
+# ABOUTME: Declarative config for the rootless Jellyfin Quadlet; persistent
+# state and read-only media access are prepared by the host ZFS unit.
+
+[service]
+name = "jellyfin"
+description = "Jellyfin Media Server"
+documentation = "https://jellyfin.org/docs/"
+
+[host]
+username = "_nas_jellyfin"
+uid = 51120
+subid-start = 511200000
+display-name = "Jellyfin"
+
+[container]
+image = "docker.io/jellyfin/jellyfin:10.11.11@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db"
+container-user = 0
+
+[container.environment]
+JELLYFIN_PublishedServerUrl = "https://jellyfin.i.samhclark.com"
+
+[krun]
+enabled = true
+cpus = 4
+ram-mib = 4096
+
+[[container.volumes]]
+comment = "Persistent configuration ZFS dataset; ownership and SELinux labels are prepared by the host unit"
+source = "/var/lib/jellyfin/config"
+target = "/config"
+
+[[container.volumes]]
+comment = "Persistent cache and transcoding ZFS dataset; ownership and SELinux labels are prepared by the host unit"
+source = "/var/lib/jellyfin/cache"
+target = "/cache"
+
+[[container.volumes]]
+comment = "Existing movies library; read-only access and SELinux labels are verified by the host unit"
+source = "/var/zfs/tank/videos/movies"
+target = "/media/movies"
+options = "ro"
+
+[[container.volumes]]
+comment = "Existing TV library; read-only access and SELinux labels are verified by the host unit"
+source = "/var/zfs/tank/videos/tv-shows"
+target = "/media/tv-shows"
+options = "ro"
+
+[[container.ports]]
+host = "127.0.0.1:8096"
+container = 8096
+
+[unit]
+timeout-start-sec = 3900
+
+[unit.extra]
+# A user service cannot order itself after the root ZFS preparation unit.
+# Wait for its current-boot marker and independently verify every mounted path.
+Service = [
+    '''ExecStartPre=/usr/bin/bash -lc 'for i in {1..1800}; do if /usr/bin/test -e /run/jellyfin-storage/ready && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/jellyfin/config 2>/dev/null)" == "tank/jellyfin/config" ]] && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/jellyfin/cache 2>/dev/null)" == "tank/jellyfin/cache" ]] && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/zfs/tank/videos 2>/dev/null)" == "tank/videos" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/jellyfin/config 2>/dev/null)" == "51120:51120" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/jellyfin/cache 2>/dev/null)" == "51120:51120" ]] && /usr/bin/test -w /var/lib/jellyfin/config && /usr/bin/test -w /var/lib/jellyfin/cache && /usr/bin/test -r /var/zfs/tank/videos/movies && /usr/bin/test -x /var/zfs/tank/videos/movies && /usr/bin/test -r /var/zfs/tank/videos/tv-shows && /usr/bin/test -x /var/zfs/tank/videos/tv-shows; then exit 0; fi; sleep 2; done; echo "Jellyfin storage was not ready within 3600 seconds" >&2; exit 1'''',
+    '''ExecStartPre=/usr/bin/bash -lc 'if /usr/bin/ss -H -ltn | /usr/bin/grep -Eq ":8096[[:space:]]"; then echo "Refusing to start while a process already listens on Jellyfin host port 8096" >&2; exit 1; fi'''',
+]
