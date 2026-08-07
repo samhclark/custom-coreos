@@ -97,6 +97,10 @@ class CaddyStatePreparationTests(unittest.TestCase):
         self.assertIn("PublishPort=0.0.0.0:443:443\n", QUADLET)
         self.assertIn("PublishPort=0.0.0.0:443:443/udp", QUADLET)
         self.assertIn("PublishPort=127.0.0.1:2019:2019", QUADLET)
+        self.assertIn(
+            "Sysctl=net.ipv4.ip_unprivileged_port_start=80",
+            QUADLET,
+        )
         self.assertIn("DNS=100.100.100.100", QUADLET)
         self.assertIn("DNS=75.75.75.75", QUADLET)
         self.assertIn("DNS=75.75.76.76", QUADLET)

@@ -116,6 +116,23 @@ def validate_dns(toml_name: str, container: dict) -> None:
         seen.add(server)
 
 
+def validate_sysctls(toml_name: str, container: dict) -> None:
+    sysctls = container.get("sysctls", [])
+    if not isinstance(sysctls, list):
+        die(f"{toml_name}: [container].sysctls must be an array of strings")
+
+    seen = set()
+    for index, setting in enumerate(sysctls, start=1):
+        field = f"[container].sysctls[{index}]"
+        if not isinstance(setting, str) or not re.fullmatch(
+            r"[A-Za-z0-9_.-]+=[^\s=]+", setting
+        ):
+            die(f'{toml_name}: {field} must use "name=value" format')
+        if setting in seen:
+            die(f"{toml_name}: duplicate sysctl {setting!r}")
+        seen.add(setting)
+
+
 def validate_krun(toml_name: str, cfg: dict) -> None:
     if "krun" not in cfg:
         return
@@ -208,6 +225,7 @@ def load_service(toml_path: Path) -> dict:
         die(f"{toml_path.name}: [host].username must match {USERNAME_RE.pattern}")
     validate_ports(toml_path.name, container)
     validate_dns(toml_path.name, container)
+    validate_sysctls(toml_path.name, container)
     validate_krun(toml_path.name, cfg)
     if "health-cmd" in container and container["health-cmd"] != "none":
         die(f'{toml_path.name}: [container].health-cmd currently supports only "none"')
@@ -294,6 +312,8 @@ def container_unit(cfg: dict) -> str:
         lines.append(f"Network={container['network']}")
     for server in container.get("dns", []):
         lines.append(f"DNS={server}")
+    for setting in container.get("sysctls", []):
+        lines.append(f"Sysctl={setting}")
     if "container-user" in container:
         lines.append(f"User={container['container-user']}")
     if "health-cmd" in container:

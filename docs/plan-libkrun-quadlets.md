@@ -23,12 +23,12 @@ Also append a row to the session log at the bottom of this file.
 | Field | Value |
 | --- | --- |
 | Overall status | All active rootless services use libkrun; Caddy and Jellyfin are configured to replace TSI with private nested passt after a production streaming stall exposed TSI head-of-line blocking |
-| Last completed work | 2026-08-06: proved concurrent private passt guests, repeated host-loopback backend mappings, and slow-client isolation; implemented typed generator support and Caddy/Jellyfin Quadlets; all 64 tests and the full image build passed |
-| Current phase | Passt implementation and local validation complete; production deployment validation pending |
-| Next concrete action | Deploy normally and validate Caddy/Jellyfin listeners, routes, HTTP/3, playback seeking, and monitoring |
+| Last completed work | 2026-08-07: diagnosed missing private-namespace low-port inheritance, added typed namespaced sysctls and guarded recovery tooling; all 66 tests, Quadlet translation, ShellCheck, and the full image build passed |
+| Current phase | First passt deployment exposed missing low-port sysctl inheritance; permanent generated-Quadlet fix is locally validated, with production recovery/redeployment pending |
+| Next concrete action | Apply the guarded temporary Caddy recovery, deploy the permanent image normally, remove the drop-in, then repeat listeners, routes, HTTP/3, playback seeking, and monitoring validation |
 | Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage; Caddy; Jellyfin; Jellyfin exporter |
 | Known production exceptions | The krun handler lacks `podman exec`; Jellyfin's image healthcheck is disabled in favor of blackbox probing, and service configuration changes use restarts |
-| Last NAS validation | 2026-08-06: two concurrent passt guests used the same guest port in distinct namespaces; explicit pasta `-T` reached host loopback; a 1.28-MiB stalled send queue left 20 health probes below 3 ms and the VMM main thread in `epoll` |
+| Last NAS validation | 2026-08-07: Caddy, Jellyfin, Grafana, metrics, outer publications, and the VMM were healthy, but inner passt had no private-namespace listeners on 80/443; all TCP ingress reset while 2019 and higher ports worked |
 
 ## Outcome
 
@@ -945,6 +945,7 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-05 | Phase 8 completion | Counted the bootc deployment boot as the full-boot gate and closed the service phase | The changed image-managed Quadlet could only become active after booting the deployment. Subsequent evidence proved krun/resources, TCP-only listeners, all routes, metrics, secret/state contracts, exact state preservation, recovery, and clean shutdown. The current Caddyfile has no operational source-IP policy. | Begin Phase 9 steady-state documentation and final repository verification; no NAS command is pending |
 | 2026-08-05 | Phase 9 completion | Finalized topology, exceptions, schema, roadmap, and evidence; regenerated outputs and ran all 38 tests | No NAS action. Disposable experiments were already removed, the implementation build/deployment passed, and production validation is complete. | Commit and push the final documentation; return to ordinary roadmap work |
 | 2026-08-06 | Streaming TSI diagnosis and nested-passt proof | Traced a stalled Swiftfin seek through Caddy and Jellyfin VMM threads blocked in `tcp_sendmsg`; corrected the scope of crun's broad passt mapping and implemented private nested passt for both streaming services | Two disposable guests concurrently served guest port 18080 through distinct namespaces and narrow loopback publications. Pasta `-T` reached loopback-only host backends with both one and two simultaneous explicit mappings. With a deliberately stalled 512-MiB response and 1.28-MiB host send queue, 20 health probes had zero failures and 2.9-ms maximum latency while the VMM main thread waited in `epoll`. All disposable containers and ports were removed. | Deploy normally, then validate listeners, routes, HTTP/3, seeking, health, and playback metrics |
+| 2026-08-07 | First passt deployment low-port failure | Diagnosed immediate Caddy TCP resets and added the missing namespaced low-port sysctl to the generated Quadlet | Host pasta owned TCP 80/443, but Caddy's private namespace contained inner passt listeners only from 2019 upward; direct Jellyfin, Grafana, and Caddy metrics were healthy. New network namespaces had not inherited the host's threshold of 80. Typed sysctl generation, regression tests, and a guarded temporary recovery script were added. | Apply temporary recovery, deploy the permanent fix, remove the override, and rerun the streaming checklist |
 
 ## Session Note Template
 

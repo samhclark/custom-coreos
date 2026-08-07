@@ -22,6 +22,9 @@ network = "pasta:-T,3000,-T,3900,-T,3903,-T,8096,-T,8428"
 # MagicDNS preserves tailnet resolution; Comcast resolvers provide fallbacks
 # for ACME and Cloudflare DNS API access.
 dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
+# Network namespaces do not inherit the host's low-port sysctl. Inner passt
+# needs the same threshold to claim guest-facing TCP/UDP 80 and 443.
+sysctls = ["net.ipv4.ip_unprivileged_port_start=80"]
 container-user = 0
 
 [krun]

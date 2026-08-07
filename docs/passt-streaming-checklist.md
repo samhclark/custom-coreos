@@ -51,6 +51,20 @@ Both services should report `runtime=krun`, a pasta network mode, and
 TCP 2019. Jellyfin should show only loopback TCP 8096 and no executable image
 healthcheck.
 
+Confirm that Caddy's private namespace received the low-port threshold. The
+host sysctl alone is insufficient because a new network namespace starts with
+its own default:
+
+```bash
+caddy_pid=$(sudo -u _nas_caddy env \
+  HOME=/var/home/_nas_caddy XDG_RUNTIME_DIR=/run/user/51310 \
+  podman inspect --format '{{.State.Pid}}' caddy)
+sudo nsenter -t "$caddy_pid" -n \
+  sysctl -n net.ipv4.ip_unprivileged_port_start
+```
+
+The result must be `80`.
+
 ## 2. Host listeners and namespace isolation
 
 ```bash
@@ -64,11 +78,16 @@ jellyfin_pid=$(sudo -u _nas_jellyfin env \
   HOME=/var/home/_nas_jellyfin XDG_RUNTIME_DIR=/run/user/51120 \
   podman inspect --format '{{.State.Pid}}' jellyfin)
 sudo readlink "/proc/$caddy_pid/ns/net" "/proc/$jellyfin_pid/ns/net"
+sudo nsenter -t "$caddy_pid" -n ss -H -ltnup \
+  '( sport = :80 or sport = :443 )'
 ```
 
 TCP 80/443 and UDP 443 may be wildcard listeners because they are intentional
 ingress. TCP 2019 and 8096 must be loopback-only. The two namespace links must
 have different inode numbers.
+The private-namespace listener output must include inner passt on TCP 80/443
+and UDP 443; host listeners without these inner listeners only accept and then
+reset connections.
 
 ## 3. Routes, metrics, and HTTP/3
 

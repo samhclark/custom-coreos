@@ -221,6 +221,47 @@ class DnsTests(unittest.TestCase):
         )
 
 
+class SysctlTests(unittest.TestCase):
+    def test_validates_and_renders_namespaced_sysctls_in_source_order(self):
+        container = {
+            "image": "example.invalid/service:1",
+            "sysctls": [
+                "net.ipv4.ip_unprivileged_port_start=80",
+                "net.ipv6.conf.all.disable_ipv6=1",
+            ],
+        }
+        GENERATOR.validate_sysctls("service.toml", container)
+        cfg = {
+            "_toml_path": Path("service.toml"),
+            "service": {"name": "service", "description": "Test service"},
+            "host": {"username": "_nas_service"},
+            "container": container,
+        }
+
+        self.assertIn(
+            "Sysctl=net.ipv4.ip_unprivileged_port_start=80\n"
+            "Sysctl=net.ipv6.conf.all.disable_ipv6=1\n",
+            GENERATOR.container_unit(cfg),
+        )
+
+    def test_rejects_invalid_or_duplicate_sysctls(self):
+        invalid_cases = {
+            "not an array": "net.ipv4.ip_forward=1",
+            "non-string": [1],
+            "missing value": ["net.ipv4.ip_forward"],
+            "missing name": ["=1"],
+            "extra equals": ["net.ipv4.ip_forward=1=2"],
+            "whitespace": ["net.ipv4.ip_forward = 1"],
+            "duplicate": ["net.ipv4.ip_forward=1", "net.ipv4.ip_forward=1"],
+        }
+        for label, sysctls in invalid_cases.items():
+            with self.subTest(label=label), self.assertRaises(SystemExit):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    GENERATOR.validate_sysctls(
+                        "service.toml", {"sysctls": sysctls}
+                    )
+
+
 class StagedServiceTests(unittest.TestCase):
     def test_disabled_container_keeps_identity_outputs_but_omits_quadlet(self):
         cfg = {

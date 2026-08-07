@@ -919,6 +919,7 @@ enabled = true             # false reserves identity/secrets without emitting a 
 image = "string"            # Full image reference
 network = "string"          # "host" or omit for default
 dns = ["192.0.2.53"]        # Explicit non-loopback resolver IPs (optional)
+sysctls = ["name=value"]     # Namespaced kernel settings (optional)
 container-user = 0          # User= inside container (optional)
 exec = "string"             # Exec= args (optional)
 health-cmd = "none"         # Disable an image healthcheck (optional)
