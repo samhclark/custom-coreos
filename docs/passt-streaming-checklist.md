@@ -5,8 +5,8 @@ TSI networking for Caddy and Jellyfin. The change does not alter their service
 users, persistent mounts, secrets, or data. It adds a private outer pasta
 namespace to each service and uses crun passt for the libkrun guest.
 
-Status: repository implementation complete; production deployment validation
-pending.
+Status: temporary namespaced-sysctl recovery validated in production on
+2026-08-07; permanent image deployment and full playback validation pending.
 
 ## Expected topology
 
