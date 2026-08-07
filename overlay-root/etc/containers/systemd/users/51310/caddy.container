@@ -9,8 +9,9 @@ Image=ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:78331c4abc23f4f3f396757
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=512
+Annotation=krun.use_passt=1
 StopSignal=SIGINT
-Network=host
+Network=pasta:-T,3000,-T,3900,-T,3903,-T,8096,-T,8428
 DNS=100.100.100.100
 DNS=75.75.75.75
 DNS=75.75.76.76
@@ -27,6 +28,11 @@ Volume=/var/lib/caddy-config:/config
 
 # Runtime secret written at boot by sops-distribute-secrets.service
 Volume=/run/nas-secrets/caddy/cf-api-token:/run/secrets/cf-api-token:ro,Z
+
+PublishPort=0.0.0.0:80:80
+PublishPort=0.0.0.0:443:443
+PublishPort=0.0.0.0:443:443/udp
+PublishPort=127.0.0.1:2019:2019
 
 [Service]
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/caddy/cf-api-token

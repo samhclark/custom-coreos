@@ -49,7 +49,7 @@ def validate_ports(toml_name: str, container: dict) -> None:
         if not isinstance(port, dict):
             die(f"{toml_name}: {field} must be a table")
 
-        unknown = sorted(set(port) - {"host", "container"})
+        unknown = sorted(set(port) - {"host", "container", "protocol"})
         if unknown:
             die(f"{toml_name}: {field} has unknown keys: {', '.join(unknown)}")
         for key in ("host", "container"):
@@ -87,7 +87,11 @@ def validate_ports(toml_name: str, container: dict) -> None:
         if type(container_port) is not int or not 1 <= container_port <= 65535:
             die(f"{toml_name}: {field}.container must be an integer from 1 to 65535")
 
-        rendered = f"{host}:{container_port}"
+        protocol = port.get("protocol", "tcp")
+        if protocol not in {"tcp", "udp"}:
+            die(f'{toml_name}: {field}.protocol must be "tcp" or "udp"')
+
+        rendered = f"{host}:{container_port}/{protocol}"
         if rendered in seen:
             die(f"{toml_name}: duplicate published port {rendered!r}")
         seen.add(rendered)
@@ -120,7 +124,7 @@ def validate_krun(toml_name: str, cfg: dict) -> None:
     if not isinstance(krun, dict):
         die(f"{toml_name}: [krun] must be a table")
 
-    unknown = sorted(set(krun) - {"enabled", "cpus", "ram-mib"})
+    unknown = sorted(set(krun) - {"enabled", "cpus", "ram-mib", "network"})
     if unknown:
         die(f"{toml_name}: [krun] has unknown keys: {', '.join(unknown)}")
 
@@ -145,7 +149,16 @@ def validate_krun(toml_name: str, cfg: dict) -> None:
     if krun["ram-mib"] < 128:
         die(f"{toml_name}: [krun].ram-mib must be at least 128")
 
+    network = krun.get("network", "tsi")
+    if network not in {"tsi", "passt"}:
+        die(f'{toml_name}: [krun].network must be "tsi" or "passt"')
+
     container = cfg.get("container", {})
+    if network == "passt" and container.get("network") == "host":
+        die(
+            f'{toml_name}: [krun].network = "passt" requires a private '
+            "container network namespace"
+        )
     if container.get("network") == "host":
         for server in container.get("dns", []):
             if ipaddress.ip_address(server).is_loopback:
@@ -196,6 +209,8 @@ def load_service(toml_path: Path) -> dict:
     validate_ports(toml_path.name, container)
     validate_dns(toml_path.name, container)
     validate_krun(toml_path.name, cfg)
+    if "health-cmd" in container and container["health-cmd"] != "none":
+        die(f'{toml_path.name}: [container].health-cmd currently supports only "none"')
     cfg["_toml_path"] = toml_path
     cfg["_slug"] = host["username"].removeprefix("_nas_")
     return cfg
@@ -272,6 +287,8 @@ def container_unit(cfg: dict) -> str:
         lines.append("PodmanArgs=--runtime=krun")
         lines.append(f"Annotation=krun.cpus={krun['cpus']}")
         lines.append(f"Annotation=krun.ram_mib={krun['ram-mib']}")
+        if krun.get("network", "tsi") == "passt":
+            lines.append("Annotation=krun.use_passt=1")
         lines.append("StopSignal=SIGINT")
     if "network" in container:
         lines.append(f"Network={container['network']}")
@@ -279,6 +296,8 @@ def container_unit(cfg: dict) -> str:
         lines.append(f"DNS={server}")
     if "container-user" in container:
         lines.append(f"User={container['container-user']}")
+    if "health-cmd" in container:
+        lines.append(f"HealthCmd={container['health-cmd']}")
 
     environment = container.get("environment", {})
     if environment:
@@ -301,7 +320,10 @@ def container_unit(cfg: dict) -> str:
     ports = container.get("ports", [])
     if ports:
         lines.append("")
-        lines += [f"PublishPort={port['host']}:{port['container']}" for port in ports]
+        for port in ports:
+            protocol = port.get("protocol", "tcp")
+            suffix = "" if protocol == "tcp" else f"/{protocol}"
+            lines.append(f"PublishPort={port['host']}:{port['container']}{suffix}")
 
     if "exec" in container:
         lines += ["", f"Exec={container['exec']}"]

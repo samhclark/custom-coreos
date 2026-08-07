@@ -14,7 +14,11 @@ display-name = "Jellyfin"
 
 [container]
 image = "docker.io/jellyfin/jellyfin:10.11.11@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db"
+network = "pasta"
 container-user = 0
+# The image healthcheck uses podman exec, which the krun handler does not
+# support. External blackbox monitoring remains the health source of truth.
+health-cmd = "none"
 
 [container.environment]
 JELLYFIN_PublishedServerUrl = "https://jellyfin.i.samhclark.com"
@@ -23,6 +27,7 @@ JELLYFIN_PublishedServerUrl = "https://jellyfin.i.samhclark.com"
 enabled = true
 cpus = 4
 ram-mib = 4096
+network = "passt"
 
 [[container.volumes]]
 comment = "Persistent configuration ZFS dataset; ownership and SELinux labels are prepared by the host unit"

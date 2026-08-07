@@ -22,13 +22,13 @@ Also append a row to the session log at the bottom of this file.
 
 | Field | Value |
 | --- | --- |
-| Overall status | Phases 2 through 9 are complete; all seven active rootless Quadlets are deployed and validated under libkrun |
-| Last completed work | 2026-08-05: finalized steady-state topology, Caddy exceptions, generator schema, roadmap status, and evidence; regeneration and all 38 unit tests passed |
-| Current phase | Migration complete; steady state |
-| Next concrete action | Push the final documentation commit; no NAS action is pending, and the next unrelated roadmap item is hosted Renovate onboarding |
-| Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage; Caddy (all validated) |
-| Known production exceptions | Caddy intentionally disables HTTP/3 under direct TSI, retains `net.ipv4.ip_unprivileged_port_start=80`, and uses restart-based operation because the krun handler lacks `podman exec`; rootless crun with root-owned TCP/UDP sockets remains its fallback |
-| Last NAS validation | 2026-08-05: Caddy restart shutdown logged SIGINT and exit code 0, exact persistent state survived, and the replacement recovered healthy under krun; the earlier bootc deployment boot had already exercised full-machine startup |
+| Overall status | All active rootless services use libkrun; Caddy and Jellyfin are configured to replace TSI with private nested passt after a production streaming stall exposed TSI head-of-line blocking |
+| Last completed work | 2026-08-06: proved concurrent private passt guests, repeated host-loopback backend mappings, and slow-client isolation; implemented typed generator support and Caddy/Jellyfin Quadlets; all 64 tests and the full image build passed |
+| Current phase | Passt implementation and local validation complete; production deployment validation pending |
+| Next concrete action | Deploy normally and validate Caddy/Jellyfin listeners, routes, HTTP/3, playback seeking, and monitoring |
+| Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage; Caddy; Jellyfin; Jellyfin exporter |
+| Known production exceptions | The krun handler lacks `podman exec`; Jellyfin's image healthcheck is disabled in favor of blackbox probing, and service configuration changes use restarts |
+| Last NAS validation | 2026-08-06: two concurrent passt guests used the same guest port in distinct namespaces; explicit pasta `-T` reached host loopback; a 1.28-MiB stalled send queue left 20 health probes below 3 ms and the VMM main thread in `epoll` |
 
 ## Outcome
 
@@ -45,22 +45,28 @@ desired end state is:
 5. Caddy gets its own networking and socket-activation decision rather than
    forcing the rest of the migration to wait.
 
-## Selected Caddy Design (Deployed and Validated)
+## Selected Streaming Network Design
 
-On 2026-08-05, the operator selected direct krun/TSI for Caddy, deployed it,
-and completed production validation. The bootc deployment boot exercised
-full-machine startup; focused follow-up proved runtime/resources, listeners,
-all routes, metrics, secret and state contracts, exact state preservation,
-bounded restart recovery, and clean SIGINT shutdown.
+Direct TSI was deployed and validated for Caddy on 2026-08-05 and initially for
+Jellyfin. Real Swiftfin seeking then exposed a synchronous-send failure mode:
+a client that stopped reading blocked Caddy's VMM main thread, stopped Caddy
+from draining Jellyfin, and then blocked Jellyfin's VMM main thread. Health and
+session APIs stalled even though host CPU, memory, ZFS, and the services
+themselves were otherwise healthy.
 
 The implementation contract is:
 
 - run Caddy through the existing rootless user-Quadlet path with runtime
   `krun`, 2 vCPUs, 512 MiB RAM, and SIGINT shutdown
-- use direct TSI TCP listeners on 80 and 443 and keep the existing host-
-  loopback reverse-proxy destinations
-- explicitly limit Caddy to HTTP/1.1 and HTTP/2 because TSI cannot host a
-  guest UDP listener for QUIC/HTTP/3
+- give Caddy and Jellyfin separate private rootless pasta namespaces and set
+  `krun.use_passt=1`, so crun's broad inner passt listeners cannot collide on
+  the host or with another service
+- publish only Caddy TCP 80/443, UDP 443, loopback TCP 2019, and Jellyfin
+  loopback TCP 8096 through the outer pasta processes
+- use Caddy's outer pasta `-T` mappings as an explicit allowlist for
+  host-loopback backends 3000, 3900, 3903, 8096, and 8428; Caddy reaches them
+  through the inner guest gateway `10.0.0.1`
+- restore HTTP/3 through the published UDP 443 listener
 - retain `net.ipv4.ip_unprivileged_port_start=80`; inherited root-owned
   sockets do not cross the current krun guest boundary
 - use service restarts for image-controlled configuration changes and do not
@@ -70,11 +76,11 @@ The implementation contract is:
   addresses when a configuration actually depends on them
 
 Rootless crun with root-owned TCP/UDP system sockets remains the documented
-fallback if a later regression blocks krun. Passt is rejected for the current
-stack because crun's hard-coded all-port mapping eagerly reserves free backend
-ports and introduces fragile cross-user-manager startup ordering. A future
-libkrun/crun release may justify revisiting HTTP/3, inherited sockets, targeted
-port mappings, or runtime exec; the evidence and retest criteria remain below.
+fallback if a later regression blocks krun. The earlier passt rejection came
+from a host-network experiment: `-t all -u all` then occupied the shared host
+namespace. With the normal private outer pasta namespace, the same broad
+listeners are confined per container. Outer publication and reverse mappings
+remain narrow and explicit.
 
 ## Settled Working Assumptions
 
@@ -742,9 +748,9 @@ security and maintenance tradeoff, then remove unused experiments.
 
 | Design | Proven behavior | Main cost | Status |
 | --- | --- | --- | --- |
-| krun with direct TSI TCP | HTTP/2, loopback bind, host-loopback reverse proxy, TLS state reuse, clean restart, DNS, and Let's Encrypt HTTPS egress | No guest UDP listener, so disable HTTP/3; direct low ports retain the current unprivileged-port sysctl | **Selected, deployed, and validated** |
+| krun with direct TSI TCP | HTTP/2, loopback bind, host-loopback reverse proxy, TLS state reuse, clean restart, DNS, and Let's Encrypt HTTPS egress | A stalled downstream stream can block the synchronous VMM send path; no guest UDP listener | Retired for streaming services after the 2026-08-06 production stall |
 | Rootless crun with root-owned system sockets | Inherited TCP and UDP, HTTP/2, QUIC with `h3`, rootless Podman, and system-owned listeners | Caddy is the production runtime exception and needs a hand-written system service rather than the user-Quadlet path | Valid fallback, not selected |
-| krun with passt | HTTP/2, QUIC with `h3`, guest-to-host gateway reverse proxy, state, and restart | Current crun hardcodes all TCP/UDP mappings; passt eagerly reserved every tested free backend/admin TCP port, creating fragile cross-user-manager startup ordering | Rejected for the current stack |
+| krun with passt inside private outer pasta | Concurrent guests on the same guest port, narrow host publication, explicit loopback backend `-T` mappings, HTTP/2/QUIC, and independent health under 1.28-MiB backpressure | Two network layers; Caddy backend addresses use the stable inner gateway and must remain explicitly allowlisted | **Selected and implemented; production validation pending** |
 | krun with direct TSI TCP plus root nftables redirect | Components are individually plausible but the combined path has not been tested | Disables HTTP/3 and adds root-managed redirect policy, but could remove the unprivileged-port sysctl while retaining krun | Not selected; revisit only with new requirements |
 
 The former production design—rootless crun with direct host-network binds—
@@ -938,6 +944,7 @@ link a dedicated checklist or commit when more detail is needed.
 | 2026-08-05 | Phase 8 Caddy clean shutdown | Closed the missing half of the restart evidence | Caddy received SIGINT, logged `shutdown complete` with exit code 0, and stopped its HTTP/admin servers; Podman reported the old container died and was removed before systemd marked the service stopped | Reboot the NAS when convenient, then run a separate post-boot recovery check |
 | 2026-08-05 | Phase 8 completion | Counted the bootc deployment boot as the full-boot gate and closed the service phase | The changed image-managed Quadlet could only become active after booting the deployment. Subsequent evidence proved krun/resources, TCP-only listeners, all routes, metrics, secret/state contracts, exact state preservation, recovery, and clean shutdown. The current Caddyfile has no operational source-IP policy. | Begin Phase 9 steady-state documentation and final repository verification; no NAS command is pending |
 | 2026-08-05 | Phase 9 completion | Finalized topology, exceptions, schema, roadmap, and evidence; regenerated outputs and ran all 38 tests | No NAS action. Disposable experiments were already removed, the implementation build/deployment passed, and production validation is complete. | Commit and push the final documentation; return to ordinary roadmap work |
+| 2026-08-06 | Streaming TSI diagnosis and nested-passt proof | Traced a stalled Swiftfin seek through Caddy and Jellyfin VMM threads blocked in `tcp_sendmsg`; corrected the scope of crun's broad passt mapping and implemented private nested passt for both streaming services | Two disposable guests concurrently served guest port 18080 through distinct namespaces and narrow loopback publications. Pasta `-T` reached loopback-only host backends with both one and two simultaneous explicit mappings. With a deliberately stalled 512-MiB response and 1.28-MiB host send queue, 20 health probes had zero failures and 2.9-ms maximum latency while the VMM main thread waited in `epoll`. All disposable containers and ports were removed. | Deploy normally, then validate listeners, routes, HTTP/3, seeking, health, and playback metrics |
 
 ## Session Note Template
 

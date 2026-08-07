@@ -91,10 +91,13 @@ sudo -u _nas_jellyfin env \
   HOME=/var/home/_nas_jellyfin \
   XDG_RUNTIME_DIR=/run/user/51120 \
   podman inspect jellyfin --format \
-  'runtime={{.OCIRuntime}} status={{.State.Status}} image={{.ImageName}}'
+  'runtime={{.OCIRuntime}} status={{.State.Status}} network={{.HostConfig.NetworkMode}} image={{.ImageName}} annotations={{json .Config.Annotations}} health={{json .Config.Healthcheck}}'
 ```
 
-Expect `runtime=krun` and `status=running`.
+Expect `runtime=krun`, `status=running`, `network=pasta`, the annotation
+`krun.use_passt=1`, and no executable healthcheck. Jellyfin's image healthcheck
+uses `podman exec`, which the krun handler does not support, so the Quadlet
+disables it; the external blackbox health probe is authoritative.
 
 Inspect the mounts:
 

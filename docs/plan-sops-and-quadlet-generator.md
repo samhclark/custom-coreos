@@ -921,12 +921,14 @@ network = "string"          # "host" or omit for default
 dns = ["192.0.2.53"]        # Explicit non-loopback resolver IPs (optional)
 container-user = 0          # User= inside container (optional)
 exec = "string"             # Exec= args (optional)
+health-cmd = "none"         # Disable an image healthcheck (optional)
 
 # Optional: libkrun microVM runtime and explicit resources
 [krun]
 enabled = true              # false permits no other keys and emits no runtime settings
 cpus = 1                    # Positive integer
 ram-mib = 128               # Integer; minimum 128 MiB
+network = "passt"           # Optional; default "tsi"
 
 # Optional: environment variables
 [container.environment]
@@ -938,11 +940,12 @@ source = "/host/path"
 target = "/container/path"
 options = "ro"              # Optional mount options
 
-# Optional: published scalar TCP ports (array of tables)
+# Optional: published scalar TCP or UDP ports (array of tables)
 [[container.ports]]
 # Literal IPv4:port or bracketed IPv6, e.g. "[::1]:3900"
 host = "127.0.0.1:3900"
 container = 3900
+protocol = "tcp"            # Optional; default "tcp", or use "udp"
 
 # Optional: secret references (array of tables)
 [[container.secrets]]
@@ -976,15 +979,16 @@ Published ports require an explicit literal bind address to avoid accidentally
 exposing a service on every interface. They cannot be combined with
 `network = "host"`. Rootless containers can publish high ports normally; ports
 below the host's `net.ipv4.ip_unprivileged_port_start` require an explicit host
-policy decision. Port ranges, dynamic host ports, and non-TCP protocols are
-deferred until a service requires them.
+policy decision. Port ranges and dynamic host ports are not supported; UDP is
+supported through an explicit `protocol = "udp"`.
 
 When `[krun].enabled = true`, the generator emits `--runtime=krun`, CPU and
-RAM annotations, and `StopSignal=SIGINT`. A host-network krun service must not
-use a loopback DNS server because the guest cannot reach the host's
-loopback-only resolver stub. Passt is intentionally not part of the shared
-schema. Legacy `pull` and `auto-update` keys are rejected; image references
-must include both a tag and a SHA-256 digest.
+RAM annotations, and `StopSignal=SIGINT`. Optional `network = "passt"` emits
+`krun.use_passt=1` and is rejected with host networking: the broad inner passt
+listeners must live inside a private Podman network namespace. A host-network
+krun service must not use a loopback DNS server because the guest cannot reach
+the host's loopback-only resolver stub. Legacy `pull` and `auto-update` keys
+are rejected; image references must include both a tag and a SHA-256 digest.
 
 **Conventions baked into the generator** (not configurable per service):
 - `subid-count` is always `65536`

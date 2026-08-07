@@ -31,9 +31,12 @@ maintaining it.
 4. **Caddy uses the validated rootless low-port policy.**
    `_nas_caddy` binds TCP low ports with
    `net.ipv4.ip_unprivileged_port_start=80`; its persistent state is maintained
-   by a steady-state host preparation service. Direct krun/TSI is deployed and
-   validated with HTTP/3 intentionally disabled and this low-port policy
-   retained. Rootless crun with root-owned TCP/UDP sockets is the fallback.
+   by a steady-state host preparation service. Caddy is configured for a
+   private outer pasta namespace plus inner krun passt: only TCP 80/443, UDP
+   443, and loopback TCP 2019 are published, while pasta `-T` explicitly
+   allowlists host-loopback backends. This restores HTTP/3 and avoids TSI's
+   stream head-of-line blocking. Rootless crun with root-owned TCP/UDP sockets
+   remains the fallback.
 
 5. **Service UIDs are allocate-only.** Never reuse a retired UID; numeric
    file ownership (especially in ZFS snapshots) outlives the user. Scheme
@@ -87,6 +90,14 @@ maintaining it.
       resources, TCP-only listener topology, all routes, metrics, secret/state
       contracts, exact state preservation, bounded recovery, and clean SIGINT
       shutdown all passed production validation.
+- [x] **3a. Replace streaming TSI with private nested passt.** Implemented
+      2026-08-06 after a stalled Jellyfin client blocked Caddy's synchronous
+      TSI send path and then Jellyfin's. Two concurrent guests proved crun's
+      broad inner passt listeners are isolated by separate outer pasta
+      namespaces. An explicit pasta `-T` mapping reached a loopback-only host
+      backend, and a 1.28-MiB backpressured response left 20 health probes at
+      zero failures with 2.9 ms maximum latency while the VMM waited in
+      `epoll`. Production deployment validation remains.
 - [x] **4. Add Renovate.** Done 2026-08-05: the hosted app is active and has
       opened working GitHub Actions, Grafana, and grouped VictoriaMetrics
       updates. Custom regex managers cover `quadlets/*.toml` and the SOPS build

@@ -19,16 +19,25 @@ ALERT_RULES = (
 DASHBOARD = (
     REPO / "overlay-root/usr/share/custom-coreos/grafana/dashboards/jellyfin.json"
 ).read_text()
+JELLYFIN_QUADLET = (
+    REPO / "overlay-root/etc/containers/systemd/users/51120/jellyfin.container"
+).read_text()
 
 
 class JellyfinIntegrationTests(unittest.TestCase):
-    def test_caddy_routes_selected_hostname_to_loopback_only_service(self):
+    def test_caddy_routes_selected_hostname_through_passt_backend_allowlist(self):
         self.assertIn(
             "jellyfin.i.samhclark.com {\n"
-            "\treverse_proxy 127.0.0.1:8096\n"
+            "\treverse_proxy 10.0.0.1:8096\n"
             "}",
             CADDYFILE,
         )
+
+    def test_jellyfin_uses_passt_and_disables_unsupported_exec_healthcheck(self):
+        self.assertIn("Network=pasta", JELLYFIN_QUADLET)
+        self.assertIn("Annotation=krun.use_passt=1", JELLYFIN_QUADLET)
+        self.assertIn("HealthCmd=none", JELLYFIN_QUADLET)
+        self.assertIn("PublishPort=127.0.0.1:8096:8096", JELLYFIN_QUADLET)
 
     def test_victoria_metrics_probes_jellyfin_health_via_blackbox(self):
         self.assertIn("job_name: 'jellyfin-health'", SCRAPE_CONFIG)

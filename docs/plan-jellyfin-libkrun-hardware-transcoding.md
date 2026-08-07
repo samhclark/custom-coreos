@@ -29,10 +29,10 @@ the handoff.
 | Last completed work | 2026-08-06: an image-contained Linux 6.18.42 kernel booted successfully with passt and Mesa 26.1.5, but repeated the rejected VirtIO-GPU commands and exposed only `VAEntrypointVideoProc` |
 | Current phase | Add playback/transcode observability, measure the real requirement, and decide between another bounded libkrun experiment and a full KVM/QEMU GPU-assignment path |
 | Recommended next experiment | Adapt only libkrunfw patch 0018 (virtio-gpu fence passing) to the existing external Linux 6.18 probe; stop if useful codecs still do not appear unless upstream identifies another specific small gap |
-| Production runtime | Jellyfin remains rootless under libkrun with 4 vCPUs, 4 GiB RAM, TSI TCP 8096, and software media processing |
+| Production runtime | Jellyfin remains rootless under libkrun with 4 vCPUs, 4 GiB RAM, private nested passt, loopback-only host TCP 8096, and software media processing |
 | Production impact so far | None; no Jellyfin restart, host package change, or persistent configuration change was made during GPU probing |
 | Primary blocker | The libkrun 1.19 / virglrenderer 1.3 / guest virtio-gpu native-context path does not expose Intel media codecs even with a guest kernel and Mesa newer than the documented minimums |
-| Secondary blocker | If the GPU path is repaired, production networking still needs either a TSI-capable custom kernel or narrowly integrated gvproxy because crun 1.28's passt mode maps all TCP and UDP ports |
+| Secondary blocker | Resolved for networking: crun's broad passt mapping is confined inside Jellyfin's private outer pasta namespace; only host-loopback TCP 8096 is published |
 
 ## Decision Snapshot
 
@@ -293,11 +293,13 @@ series. Standard virtio-net is available, so passt supplies guest networking
 without requiring those patches. This sharply reduces the kernel-forward-port
 work needed for the proof.
 
-The tradeoff is important: crun 1.28 starts passt with all TCP and UDP ports,
-not a narrow Jellyfin-only mapping. That behavior was already rejected for
-Caddy because it can reserve unrelated ports and introduce startup-order
-coupling. The first option-2 network tests must therefore run in an isolated
-network namespace and must not be treated as production approval for passt.
+crun 1.28 starts passt with all TCP and UDP ports, but the 2026-08-06 nested
+network tests corrected the scope of that behavior: with Podman's normal
+rootless pasta network, those listeners exist only inside that container's
+private namespace. Two guests concurrently used the same guest port without a
+host collision, while outer `PublishPort` exposed only the selected loopback
+port. Passt is therefore approved for this topology; host networking remains
+explicitly incompatible.
 
 ### gvproxy as the production networking variant
 
@@ -418,8 +420,8 @@ Likely repository work:
 - add a reproducible derived Jellyfin image build and pin its resulting digest
 - record the kernel source version, configuration, patches, and corresponding
   source-distribution obligations
-- extend `[krun]` in `generate-quadlets.py` with narrowly validated fields such
-  as `gpu-flags` and `use-passt`
+- extend `[krun]` in `generate-quadlets.py` with a narrowly validated field for
+  `gpu-flags`; the typed `network = "passt"` field is already implemented
 - add generated `Annotation=krun.gpu_flags=1411` and
   `Annotation=krun.use_passt=1`
 - add `AddDevice=/dev/dri/renderD128`
@@ -428,8 +430,8 @@ Likely repository work:
 - preserve all existing Jellyfin storage mounts, ownership, SELinux labeling,
   resource limits, Caddy route, and graceful shutdown behavior
 
-Gate: do not merge a production Quadlet change until passt's port behavior is
-understood and acceptable on the real single-host topology.
+The passt networking gate is complete on the real single-host topology. A
+future GPU integration still requires its own device and codec gates.
 
 ### Phase 2E: Production validation
 
@@ -446,9 +448,8 @@ Validate in this order:
    stability, and Grafana responsiveness
 7. graceful restart and recovery after a host reboot
 
-Rollback immediately if passt reserves unrelated required ports, other
-services become order-dependent, the VA driver exposes no useful codec, or
-playback becomes less reliable.
+Rollback immediately if the VA driver exposes no useful codec, unrelated host
+ports appear, or playback becomes less reliable.
 
 ### External-kernel maintenance cost
 

@@ -95,6 +95,33 @@ class PublishedPortTests(unittest.TestCase):
         self.assertNotIn("AutoUpdate=", unit)
         self.assertNotIn("Pull=", unit)
 
+    def test_renders_udp_and_allows_tcp_and_udp_on_the_same_endpoint(self):
+        container = {
+            "image": "example.invalid/service:1",
+            "ports": [
+                {"host": "0.0.0.0:443", "container": 443},
+                {
+                    "host": "0.0.0.0:443",
+                    "container": 443,
+                    "protocol": "udp",
+                },
+            ],
+        }
+        GENERATOR.validate_ports("service.toml", container)
+
+        cfg = {
+            "_toml_path": Path("service.toml"),
+            "service": {"name": "service", "description": "Test service"},
+            "host": {"username": "_nas_service"},
+            "container": container,
+        }
+
+        self.assertIn(
+            "PublishPort=0.0.0.0:443:443\n"
+            "PublishPort=0.0.0.0:443:443/udp\n",
+            GENERATOR.container_unit(cfg),
+        )
+
     def test_rejects_invalid_port_declarations(self):
         invalid_cases = {
             "host networking": {
@@ -117,12 +144,21 @@ class PublishedPortTests(unittest.TestCase):
                 "ports": [{"host": "127.0.0.1:3900", "container": True}],
             },
             "missing host": {"ports": [{"container": 3900}]},
+            "invalid protocol": {
+                "ports": [
+                    {
+                        "host": "127.0.0.1:3900",
+                        "container": 3900,
+                        "protocol": "sctp",
+                    }
+                ],
+            },
             "unknown key": {
                 "ports": [
                     {
                         "host": "127.0.0.1:3900",
                         "container": 3900,
-                        "protocol": "udp",
+                        "description": "metrics",
                     }
                 ],
             },
@@ -347,6 +383,19 @@ image = "example.invalid/service:1@sha256:"""
                 unit,
             )
 
+    def test_passt_network_renders_annotation_in_private_namespace(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            cfg = GENERATOR.load_service(
+                self.write_service(
+                    tmpdir,
+                    "enabled = true\ncpus = 2\nram-mib = 512\nnetwork = \"passt\"",
+                )
+            )
+
+            unit = GENERATOR.container_unit(cfg)
+
+            self.assertIn("Annotation=krun.use_passt=1\n", unit)
+
     def test_service_without_krun_has_no_runtime_output(self):
         with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
             cfg = GENERATOR.load_service(self.write_service(tmpdir, None))
@@ -380,7 +429,10 @@ image = "example.invalid/service:1@sha256:"""
             "boolean RAM": "enabled = true\ncpus = 1\nram-mib = true",
             "RAM below minimum": "enabled = true\ncpus = 1\nram-mib = 127",
             "unknown key": (
-                "enabled = true\ncpus = 1\nram-mib = 128\nuse-passt = true"
+                "enabled = true\ncpus = 1\nram-mib = 128\nnetwork-mode = \"passt\""
+            ),
+            "invalid network": (
+                "enabled = true\ncpus = 1\nram-mib = 128\nnetwork = \"bridge\""
             ),
         }
 
@@ -403,6 +455,35 @@ image = "example.invalid/service:1@sha256:"""
 
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             GENERATOR.validate_krun("service.toml", cfg)
+
+    def test_rejects_passt_with_host_networking(self):
+        cfg = {
+            "container": {"network": "host"},
+            "krun": {
+                "enabled": True,
+                "cpus": 1,
+                "ram-mib": 128,
+                "network": "passt",
+            },
+        }
+
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+            GENERATOR.validate_krun("service.toml", cfg)
+
+
+class HealthCmdTests(unittest.TestCase):
+    def test_none_disables_an_image_healthcheck(self):
+        cfg = {
+            "_toml_path": Path("service.toml"),
+            "service": {"name": "service", "description": "Test service"},
+            "host": {"username": "_nas_service"},
+            "container": {
+                "image": "example.invalid/service:1",
+                "health-cmd": "none",
+            },
+        }
+
+        self.assertIn("HealthCmd=none\n", GENERATOR.container_unit(cfg))
 
 
 if __name__ == "__main__":

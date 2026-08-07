@@ -3,7 +3,9 @@
 Use this after the NAS first boots the image containing Jellyfin. The service
 runs as `_nas_jellyfin` (UID/GID `51120`) in a rootless libkrun guest. Caddy
 publishes it at `https://jellyfin.i.samhclark.com`; port 8096 remains bound to
-host loopback only.
+host loopback only. Both services use virtio-net through crun passt inside
+separate private rootless pasta namespaces, avoiding TSI stream head-of-line
+blocking.
 
 The storage preparation unit creates `tank/jellyfin/{config,cache}`. It does
 not create, move, rename, or change ownership of the existing `tank/videos`
@@ -53,12 +55,20 @@ sudo -u _nas_jellyfin env \
 curl -fsS http://127.0.0.1:8096/health
 curl -fsS https://jellyfin.i.samhclark.com/health
 sudo ss -ltnp | grep ':8096\b'
+
+sudo -u _nas_jellyfin env \
+  HOME=/var/home/_nas_jellyfin \
+  XDG_RUNTIME_DIR=/run/user/51120 \
+  podman inspect jellyfin --format \
+  'runtime={{.OCIRuntime}} network={{.HostConfig.NetworkMode}} health={{json .Config.Healthcheck}} annotations={{json .Config.Annotations}}'
 ```
 
 Both health requests should return `Healthy`; the only host listener for 8096
-should be loopback. Complete Jellyfin's first-run wizard at the HTTPS URL,
-create the admin account, then add `/media/movies` and `/media/tv-shows` as
-separate library roots.
+should be loopback. Inspect output should show `runtime=krun`, `network=pasta`,
+`krun.use_passt=1`, and no executable image healthcheck. The blackbox probe,
+not Podman's container-health state, is authoritative. Complete Jellyfin's
+first-run wizard at the HTTPS URL, create the admin account, then add
+`/media/movies` and `/media/tv-shows` as separate library roots.
 
 ## Monitoring and reboot
 
