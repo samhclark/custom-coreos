@@ -46,7 +46,8 @@ Volume=/var/lib/grafana:/var/lib/grafana
 
 [Service]
 ExecStartPre=/usr/bin/test -c /dev/net/tun
-ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51210
+ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/nas-krun-network/policy-ready && /usr/bin/test -e /sys/class/net/krun-51210; then exit 0; fi; sleep 1; done; echo "krun network policy was not ready within 90 seconds" >&2; exit 1'
+ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.3.2/3000" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.3.2:3000 was not reachable" >&2; exit 1'
 Restart=always
 RestartSec=30
 TimeoutStartSec=900

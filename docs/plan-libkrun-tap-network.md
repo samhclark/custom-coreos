@@ -24,6 +24,10 @@ component terminates and recreates the media TCP connection.
 - `[[container.ports]]` retains its existing meaning as a host publication.
   The generator renders nftables DNAT instead of `PublishPort=` for TAP guests.
   `127.0.0.1` remains loopback-only; `0.0.0.0` means any local host address.
+  Other bind addresses are rejected because the generated policy does not yet
+  model interface-specific publication.
+- Disabled containers retain their host identity artifacts but are excluded
+  from TAP creation, peer names, ingress validation, and nftables policy.
 
 The generator emits:
 
@@ -36,7 +40,18 @@ The generator emits:
   `/etc/hosts` entries, and no Podman publisher in every Quadlet;
 - nftables anti-spoofing, explicit inter-guest edges, public ingress, loopback
   DNAT with per-TAP loopback routing and SNAT, VM-to-host restrictions, and
-  outbound masquerading.
+  outbound masquerading;
+- a root-owned policy service that publishes a current-boot readiness marker
+  only after networkd has configured every TAP gateway and the generated
+  nftables chains exist. Every TAP Quadlet waits for this marker;
+- fail-closed shutdown ordering: loss or shutdown of networkd/nftables first
+  removes readiness and synchronously stops the dedicated service user
+  managers. The nftables stop override quiesces the guests before flushing the
+  ruleset, while dependency restarts propagate back to the policy service so it
+  can republish readiness and restart the dedicated user managers;
+- a post-start TCP check against each guest's first published TCP service. A
+  missed one-shot libkrun DHCP exchange therefore fails startup, and the
+  Quadlet's restart policy boots a fresh guest for another DHCP attempt.
 
 NetworkManager continues to manage physical links and ignores `krun-*`.
 systemd-networkd is enabled only to match and manage the generated TAPs.
@@ -54,12 +69,18 @@ Validated on 2026-08-07/08 without modifying the host network:
    patched crun. libkrun's embedded DHCP client obtained `10.254.254.2` through
    the TAP using DHCP Rapid Commit, and host `curl` reached a TCP HTTP responder
    in the guest.
-5. The complete generated nftables ruleset parses successfully in an isolated
+5. Starting the same VM before its DHCP server confirmed libkrun 1.19 does not
+   recover inside that boot: the workload remained running but unreachable.
+   Starting with DHCP ready produced a discover/ack exchange. This is why the
+   generated lifecycle gates initial startup and treats failed TCP reachability
+   as a startup failure that must restart the guest; ICMP is not used as the
+   application-readiness signal.
+6. The complete generated nftables ruleset parses successfully in an isolated
    network namespace.
-6. The complete bootc image builds successfully with the patched crun,
+7. The complete bootc image builds successfully with the patched crun,
    `systemd-networkd` subpackage, generated network files, and nftables policy;
-   73 repository tests pass, including a real loopback-DNAT round trip across
-   isolated host and guest network namespaces.
+   repository tests include a real loopback-DNAT round trip across isolated
+   host and guest network namespaces.
 
 The first boot attempt also established why `AddDevice=/dev/net/tun` is
 required: without it, libkrun reached the TAP backend but failed with

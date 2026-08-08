@@ -206,8 +206,11 @@ def validate_krun(toml_name: str, cfg: dict) -> None:
             die(f"{toml_name}: [krun].ipv4 must be the second usable /30 address")
         for port in container.get("ports", []):
             address_text = port["host"].rsplit(":", 1)[0]
-            if ipaddress.ip_address(address_text).version != 4:
-                die(f"{toml_name}: TAP host publications currently support only IPv4")
+            if address_text not in {"127.0.0.1", "0.0.0.0"}:
+                die(
+                    f"{toml_name}: TAP host publications support only "
+                    '"127.0.0.1" or "0.0.0.0" addresses'
+                )
 
         ingress = krun.get("ingress", [])
         if not isinstance(ingress, list):
@@ -323,7 +326,7 @@ def validate_fleet(configs: list[dict]) -> None:
         start = cfg["host"]["subid-start"]
         ranges.append((start, start + SUBID_COUNT, name))
         krun = cfg.get("krun", {})
-        if krun.get("network") == "tap":
+        if is_active_tap(cfg):
             network = ipaddress.ip_interface(krun["ipv4"]).network
             if network in tap_networks:
                 die(f"{name}: TAP subnet {network} is also used by {tap_networks[network]}")
@@ -347,6 +350,11 @@ def validate_fleet(configs: list[dict]) -> None:
                         f"by {tap_publications[key]}"
                     )
                 tap_publications[key] = name
+            if not any(
+                port.get("protocol", "tcp") == "tcp"
+                for port in cfg["container"].get("ports", [])
+            ):
+                die(f"{name}: active TAP services need a published TCP probe port")
     ranges.sort()
     for (_, prev_end, prev_name), (cur_start, _, cur_name) in zip(ranges, ranges[1:]):
         if cur_start < prev_end:
@@ -355,15 +363,25 @@ def validate_fleet(configs: list[dict]) -> None:
     tap_names = {
         cfg["service"]["name"]
         for cfg in configs
-        if cfg.get("krun", {}).get("network") == "tap"
+        if is_active_tap(cfg)
     }
     for cfg in configs:
-        if cfg.get("krun", {}).get("network") != "tap":
+        if not is_active_tap(cfg):
             continue
         for rule in cfg["krun"].get("ingress", []):
             source = rule["from"]
             if source not in tap_names:
                 die(f"{cfg['_toml_path'].name}: unknown TAP source service {source!r}")
+
+
+def is_active_tap(cfg: dict) -> bool:
+    return cfg["container"].get("enabled", True) and (
+        cfg.get("krun", {}).get("network") == "tap"
+    )
+
+
+def active_taps(configs: list[dict]) -> list[dict]:
+    return [cfg for cfg in configs if is_active_tap(cfg)]
 
 
 def tap_name(cfg: dict) -> str:
@@ -382,6 +400,13 @@ def tap_gateway(cfg: dict) -> ipaddress.IPv4Interface:
     return ipaddress.ip_interface(
         f"{guest.network.network_address + 1}/{guest.network.prefixlen}"
     )
+
+
+def tap_probe_port(cfg: dict) -> int:
+    for port in cfg["container"].get("ports", []):
+        if port.get("protocol", "tcp") == "tcp":
+            return port["container"]
+    die(f"{cfg['_toml_path'].name}: active TAP service has no TCP probe port")
 
 
 def sops_secret_keys() -> set[str]:
@@ -441,15 +466,14 @@ def container_unit(cfg: dict, configs: list[dict] | None = None) -> str:
         lines.append("StopSignal=SIGINT")
     if "network" in container:
         lines.append(f"Network={container['network']}")
-    if krun.get("network") == "tap" and configs is not None:
+    if is_active_tap(cfg) and configs is not None:
         # libkrun opens /dev/net/tun after crun enters the container mount
         # namespace, so the device must exist there as well as on the host.
         lines.append("AddDevice=/dev/net/tun")
-        for peer in configs:
-            if peer.get("krun", {}).get("network") == "tap":
-                lines.append(
-                    f"AddHost={peer['service']['name']}.krun:{tap_guest(peer).ip}"
-                )
+        for peer in active_taps(configs):
+            lines.append(
+                f"AddHost={peer['service']['name']}.krun:{tap_guest(peer).ip}"
+            )
         lines.append(f"AddHost=host.krun.internal:{tap_gateway(cfg).ip}")
     for server in container.get("dns", []):
         lines.append(f"DNS={server}")
@@ -492,14 +516,32 @@ def container_unit(cfg: dict, configs: list[dict] | None = None) -> str:
     lines += extra.get("Container", [])
 
     lines += ["", "[Service]"]
-    if krun.get("network") == "tap":
+    if is_active_tap(cfg):
         lines.append(f"ExecStartPre=/usr/bin/test -c /dev/net/tun")
-        lines.append(f"ExecStartPre=/usr/bin/test -e /sys/class/net/{tap_name(cfg)}")
+        lines.append(
+            "ExecStartPre=/usr/bin/bash -ceu '"
+            "for i in {1..90}; do "
+            "if /usr/bin/test -r /run/nas-krun-network/policy-ready && "
+            f"/usr/bin/test -e /sys/class/net/{tap_name(cfg)}; then exit 0; fi; "
+            "sleep 1; done; "
+            'echo "krun network policy was not ready within 90 seconds" >&2; exit 1'"'"
+        )
     lines += [
         f"ExecStartPre=/usr/bin/test -r /run/nas-secrets/{svc['name']}/{secret['name']}"
         for secret in secrets
     ]
     lines += extra.get("Service", [])
+    if is_active_tap(cfg):
+        probe_port = tap_probe_port(cfg)
+        lines.append(
+            "ExecStartPost=/usr/bin/bash -ceu '"
+            "for i in {1..30}; do "
+            f"if /usr/bin/timeout 1 /usr/bin/bash -c \"</dev/tcp/{tap_guest(cfg).ip}/{probe_port}\" "
+            ">/dev/null 2>&1; "
+            "then exit 0; fi; sleep 1; done; "
+            f"echo \"libkrun guest {tap_guest(cfg).ip}:{probe_port} was not reachable\" >&2; "
+            "exit 1'"
+        )
     lines.append("Restart=always")
     lines.append(f"RestartSec={unit.get('restart-sec', 30)}")
     if "timeout-start-sec" in unit:
@@ -740,7 +782,7 @@ def fleet_header(name: str) -> str:
 
 
 def nft_filter(configs: list[dict]) -> str:
-    taps = [cfg for cfg in configs if cfg.get("krun", {}).get("network") == "tap"]
+    taps = active_taps(configs)
     tap_exclusions = " ".join(f'iifname != "{tap_name(cfg)}"' for cfg in taps)
     out_exclusions = " ".join(f'oifname != "{tap_name(cfg)}"' for cfg in taps)
     by_name = {cfg["service"]["name"]: cfg for cfg in taps}
@@ -802,8 +844,7 @@ def nft_filter(configs: list[dict]) -> str:
 def networkd_account_ordering(configs: list[dict]) -> str:
     account_units = [
         f"ensure-nas-{cfg['_slug']}-account.service"
-        for cfg in configs
-        if cfg.get("krun", {}).get("network") == "tap"
+        for cfg in active_taps(configs)
     ]
     return "\n".join(
         [
@@ -815,8 +856,126 @@ def networkd_account_ordering(configs: list[dict]) -> str:
     )
 
 
+def network_policy_script(configs: list[dict]) -> str:
+    taps = active_taps(configs)
+    tap_names = " ".join(f'"{tap_name(cfg)}"' for cfg in taps)
+    gateways = " ".join(f'"{tap_gateway(cfg)}"' for cfg in taps)
+    user_units = " ".join(f'"user@{cfg["host"]["uid"]}.service"' for cfg in taps)
+    wait_interfaces = " ".join(
+        f'--interface="{tap_name(cfg)}:off"' for cfg in taps
+    )
+    return fr"""#!/bin/bash
+{fleet_header("TAP network policy readiness")}
+
+set -euo pipefail
+
+READY_DIR=/run/nas-krun-network
+READY_FILE="${{READY_DIR}}/policy-ready"
+TAPS=({tap_names})
+GATEWAYS=({gateways})
+USER_UNITS=({user_units})
+
+quiesce_guests() {{
+    rm -f "${{READY_FILE}}"
+    systemctl stop "${{USER_UNITS[@]}}"
+    for unit in "${{USER_UNITS[@]}}"; do
+        if systemctl is-active --quiet "${{unit}}"; then
+            echo "Refusing to remove krun network policy while ${{unit}} is active" >&2
+            return 1
+        fi
+    done
+}}
+
+publish_readiness() {{
+    trap 'rm -f "${{READY_FILE}}"' ERR
+    install -d -o root -g root -m 0755 "${{READY_DIR}}"
+    rm -f "${{READY_FILE}}"
+
+    /usr/lib/systemd/systemd-networkd-wait-online --quiet --timeout=60 \
+        --ipv4 {wait_interfaces}
+
+    for index in "${{!TAPS[@]}}"; do
+        ip -4 -o address show dev "${{TAPS[$index]}}" \
+            | grep -Fq " ${{GATEWAYS[$index]}} "
+    done
+
+    nft list chain inet filter nas_krun_input >/dev/null
+    nft list chain inet filter nas_krun_forward >/dev/null
+    nft list table ip nas_krun_nat >/dev/null
+
+    printf '%s\n' "$(cat /proc/sys/kernel/random/boot_id)" \
+        > "${{READY_FILE}}.tmp"
+    chown root:root "${{READY_FILE}}.tmp"
+    chmod 0644 "${{READY_FILE}}.tmp"
+    mv -f "${{READY_FILE}}.tmp" "${{READY_FILE}}"
+    systemctl start "${{USER_UNITS[@]}}"
+    trap - ERR
+}}
+
+case "${{1:-}}" in
+    publish)
+        publish_readiness
+        ;;
+    quiesce)
+        quiesce_guests
+        ;;
+    quiesce-and-flush)
+        quiesce_guests
+        nft flush ruleset
+        ;;
+    *)
+        echo "usage: $0 publish|quiesce|quiesce-and-flush" >&2
+        exit 2
+        ;;
+esac
+"""
+
+
+def network_policy_unit(configs: list[dict]) -> str:
+    account_units = [
+        f"ensure-nas-{cfg['_slug']}-account.service" for cfg in active_taps(configs)
+    ]
+    accounts = " ".join(account_units)
+    return "\n".join(
+        [
+            fleet_header("TAP network policy service"),
+            "[Unit]",
+            "Description=Publish fail-closed readiness for the libkrun TAP network",
+            "Requires=nftables.service systemd-networkd.service",
+            f"Requires={accounts}",
+            "BindsTo=nftables.service systemd-networkd.service",
+            "PartOf=nftables.service systemd-networkd.service",
+            f"After=nftables.service systemd-networkd.service {accounts}",
+            "",
+            "[Service]",
+            "Type=oneshot",
+            "ExecStart=/usr/local/bin/nas-krun-network-policy.sh publish",
+            "ExecStop=/usr/local/bin/nas-krun-network-policy.sh quiesce",
+            "RemainAfterExit=yes",
+            "TimeoutStartSec=90",
+            "TimeoutStopSec=180",
+            "",
+            "[Install]",
+            "WantedBy=multi-user.target",
+            "",
+        ]
+    )
+
+
+def nftables_policy_dropin() -> str:
+    return "\n".join(
+        [
+            fleet_header("fail-closed nftables shutdown"),
+            "[Service]",
+            "ExecStop=",
+            "ExecStop=/usr/local/bin/nas-krun-network-policy.sh quiesce-and-flush",
+            "",
+        ]
+    )
+
+
 def nft_nat(configs: list[dict]) -> str:
-    taps = [cfg for cfg in configs if cfg.get("krun", {}).get("network") == "tap"]
+    taps = active_taps(configs)
     tap_input_exclusions = " ".join(
         f'iifname != "{tap_name(cfg)}"' for cfg in taps
     )
@@ -908,7 +1067,7 @@ def generated_paths(cfg: dict) -> set[Path]:
     }
     if cfg["container"].get("enabled", True):
         paths.add(OVERLAY / f"etc/containers/systemd/users/{uid}/{name}.container")
-    if cfg.get("krun", {}).get("network") == "tap":
+    if is_active_tap(cfg):
         paths.add(OVERLAY / f"usr/lib/systemd/network/80-{tap_name(cfg)}.netdev")
         paths.add(OVERLAY / f"usr/lib/systemd/network/80-{tap_name(cfg)}.network")
     return paths
@@ -963,6 +1122,9 @@ def main() -> None:
     fleet_paths = {
         OVERLAY / "etc/nftables/nas-krun-filter.nft",
         OVERLAY / "etc/nftables/nas-krun-nat.nft",
+        OVERLAY / "usr/local/bin/nas-krun-network-policy.sh",
+        OVERLAY / "etc/systemd/system/nas-krun-network-policy.service",
+        OVERLAY / "etc/systemd/system/nftables.service.d/10-nas-krun-policy.conf",
         OVERLAY
         / "etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf",
     }
@@ -988,7 +1150,7 @@ def main() -> None:
             OVERLAY / f"etc/systemd/system/ensure-nas-{slug}-account.service",
             ensure_account_unit(cfg),
         )
-        if cfg.get("krun", {}).get("network") == "tap":
+        if is_active_tap(cfg):
             write(
                 OVERLAY / f"usr/lib/systemd/network/80-{tap_name(cfg)}.netdev",
                 networkd_netdev(cfg),
@@ -1000,6 +1162,19 @@ def main() -> None:
 
     write(OVERLAY / "etc/subuid", subid_file(configs))
     write(OVERLAY / "etc/subgid", subid_file(configs))
+    write(
+        OVERLAY / "usr/local/bin/nas-krun-network-policy.sh",
+        network_policy_script(configs),
+        executable=True,
+    )
+    write(
+        OVERLAY / "etc/systemd/system/nas-krun-network-policy.service",
+        network_policy_unit(configs),
+    )
+    write(
+        OVERLAY / "etc/systemd/system/nftables.service.d/10-nas-krun-policy.conf",
+        nftables_policy_dropin(),
+    )
     write(
         OVERLAY
         / "etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf",
