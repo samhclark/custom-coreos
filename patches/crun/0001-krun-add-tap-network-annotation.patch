@@ -1,0 +1,63 @@
+diff --git a/krun.1.md b/krun.1.md
+--- a/krun.1.md
++++ b/krun.1.md
+@@ -60,6 +60,11 @@
+ :   When set to a value greater than 0, enable passt-based networking
+     in the microVM.
+
++**krun.tap_name**=*INTERFACE*
++:   Attach the named host TAP interface as a virtio-net device and enable
++    DHCP in the microVM. The caller must be allowed to open the existing TAP.
++    This annotation and **krun.use_passt** are mutually exclusive.
++
+ **krun.nested_virt**=*NUM*
+ :   When set to a value greater than 0, enable nested virtualization
+     in the microVM, exposing hardware virtualization support (VMX on
+diff --git a/src/libcrun/handlers/krun.c b/src/libcrun/handlers/krun.c
+--- a/src/libcrun/handlers/krun.c
++++ b/src/libcrun/handlers/krun.c
+@@ -30,6 +30,7 @@
+ #include <sys/types.h>
+ #include <sys/sysmacros.h>
+ #include <fcntl.h>
++#include <net/if.h>
+ #include <sched.h>
+ #include <ocispec/runtime_spec_schema_config_schema.h>
+
+@@ -256,6 +257,8 @@ libkrun_configure_vm (uint32_t ctx_id, void *handle, struct krun_config *kconf,
+   runtime_spec_schema_config_schema *def = container->container_def;
+   int32_t (*krun_set_vm_config) (uint32_t ctx_id, uint8_t num_vcpus, uint32_t ram_mib);
+   int32_t (*krun_add_net_unixstream) (uint32_t ctx_id, const char *c_path, int fd, uint8_t *const c_mac, uint32_t features, uint32_t flags);
++  int32_t (*krun_add_net_tap) (uint32_t ctx_id, char *c_tap_name, uint8_t *const c_mac, uint32_t features, uint32_t flags);
++  const char *tap_name;
+   int cpus, ram_mib, gpu_flags, nested_virt, ret;
+   cpu_set_t set;
+
+@@ -288,6 +291,27 @@ libkrun_configure_vm (uint32_t ctx_id, void *handle, struct krun_config *kconf,
+   if (UNLIKELY (ret < 0))
+     return crun_make_error (err, -ret, "could not set krun vm configuration");
+
++  tap_name = find_annotation (container, "krun.tap_name");
++  if (tap_name != NULL)
++    {
++      uint8_t mac[] = { 0x5a, 0x94, 0xef, 0xe4, 0x0c, 0xee };
++
++      if (tap_name[0] == '\0' || strlen (tap_name) >= IFNAMSIZ)
++        return crun_make_error (err, EINVAL, "invalid TAP interface name in krun.tap_name");
++      if (kconf->use_passt)
++        return crun_make_error (err, EINVAL, "krun.tap_name and krun.use_passt are mutually exclusive");
++      if (if_nametoindex (tap_name) == 0)
++        return crun_make_error (err, errno, "TAP interface `%s` is not available", tap_name);
++
++      krun_add_net_tap = dlsym (handle, "krun_add_net_tap");
++      if (krun_add_net_tap == NULL)
++        return crun_make_error (err, 0, "could not find symbol `krun_add_net_tap` in the krun library");
++
++      ret = krun_add_net_tap (ctx_id, (char *) tap_name, &mac[0], COMPAT_NET_FEATURES, NET_FLAG_DHCP_CLIENT);
++      if (UNLIKELY (ret < 0))
++        return crun_make_error (err, -ret, "could not attach krun TAP interface `%s`", tap_name);
++    }
++
+   gpu_flags = libkrun_parse_resource_configuration (kconf->config_tree, container, "krun.gpu_flags", "gpu_flags");
+   if (gpu_flags > 0)
+     {
