@@ -69,7 +69,6 @@ LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modu
 LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
 LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
 
-COPY quadlets/ /usr/share/custom-coreos/quadlets/
 COPY overlay-root/ /
 COPY --from=sops /usr/local/bin/sops /usr/local/bin/sops
 
@@ -107,16 +106,11 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     depmod -a "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")"; \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
+    mapfile -t account_units < <( \
+        awk "!/^#/" /usr/share/custom-coreos/fleet/account-units.list \
+    ); \
     systemctl enable \
-        ensure-nas-alertmanager-account.service \
-        ensure-nas-blackbox-account.service \
-        ensure-nas-caddy-account.service \
-        ensure-nas-garage-account.service \
-        ensure-nas-grafana-account.service \
-        ensure-nas-jellyfin-account.service \
-        ensure-nas-jellyfinmetrics-account.service \
-        ensure-nas-victoriametrics-account.service \
-        ensure-nas-vmalert-account.service \
+        "${account_units[@]}" \
         bootc-fetch-apply-updates.timer \
         nftables.service \
         nas-krun-network-policy.service \
@@ -154,16 +148,14 @@ RUN /bin/bash -c 'set -euo pipefail; \
     restorecon -F /usr/bin/crun'
 
 RUN /bin/bash -c 'set -euo pipefail; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/alertmanager(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/blackbox-exporter(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/caddy(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/garage(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/grafana(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/jellyfin-exporter(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/victoria-metrics(/.*)?"; \
-    semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/vmalert(/.*)?"; \
+    mapfile -t image_assets < <( \
+        awk "!/^#/" /usr/share/custom-coreos/fleet/assets.list \
+    ); \
+    for asset in "${image_assets[@]}"; do \
+        semanage fcontext -a -t container_file_t -r s0 "${asset}(/.*)?"; \
+    done; \
     semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R /usr/share/custom-coreos/alertmanager /usr/share/custom-coreos/blackbox-exporter /usr/share/custom-coreos/caddy /usr/share/custom-coreos/garage /usr/share/custom-coreos/grafana /usr/share/custom-coreos/jellyfin-exporter /usr/share/custom-coreos/victoria-metrics /usr/share/custom-coreos/vmalert'
+    restorecon -F -R "${image_assets[@]}"'
 
 RUN ["bootc", "container", "lint"]
 

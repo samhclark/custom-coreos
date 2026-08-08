@@ -9,31 +9,28 @@ export LC_ALL=C
 export SYSTEMD_COLORS=0
 export SYSTEMD_PAGER=cat
 
+TAP_MANIFEST=/usr/share/custom-coreos/fleet/active-taps.tsv
+
 if (( EUID != 0 )); then
     echo "Run this script as root (for example: sudo bash $0)." >&2
     exit 1
 fi
 
-TAPS=(
-    krun-51110 krun-51120 krun-51210 krun-51220 krun-51230
-    krun-51240 krun-51250 krun-51260 krun-51310
-)
-USER_UNITS=(
-    user@51110.service user@51120.service user@51210.service
-    user@51220.service user@51230.service user@51240.service
-    user@51250.service user@51260.service user@51310.service
-)
-ACCOUNT_UNITS=(
-    ensure-nas-garage-account.service
-    ensure-nas-jellyfin-account.service
-    ensure-nas-grafana-account.service
-    ensure-nas-vmalert-account.service
-    ensure-nas-blackbox-account.service
-    ensure-nas-alertmanager-account.service
-    ensure-nas-victoriametrics-account.service
-    ensure-nas-jellyfinmetrics-account.service
-    ensure-nas-caddy-account.service
-)
+if [[ ! -r "${TAP_MANIFEST}" ]]; then
+    echo "Fleet manifest is missing: ${TAP_MANIFEST}" >&2
+    exit 1
+fi
+
+TAPS=()
+USER_UNITS=()
+ACCOUNT_UNITS=()
+while IFS=$'\t' read -r tap user_unit account_unit; do
+    [[ "${tap}" == \#* ]] && continue
+    TAPS+=("${tap}")
+    USER_UNITS+=("${user_unit}")
+    ACCOUNT_UNITS+=("${account_unit}")
+done < "${TAP_MANIFEST}"
+
 ACCOUNT_JOURNAL_ARGS=()
 USER_JOURNAL_ARGS=()
 for unit in "${ACCOUNT_UNITS[@]}"; do
@@ -97,8 +94,13 @@ run "policy and network boot journal" journalctl -b --no-pager \
     -u systemd-networkd.service \
     -u systemd-networkd-wait-online.service \
     -u nftables.service
-run "account preparation boot journal" journalctl -b --no-pager \
-    -o short-monotonic "${ACCOUNT_JOURNAL_ARGS[@]}"
+if (( ${#ACCOUNT_JOURNAL_ARGS[@]} > 0 )); then
+    run "account preparation boot journal" journalctl -b --no-pager \
+        -o short-monotonic "${ACCOUNT_JOURNAL_ARGS[@]}"
+else
+    section "account preparation boot journal"
+    echo "No active TAP service accounts are declared."
+fi
 
 run "networkd link summary" networkctl list --no-pager --all
 run "networkd overall status" networkctl status --no-pager --all
@@ -154,12 +156,17 @@ run "required nftables objects" bash -c '
 '
 run "complete nftables ruleset" nft list ruleset
 
-run "service user manager states" systemctl show "${USER_UNITS[@]}" \
-    -p Id -p LoadState -p ActiveState -p SubState -p Result -p Job -p InvocationID
-run "service user manager status" systemctl status --no-pager --full \
-    "${USER_UNITS[@]}"
-run "service user manager boot journal" journalctl -b --no-pager \
-    -o short-monotonic "${USER_JOURNAL_ARGS[@]}"
+if (( ${#USER_UNITS[@]} > 0 )); then
+    run "service user manager states" systemctl show "${USER_UNITS[@]}" \
+        -p Id -p LoadState -p ActiveState -p SubState -p Result -p Job -p InvocationID
+    run "service user manager status" systemctl status --no-pager --full \
+        "${USER_UNITS[@]}"
+    run "service user manager boot journal" journalctl -b --no-pager \
+        -o short-monotonic "${USER_JOURNAL_ARGS[@]}"
+else
+    section "service user managers"
+    echo "No active TAP services are declared."
+fi
 run "logged-in and lingering users" loginctl list-users --no-pager
 
 WAIT_ONLINE=/usr/lib/systemd/systemd-networkd-wait-online
@@ -178,9 +185,13 @@ if [[ -n "$WAIT_ONLINE" && -x "$WAIT_ONLINE" ]]; then
         policy_interfaces+=("--interface=${tap}:off")
     done
 
-    run "10-second reproduction of policy wait (debug logging)" \
-        timeout --signal=TERM 15s env SYSTEMD_LOG_LEVEL=debug \
-        "$WAIT_ONLINE" --timeout=10 --ipv4 "${policy_interfaces[@]}"
+    if (( ${#policy_interfaces[@]} > 0 )); then
+        run "10-second reproduction of policy wait (debug logging)" \
+            timeout --signal=TERM 15s env SYSTEMD_LOG_LEVEL=debug \
+            "$WAIT_ONLINE" --timeout=10 --ipv4 "${policy_interfaces[@]}"
+    else
+        echo "No active TAP interfaces are declared; skipping policy wait reproduction."
+    fi
     run "10-second reproduction of global wait (debug logging)" \
         timeout --signal=TERM 15s env SYSTEMD_LOG_LEVEL=debug \
         "$WAIT_ONLINE" --timeout=10

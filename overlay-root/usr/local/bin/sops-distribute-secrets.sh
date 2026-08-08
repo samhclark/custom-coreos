@@ -5,7 +5,7 @@
 set -euo pipefail
 
 SOPS_FILE="/usr/share/custom-coreos/secrets/secrets.sops.yaml"
-QUADLET_DIR="/usr/share/custom-coreos/quadlets"
+SECRET_MANIFEST="/usr/share/custom-coreos/fleet/secrets.tsv"
 AGE_CREDENTIAL="/var/lib/nas-secrets/age-key.cred"
 RUNTIME_DIR="/run/nas-secrets"
 
@@ -34,68 +34,6 @@ require_file() {
         log "ERROR: Missing required file: $1"
         exit 1
     fi
-}
-
-# Emits one row per declared rootless secret:
-#   <service>\t<username>\t<secret-name>
-read_quadlet_secret_rows() {
-    local file
-    local line
-    local section
-    local service
-    local username
-
-    shopt -s nullglob
-    local files=("${QUADLET_DIR}"/*.toml)
-    shopt -u nullglob
-
-    for file in "${files[@]}"; do
-        section=""
-        service=""
-        username=""
-
-        while IFS= read -r line; do
-            line="${line%%#*}"
-
-            if [[ "${line}" =~ ^[[:space:]]*\[service\][[:space:]]*$ ]]; then
-                section="service"
-                continue
-            fi
-
-            if [[ "${line}" =~ ^[[:space:]]*\[host\][[:space:]]*$ ]]; then
-                section="host"
-                continue
-            fi
-
-            if [[ "${line}" =~ ^[[:space:]]*\[\[container\.secrets\]\][[:space:]]*$ ]]; then
-                section="container_secret"
-                continue
-            fi
-
-            if [[ "${line}" =~ ^[[:space:]]*\[ ]]; then
-                section=""
-                continue
-            fi
-
-            if [[ "${section}" == "service" && "${line}" =~ ^[[:space:]]*name[[:space:]]*=[[:space:]]*\"([a-z0-9-]+)\" ]]; then
-                service="${BASH_REMATCH[1]}"
-                continue
-            fi
-
-            if [[ "${section}" == "host" && "${line}" =~ ^[[:space:]]*username[[:space:]]*=[[:space:]]*\"([^\"]+)\" ]]; then
-                username="${BASH_REMATCH[1]}"
-                continue
-            fi
-
-            if [[ "${section}" == "container_secret" && "${line}" =~ ^[[:space:]]*name[[:space:]]*=[[:space:]]*\"([^\"]+)\" ]]; then
-                if [[ -z "${service}" || -z "${username}" ]]; then
-                    log "ERROR: ${file} declares a secret before [service].name and [host].username"
-                    exit 1
-                fi
-                printf '%s\t%s\t%s\n' "${service}" "${username}" "${BASH_REMATCH[1]}"
-            fi
-        done < "${file}"
-    done
 }
 
 secret_value() {
@@ -127,6 +65,7 @@ write_runtime_secret() {
 
 install -d -m 0711 -o root -g root "${RUNTIME_DIR}"
 require_file "${SOPS_FILE}"
+require_file "${SECRET_MANIFEST}"
 require_file "${AGE_CREDENTIAL}"
 
 age_key_file="$(mktemp "${RUNTIME_DIR}/.age-key.XXXXXX")"
@@ -154,7 +93,7 @@ require_sops_secret() {
 
 missing_secrets=0
 
-runtime_rows="$(read_quadlet_secret_rows)"
+runtime_rows="$(awk '!/^#/' "${SECRET_MANIFEST}")"
 
 while IFS=$'\t' read -r service user secret; do
     [[ -z "${service}" ]] && continue
