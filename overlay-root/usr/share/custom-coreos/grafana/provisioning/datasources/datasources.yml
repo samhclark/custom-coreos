@@ -4,5 +4,5 @@ datasources:
   - name: VictoriaMetrics
     type: victoriametrics-metrics-datasource
     access: proxy
-    url: http://127.0.0.1:8428
+    url: http://victoria-metrics.krun:8428
     isDefault: true

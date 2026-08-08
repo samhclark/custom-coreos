@@ -21,6 +21,8 @@ GENERATED_HEADER_SUFFIX = " — DO NOT EDIT"
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 USERNAME_RE = re.compile(r"^_nas_[a-z0-9]+$")
 PINNED_IMAGE_RE = re.compile(r"^[^@\s]+:[^@:\s]+@sha256:[0-9a-f]{64}$")
+TAP_NAME_RE = re.compile(r"^krun-[0-9]{5}$")
+KRUN_DNS_SERVERS = ("100.100.100.100", "75.75.75.75", "75.75.76.76")
 
 
 def die(msg: str) -> None:
@@ -36,11 +38,13 @@ def wrap_comment(text: str) -> str:
     return textwrap.fill(text, width=78, initial_indent="# ", subsequent_indent="# ")
 
 
-def validate_ports(toml_name: str, container: dict) -> None:
+def validate_ports(
+    toml_name: str, container: dict, *, allow_host_network: bool = False
+) -> None:
     ports = container.get("ports", [])
     if not isinstance(ports, list):
         die(f"{toml_name}: [container].ports must be an array of tables")
-    if ports and container.get("network") == "host":
+    if ports and container.get("network") == "host" and not allow_host_network:
         die(f"{toml_name}: [container].ports cannot be used with network = \"host\"")
 
     seen = set()
@@ -141,7 +145,18 @@ def validate_krun(toml_name: str, cfg: dict) -> None:
     if not isinstance(krun, dict):
         die(f"{toml_name}: [krun] must be a table")
 
-    unknown = sorted(set(krun) - {"enabled", "cpus", "ram-mib", "network"})
+    unknown = sorted(
+        set(krun)
+        - {
+            "enabled",
+            "cpus",
+            "ram-mib",
+            "network",
+            "ipv4",
+            "ingress",
+            "host-access",
+        }
+    )
     if unknown:
         die(f"{toml_name}: [krun] has unknown keys: {', '.join(unknown)}")
 
@@ -167,8 +182,8 @@ def validate_krun(toml_name: str, cfg: dict) -> None:
         die(f"{toml_name}: [krun].ram-mib must be at least 128")
 
     network = krun.get("network", "tsi")
-    if network not in {"tsi", "passt"}:
-        die(f'{toml_name}: [krun].network must be "tsi" or "passt"')
+    if network not in {"tsi", "passt", "tap"}:
+        die(f'{toml_name}: [krun].network must be "tsi", "passt", or "tap"')
 
     container = cfg.get("container", {})
     if network == "passt" and container.get("network") == "host":
@@ -176,6 +191,55 @@ def validate_krun(toml_name: str, cfg: dict) -> None:
             f'{toml_name}: [krun].network = "passt" requires a private '
             "container network namespace"
         )
+    if network == "tap":
+        if container.get("network") != "host":
+            die(f'{toml_name}: [krun].network = "tap" requires network = "host"')
+        if "ipv4" not in krun:
+            die(f"{toml_name}: TAP networking requires [krun].ipv4")
+        try:
+            guest = ipaddress.ip_interface(krun["ipv4"])
+        except (TypeError, ValueError):
+            die(f"{toml_name}: [krun].ipv4 must be an IPv4 interface address")
+        if guest.version != 4 or guest.network.prefixlen != 30:
+            die(f"{toml_name}: [krun].ipv4 must use a dedicated IPv4 /30")
+        if guest.ip != guest.network.network_address + 2:
+            die(f"{toml_name}: [krun].ipv4 must be the second usable /30 address")
+        for port in container.get("ports", []):
+            address_text = port["host"].rsplit(":", 1)[0]
+            if ipaddress.ip_address(address_text).version != 4:
+                die(f"{toml_name}: TAP host publications currently support only IPv4")
+
+        ingress = krun.get("ingress", [])
+        if not isinstance(ingress, list):
+            die(f"{toml_name}: [[krun.ingress]] must be an array of tables")
+        seen_ingress = set()
+        for rule in ingress:
+            if not isinstance(rule, dict) or set(rule) != {"from", "ports"}:
+                die(f"{toml_name}: each [[krun.ingress]] needs only from and ports")
+            if not isinstance(rule["from"], str) or not NAME_RE.fullmatch(rule["from"]):
+                die(f"{toml_name}: [[krun.ingress]].from must be a service name")
+            ports = rule["ports"]
+            if not isinstance(ports, list) or not ports or any(
+                type(port) is not int or not 1 <= port <= 65535 for port in ports
+            ):
+                die(f"{toml_name}: [[krun.ingress]].ports must contain TCP ports")
+            if len(set(ports)) != len(ports):
+                die(f"{toml_name}: [[krun.ingress]].ports contains duplicates")
+            key = (rule["from"], tuple(ports))
+            if key in seen_ingress:
+                die(f"{toml_name}: duplicate [[krun.ingress]] rule")
+            seen_ingress.add(key)
+
+        host_access = krun.get("host-access", [])
+        if not isinstance(host_access, list) or any(
+            type(port) is not int or not 1 <= port <= 65535
+            for port in host_access
+        ):
+            die(f"{toml_name}: [krun].host-access must be an array of TCP ports")
+        if len(set(host_access)) != len(host_access):
+            die(f"{toml_name}: [krun].host-access contains duplicates")
+    elif set(krun) & {"ipv4", "ingress", "host-access"}:
+        die(f"{toml_name}: TAP-only [krun] fields require network = \"tap\"")
     if container.get("network") == "host":
         for server in container.get("dns", []):
             if ipaddress.ip_address(server).is_loopback:
@@ -223,7 +287,14 @@ def load_service(toml_path: Path) -> dict:
         die(f"{toml_path.name}: [service].name must match {NAME_RE.pattern}")
     if not USERNAME_RE.match(host["username"]):
         die(f"{toml_path.name}: [host].username must match {USERNAME_RE.pattern}")
-    validate_ports(toml_path.name, container)
+    krun = cfg.get("krun", {})
+    validate_ports(
+        toml_path.name,
+        container,
+        allow_host_network=(
+            krun.get("enabled", False) and krun.get("network") == "tap"
+        ),
+    )
     validate_dns(toml_path.name, container)
     validate_sysctls(toml_path.name, container)
     validate_krun(toml_path.name, cfg)
@@ -237,6 +308,8 @@ def load_service(toml_path: Path) -> dict:
 def validate_fleet(configs: list[dict]) -> None:
     seen: dict[str, tuple] = {}
     ranges: list[tuple[int, int, str]] = []
+    tap_networks: dict[ipaddress.IPv4Network, str] = {}
+    tap_publications: dict[tuple[int, str], str] = {}
     for cfg in configs:
         name = cfg["_toml_path"].name
         for key, value in (
@@ -249,10 +322,66 @@ def validate_fleet(configs: list[dict]) -> None:
             seen[(key, value)] = name
         start = cfg["host"]["subid-start"]
         ranges.append((start, start + SUBID_COUNT, name))
+        krun = cfg.get("krun", {})
+        if krun.get("network") == "tap":
+            network = ipaddress.ip_interface(krun["ipv4"]).network
+            if network in tap_networks:
+                die(f"{name}: TAP subnet {network} is also used by {tap_networks[network]}")
+            tap_networks[network] = name
+            declared_container_ports = {
+                port["container"] for port in cfg["container"].get("ports", [])
+            }
+            for rule in krun.get("ingress", []):
+                unknown_ports = sorted(set(rule["ports"]) - declared_container_ports)
+                if unknown_ports:
+                    die(
+                        f"{name}: TAP ingress ports must also be declared in "
+                        f"[[container.ports]]: {', '.join(map(str, unknown_ports))}"
+                    )
+            for port in cfg["container"].get("ports", []):
+                host_port = int(port["host"].rsplit(":", 1)[1])
+                key = (host_port, port.get("protocol", "tcp"))
+                if key in tap_publications:
+                    die(
+                        f"{name}: host {key[1]} port {key[0]} is also published "
+                        f"by {tap_publications[key]}"
+                    )
+                tap_publications[key] = name
     ranges.sort()
     for (_, prev_end, prev_name), (cur_start, _, cur_name) in zip(ranges, ranges[1:]):
         if cur_start < prev_end:
             die(f"subordinate ID ranges overlap between {prev_name} and {cur_name}")
+
+    tap_names = {
+        cfg["service"]["name"]
+        for cfg in configs
+        if cfg.get("krun", {}).get("network") == "tap"
+    }
+    for cfg in configs:
+        if cfg.get("krun", {}).get("network") != "tap":
+            continue
+        for rule in cfg["krun"].get("ingress", []):
+            source = rule["from"]
+            if source not in tap_names:
+                die(f"{cfg['_toml_path'].name}: unknown TAP source service {source!r}")
+
+
+def tap_name(cfg: dict) -> str:
+    name = f"krun-{cfg['host']['uid']}"
+    if not TAP_NAME_RE.fullmatch(name):
+        die(f"{cfg['_toml_path'].name}: generated invalid TAP name {name!r}")
+    return name
+
+
+def tap_guest(cfg: dict) -> ipaddress.IPv4Interface:
+    return ipaddress.ip_interface(cfg["krun"]["ipv4"])
+
+
+def tap_gateway(cfg: dict) -> ipaddress.IPv4Interface:
+    guest = tap_guest(cfg)
+    return ipaddress.ip_interface(
+        f"{guest.network.network_address + 1}/{guest.network.prefixlen}"
+    )
 
 
 def sops_secret_keys() -> set[str]:
@@ -285,7 +414,7 @@ def verify_sops(configs: list[dict]) -> None:
         sys.exit(1)
 
 
-def container_unit(cfg: dict) -> str:
+def container_unit(cfg: dict, configs: list[dict] | None = None) -> str:
     svc, host, container = cfg["service"], cfg["host"], cfg["container"]
     unit = cfg.get("unit", {})
     extra = unit.get("extra", {})
@@ -307,9 +436,21 @@ def container_unit(cfg: dict) -> str:
         lines.append(f"Annotation=krun.ram_mib={krun['ram-mib']}")
         if krun.get("network", "tsi") == "passt":
             lines.append("Annotation=krun.use_passt=1")
+        elif krun.get("network", "tsi") == "tap":
+            lines.append(f"Annotation=krun.tap_name={tap_name(cfg)}")
         lines.append("StopSignal=SIGINT")
     if "network" in container:
         lines.append(f"Network={container['network']}")
+    if krun.get("network") == "tap" and configs is not None:
+        # libkrun opens /dev/net/tun after crun enters the container mount
+        # namespace, so the device must exist there as well as on the host.
+        lines.append("AddDevice=/dev/net/tun")
+        for peer in configs:
+            if peer.get("krun", {}).get("network") == "tap":
+                lines.append(
+                    f"AddHost={peer['service']['name']}.krun:{tap_guest(peer).ip}"
+                )
+        lines.append(f"AddHost=host.krun.internal:{tap_gateway(cfg).ip}")
     for server in container.get("dns", []):
         lines.append(f"DNS={server}")
     for setting in container.get("sysctls", []):
@@ -338,7 +479,7 @@ def container_unit(cfg: dict) -> str:
         lines.append(f"Volume=/run/nas-secrets/{svc['name']}/{secret['name']}:{target}:ro,Z")
 
     ports = container.get("ports", [])
-    if ports:
+    if ports and krun.get("network") != "tap":
         lines.append("")
         for port in ports:
             protocol = port.get("protocol", "tcp")
@@ -351,6 +492,9 @@ def container_unit(cfg: dict) -> str:
     lines += extra.get("Container", [])
 
     lines += ["", "[Service]"]
+    if krun.get("network") == "tap":
+        lines.append(f"ExecStartPre=/usr/bin/test -c /dev/net/tun")
+        lines.append(f"ExecStartPre=/usr/bin/test -e /sys/class/net/{tap_name(cfg)}")
     lines += [
         f"ExecStartPre=/usr/bin/test -r /run/nas-secrets/{svc['name']}/{secret['name']}"
         for secret in secrets
@@ -546,6 +690,195 @@ WantedBy=sysinit.target
 """
 
 
+def networkd_netdev(cfg: dict) -> str:
+    host = cfg["host"]
+    return f"""{header(cfg['_toml_path'])}
+[NetDev]
+Name={tap_name(cfg)}
+Kind=tap
+
+[Tap]
+User={host['username']}
+Group={host['username']}
+VNetHeader=yes
+"""
+
+
+def networkd_network(cfg: dict) -> str:
+    gateway = tap_gateway(cfg)
+    return f"""{header(cfg['_toml_path'])}
+[Match]
+Name={tap_name(cfg)}
+
+[Link]
+RequiredForOnline=no
+
+[Network]
+Address={gateway}
+DHCPServer=yes
+ConfigureWithoutCarrier=yes
+IPv4RouteLocalnet=yes
+LinkLocalAddressing=no
+IPv6AcceptRA=no
+
+[DHCPServer]
+PoolOffset=2
+PoolSize=1
+PersistLeases=runtime
+RapidCommit=yes
+EmitDNS=yes
+DNS={' '.join(KRUN_DNS_SERVERS)}
+EmitNTP=no
+EmitSIP=no
+EmitRouter=yes
+Router={gateway.ip}
+"""
+
+
+def fleet_header(name: str) -> str:
+    return f"{GENERATED_HEADER_PREFIX}{name}{GENERATED_HEADER_SUFFIX}"
+
+
+def nft_filter(configs: list[dict]) -> str:
+    taps = [cfg for cfg in configs if cfg.get("krun", {}).get("network") == "tap"]
+    tap_exclusions = " ".join(f'iifname != "{tap_name(cfg)}"' for cfg in taps)
+    out_exclusions = " ".join(f'oifname != "{tap_name(cfg)}"' for cfg in taps)
+    by_name = {cfg["service"]["name"]: cfg for cfg in taps}
+    lines = [fleet_header("TAP fleet filter"), "chain nas_krun_input {"]
+    for cfg in taps:
+        lines.append(
+            f'    iifname "{tap_name(cfg)}" udp sport 68 udp dport 67 accept'
+        )
+        lines.append(
+            f'    iifname "{tap_name(cfg)}" ip saddr != {tap_guest(cfg).ip} drop'
+        )
+        lines.append(
+            f'    iifname "{tap_name(cfg)}" ip saddr {tap_guest(cfg).ip} '
+            "ct state established,related accept"
+        )
+        for port in cfg["krun"].get("host-access", []):
+            lines.append(
+                f'    iifname "{tap_name(cfg)}" ip saddr {tap_guest(cfg).ip} '
+                f"ip daddr {tap_gateway(cfg).ip} tcp dport {port} accept"
+            )
+        lines.append(f'    iifname "{tap_name(cfg)}" drop')
+    lines += ["}", "", "chain nas_krun_forward {"]
+    for cfg in taps:
+        lines.append(
+            f'    iifname "{tap_name(cfg)}" ip saddr != {tap_guest(cfg).ip} drop'
+        )
+        lines.append(
+            f'    oifname "{tap_name(cfg)}" ip daddr != {tap_guest(cfg).ip} drop'
+        )
+    lines.append("    ct state established,related accept")
+    for destination in taps:
+        for rule in destination["krun"].get("ingress", []):
+            source = by_name[rule["from"]]
+            ports = ", ".join(str(port) for port in rule["ports"])
+            lines.append(
+                f'    iifname "{tap_name(source)}" oifname "{tap_name(destination)}" '
+                f"ip saddr {tap_guest(source).ip} ip daddr {tap_guest(destination).ip} "
+                f"tcp dport {{ {ports} }} accept"
+            )
+    for cfg in taps:
+        for port in cfg["container"].get("ports", []):
+            address = port["host"].rsplit(":", 1)[0]
+            if address != "0.0.0.0":
+                continue
+            protocol = port.get("protocol", "tcp")
+            lines.append(
+                f"    {tap_exclusions} oifname \"{tap_name(cfg)}\" "
+                f"ip daddr {tap_guest(cfg).ip} {protocol} dport {port['container']} accept"
+            )
+    for cfg in taps:
+        lines.append(
+            f'    iifname "{tap_name(cfg)}" ip saddr {tap_guest(cfg).ip} '
+            f"{out_exclusions} accept"
+        )
+    lines += ["}", ""]
+    return "\n".join(lines)
+
+
+def networkd_account_ordering(configs: list[dict]) -> str:
+    account_units = [
+        f"ensure-nas-{cfg['_slug']}-account.service"
+        for cfg in configs
+        if cfg.get("krun", {}).get("network") == "tap"
+    ]
+    return "\n".join(
+        [
+            fleet_header("networkd TAP account ordering"),
+            "[Unit]",
+            f"After={' '.join(account_units)}",
+            "",
+        ]
+    )
+
+
+def nft_nat(configs: list[dict]) -> str:
+    taps = [cfg for cfg in configs if cfg.get("krun", {}).get("network") == "tap"]
+    tap_input_exclusions = " ".join(
+        f'iifname != "{tap_name(cfg)}"' for cfg in taps
+    )
+    tap_output_exclusions = " ".join(
+        f'oifname != "{tap_name(cfg)}"' for cfg in taps
+    )
+    prerouting = []
+    output = []
+    for cfg in taps:
+        guest = tap_guest(cfg).ip
+        for port in cfg["container"].get("ports", []):
+            address, host_port = port["host"].rsplit(":", 1)
+            protocol = port.get("protocol", "tcp")
+            destination = f"{guest}:{port['container']}"
+            if address == "0.0.0.0":
+                prerouting.append(
+                    f"        {tap_input_exclusions} fib daddr type local {protocol} "
+                    f"dport {host_port} dnat to {destination}"
+                )
+                output.append(
+                    f"        fib daddr type local {protocol} dport {host_port} "
+                    f"dnat to {destination}"
+                )
+            else:
+                prerouting.append(
+                    f'        iifname "lo" ip daddr {address} {protocol} '
+                    f"dport {host_port} dnat to {destination}"
+                )
+                output.append(
+                    f"        ip daddr {address} {protocol} dport {host_port} "
+                    f"dnat to {destination}"
+                )
+    lines = [
+        fleet_header("TAP fleet NAT"),
+        "table ip nas_krun_nat {",
+        "    chain prerouting {",
+        "        type nat hook prerouting priority dstnat; policy accept;",
+        *prerouting,
+        "    }",
+        "",
+        "    chain output {",
+        "        type nat hook output priority dstnat; policy accept;",
+        *output,
+        "    }",
+        "",
+        "    chain postrouting {",
+        "        type nat hook postrouting priority srcnat; policy accept;",
+    ]
+    for cfg in taps:
+        if cfg["container"].get("ports"):
+            lines.append(
+                f'        oifname "{tap_name(cfg)}" ip saddr 127.0.0.0/8 '
+                f"ip daddr {tap_guest(cfg).ip} snat to {tap_gateway(cfg).ip}"
+            )
+    for cfg in taps:
+        lines.append(
+            f"        ip saddr {tap_guest(cfg).ip} {tap_output_exclusions} masquerade"
+        )
+    lines += ["    }", "}", ""]
+    return "\n".join(lines)
+
+
 def subid_file(configs: list[dict]) -> str:
     # No header comment: shadow-utils does not document comment support in
     # subuid/subgid, so these files stay bare.
@@ -575,6 +908,9 @@ def generated_paths(cfg: dict) -> set[Path]:
     }
     if cfg["container"].get("enabled", True):
         paths.add(OVERLAY / f"etc/containers/systemd/users/{uid}/{name}.container")
+    if cfg.get("krun", {}).get("network") == "tap":
+        paths.add(OVERLAY / f"usr/lib/systemd/network/80-{tap_name(cfg)}.netdev")
+        paths.add(OVERLAY / f"usr/lib/systemd/network/80-{tap_name(cfg)}.network")
     return paths
 
 
@@ -624,13 +960,20 @@ def main() -> None:
     verify_sops(configs)
 
     expected_paths = set()
+    fleet_paths = {
+        OVERLAY / "etc/nftables/nas-krun-filter.nft",
+        OVERLAY / "etc/nftables/nas-krun-nat.nft",
+        OVERLAY
+        / "etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf",
+    }
+    expected_paths.update(fleet_paths)
     for cfg in configs:
         uid, slug, name = cfg["host"]["uid"], cfg["_slug"], cfg["service"]["name"]
         expected_paths.update(generated_paths(cfg))
         if cfg["container"].get("enabled", True):
             write(
                 OVERLAY / f"etc/containers/systemd/users/{uid}/{name}.container",
-                container_unit(cfg),
+                container_unit(cfg, configs),
             )
         else:
             print(f"skip  quadlets/{cfg['_toml_path'].name} container (disabled)")
@@ -645,9 +988,25 @@ def main() -> None:
             OVERLAY / f"etc/systemd/system/ensure-nas-{slug}-account.service",
             ensure_account_unit(cfg),
         )
+        if cfg.get("krun", {}).get("network") == "tap":
+            write(
+                OVERLAY / f"usr/lib/systemd/network/80-{tap_name(cfg)}.netdev",
+                networkd_netdev(cfg),
+            )
+            write(
+                OVERLAY / f"usr/lib/systemd/network/80-{tap_name(cfg)}.network",
+                networkd_network(cfg),
+            )
 
     write(OVERLAY / "etc/subuid", subid_file(configs))
     write(OVERLAY / "etc/subgid", subid_file(configs))
+    write(
+        OVERLAY
+        / "etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf",
+        networkd_account_ordering(configs),
+    )
+    write(OVERLAY / "etc/nftables/nas-krun-filter.nft", nft_filter(configs))
+    write(OVERLAY / "etc/nftables/nas-krun-nat.nft", nft_nat(configs))
     remove_stale_generated(expected_paths)
 
 

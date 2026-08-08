@@ -16,12 +16,22 @@ display-name = "blackbox exporter"
 [container]
 image = "quay.io/prometheus/blackbox-exporter:v0.28.0@sha256:e753ff9f3fc458d02cca5eddab5a77e1c175eee484a8925ac7d524f04366c2fc"
 network = "host"
-exec = "--config.file=/config/blackbox.yml --web.listen-address=127.0.0.1:9115"
+exec = "--config.file=/config/blackbox.yml --web.listen-address=0.0.0.0:9115"
 
 [krun]
 enabled = true
 cpus = 1
 ram-mib = 128
+network = "tap"
+ipv4 = "10.253.5.2/30"
+
+[[krun.ingress]]
+from = "victoria-metrics"
+ports = [9115]
+
+[[container.ports]]
+host = "127.0.0.1:9115"
+container = 9115
 
 [[container.volumes]]
 comment = "Image-controlled local probe configuration (read-only)"

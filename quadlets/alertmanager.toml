@@ -19,12 +19,26 @@ network = "host"
 # MagicDNS preserves tailnet resolution; Comcast resolvers provide fallbacks.
 dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
 container-user = 0
-exec = "--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager --cluster.listen-address="
+exec = "--web.listen-address=0.0.0.0:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager --cluster.listen-address="
 
 [krun]
 enabled = true
 cpus = 1
 ram-mib = 256
+network = "tap"
+ipv4 = "10.253.6.2/30"
+
+[[krun.ingress]]
+from = "vmalert"
+ports = [9093]
+
+[[krun.ingress]]
+from = "victoria-metrics"
+ports = [9093]
+
+[[container.ports]]
+host = "127.0.0.1:9093"
+container = 9093
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"

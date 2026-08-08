@@ -9,8 +9,20 @@ Image=docker.io/victoriametrics/victoria-metrics:v1.148.0@sha256:407013e902f9a0b
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=1024
+Annotation=krun.tap_name=krun-51250
 StopSignal=SIGINT
 Network=host
+AddDevice=/dev/net/tun
+AddHost=garage.krun:10.253.1.2
+AddHost=jellyfin.krun:10.253.2.2
+AddHost=grafana.krun:10.253.3.2
+AddHost=vmalert.krun:10.253.4.2
+AddHost=blackbox-exporter.krun:10.253.5.2
+AddHost=alertmanager.krun:10.253.6.2
+AddHost=victoria-metrics.krun:10.253.7.2
+AddHost=jellyfin-exporter.krun:10.253.8.2
+AddHost=caddy.krun:10.253.9.2
+AddHost=host.krun.internal:10.253.7.1
 User=0
 
 # Image-controlled scrape configuration (read-only)
@@ -22,9 +34,11 @@ Volume=/var/lib/victoria-metrics:/victoria-metrics-data
 # Runtime secret written at boot by sops-distribute-secrets.service
 Volume=/run/nas-secrets/victoria-metrics/garage-metrics-token:/run/secrets/garage-metrics-token:ro,Z
 
-Exec=-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=127.0.0.1:8428
+Exec=-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=0.0.0.0:8428
 
 [Service]
+ExecStartPre=/usr/bin/test -c /dev/net/tun
+ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51250
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/victoria-metrics/garage-metrics-token
 ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do if /usr/bin/test -e /run/victoria-metrics-dataset/ready && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/victoria-metrics 2>/dev/null)" == "tank/victoria-metrics/data" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/victoria-metrics 2>/dev/null)" == "51250:51250" ]] && /usr/bin/test -w /var/lib/victoria-metrics; then exit 0; fi; sleep 2; done; echo "VictoriaMetrics storage was not ready within 300 seconds" >&2; exit 1'
 Restart=always

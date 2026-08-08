@@ -15,12 +15,22 @@ display-name = "vmalert"
 [container]
 image = "docker.io/victoriametrics/vmalert:v1.148.0@sha256:268ab5df69360a236e1382db0dbde44d5c32362b85501f761d61fc25c76f05ce"
 network = "host"
-exec = "-datasource.url=http://127.0.0.1:8428 -remoteWrite.url=http://127.0.0.1:8428 -remoteRead.url=http://127.0.0.1:8428 -notifier.url=http://127.0.0.1:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=127.0.0.1:8880"
+exec = "-datasource.url=http://victoria-metrics.krun:8428 -remoteWrite.url=http://victoria-metrics.krun:8428 -remoteRead.url=http://victoria-metrics.krun:8428 -notifier.url=http://alertmanager.krun:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=0.0.0.0:8880"
 
 [krun]
 enabled = true
 cpus = 1
 ram-mib = 256
+network = "tap"
+ipv4 = "10.253.4.2/30"
+
+[[krun.ingress]]
+from = "victoria-metrics"
+ports = [8880]
+
+[[container.ports]]
+host = "127.0.0.1:8880"
+container = 8880
 
 [[container.volumes]]
 comment = "Image-controlled alerting rules (read-only)"

@@ -82,34 +82,33 @@ class CaddyStatePreparationTests(unittest.TestCase):
             QUADLET,
         )
 
-    def test_quadlet_uses_private_passt_and_narrow_explicit_ports(self):
+    def test_quadlet_uses_root_managed_tap_and_no_podman_forwarders(self):
         self.assertIn("PodmanArgs=--runtime=krun", QUADLET)
         self.assertIn("Annotation=krun.cpus=2", QUADLET)
         self.assertIn("Annotation=krun.ram_mib=512", QUADLET)
-        self.assertIn("Annotation=krun.use_passt=1", QUADLET)
+        self.assertIn("Annotation=krun.tap_name=krun-51310", QUADLET)
         self.assertIn("StopSignal=SIGINT", QUADLET)
         self.assertIn(
-            "Network=pasta:-T,3000,-T,3900,-T,3903,-T,8096,-T,8428",
-            QUADLET,
+            "Network=host", QUADLET
         )
-        self.assertNotIn("Network=host", QUADLET)
-        self.assertIn("PublishPort=0.0.0.0:80:80", QUADLET)
-        self.assertIn("PublishPort=0.0.0.0:443:443\n", QUADLET)
-        self.assertIn("PublishPort=0.0.0.0:443:443/udp", QUADLET)
-        self.assertIn("PublishPort=127.0.0.1:2019:2019", QUADLET)
-        self.assertIn(
-            "Sysctl=net.ipv4.ip_unprivileged_port_start=80",
-            QUADLET,
-        )
+        self.assertNotIn("PublishPort=", QUADLET)
+        self.assertNotIn("Annotation=krun.use_passt", QUADLET)
+        self.assertNotIn("Sysctl=net.ipv4.ip_unprivileged_port_start", QUADLET)
         self.assertIn("DNS=100.100.100.100", QUADLET)
         self.assertIn("DNS=75.75.75.75", QUADLET)
         self.assertIn("DNS=75.75.76.76", QUADLET)
         self.assertNotIn("DNS=127.", QUADLET)
 
-    def test_caddyfile_uses_passt_gateway_and_allows_http3(self):
+    def test_caddyfile_uses_tap_service_names_and_allows_http3(self):
         self.assertIn("admin 0.0.0.0:2019", CADDYFILE)
-        for port in (3000, 3900, 3903, 8096, 8428):
-            self.assertIn(f"reverse_proxy 10.0.0.1:{port}", CADDYFILE)
+        for target in (
+            "grafana.krun:3000",
+            "garage.krun:3900",
+            "garage.krun:3903",
+            "jellyfin.krun:8096",
+            "victoria-metrics.krun:8428",
+        ):
+            self.assertIn(f"reverse_proxy {target}", CADDYFILE)
         self.assertNotIn("protocols h1 h2", CADDYFILE)
 
 
