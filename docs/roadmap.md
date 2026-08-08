@@ -118,8 +118,10 @@ maintaining it.
         passwd entry stays — it ships in Fedora CoreOS's static sysusers,
         not from this repo.
       - De-duplicate README.md vs AGENTS.md.
-      - Move `zfs-snapshot-*.sh` from `/etc/systemd/system/` to
-        `/usr/local/bin/`.
+      - Done 2026-08-08: replace the six rotating `zfs-snapshot-*.sh`
+        implementations with one create-first, retention-based helper under
+        `/usr/local/bin/`; legacy managed names age out without touching
+        manual snapshots.
 
 ## New-service pipeline
 
