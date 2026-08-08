@@ -107,7 +107,7 @@ make kernel-version      # Current CoreOS kernel (script-based fallback if label
 make versions            # All versions + compatibility
 
 # Test cleanup logic locally
-make cleanup-dry-run RETENTION_DAYS=30
+make cleanup-dry-run RETENTION_DAYS=90
 ```
 
 ## Architecture

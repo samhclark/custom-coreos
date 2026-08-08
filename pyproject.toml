@@ -1,4 +1,4 @@
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["generate-quadlets.py", "quadletgen"]
+files = ["generate-quadlets.py", "quadletgen", "scripts/plan-image-cleanup.py"]
