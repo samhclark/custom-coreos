@@ -10,6 +10,21 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  verify-generated:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install development dependencies
+        run: python3 -m pip install --requirement requirements-dev.txt
+
+      - name: Validate repository and generated artifacts
+        run: make verify-generated
+
   verify-sops-image:
     runs-on: ubuntu-latest
     permissions:
@@ -61,6 +76,7 @@ jobs:
     needs:
       - query-versions
       - verify-sops-image
+      - verify-generated
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -108,7 +124,6 @@ jobs:
           create-storage-record: false
 
       - name: Sign the published OCI image
-        if: ${{ github.event_name != 'pull_request' }}
         uses: samhclark/cosign-exec-action@f8a4f58b424b15fa5fee1795fd25e6de48f9609d # v1.1.0
         env:
           COSIGN_PASSWORD: ${{ secrets.cosign_password }}

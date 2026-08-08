@@ -56,23 +56,8 @@ jobs:
       - name: Install development dependencies
         run: python3 -m pip install --requirement requirements-dev.txt
 
-      - name: Type-check quadlet generator
-        run: make typecheck
-
-      - name: Test quadlet generator
-        run: python3 -m unittest discover -s tests -v
-
-      - name: Regenerate quadlet files
-        run: python3 generate-quadlets.py
-
-      - name: Check for drift between quadlets/*.toml and generated files
-        run: |
-          if [[ -n "$(git status --porcelain=v1 --untracked-files=all -- overlay-root/)" ]]; then
-            git diff -- overlay-root/
-            git status --short --untracked-files=all -- overlay-root/
-            echo "::error::Generated files are out of date. Run python3 generate-quadlets.py and commit the result."
-            exit 1
-          fi
+      - name: Validate repository and generated artifacts
+        run: make verify-generated
 
   query-versions:
     runs-on: ubuntu-latest
@@ -94,6 +79,7 @@ jobs:
     needs:
       - query-versions
       - verify-sops-image
+      - verify-generated
     runs-on: ubuntu-latest
     permissions:
       contents: read
