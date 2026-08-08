@@ -65,9 +65,12 @@ class CaddyStatePreparationTests(unittest.TestCase):
         self.assertNotIn("nas-migrations", SERVICE)
 
     def test_quadlet_waits_for_readiness_and_keeps_large_state_unlabeled(self):
-        self.assertIn("/run/caddy-state/ready", QUADLET)
-        self.assertIn("/usr/bin/test -w /var/lib/caddy", QUADLET)
-        self.assertIn("/usr/bin/test -w /var/lib/caddy-config", QUADLET)
+        self.assertIn(
+            "nas-wait-for-readiness.sh marker /run/caddy-state/ready 300 2",
+            QUADLET,
+        )
+        self.assertNotIn("/usr/bin/test -w /var/lib/caddy", QUADLET)
+        self.assertNotIn("/usr/bin/test -w /var/lib/caddy-config", QUADLET)
         self.assertIn("Volume=/var/lib/caddy:/data\n", QUADLET)
         self.assertIn("Volume=/var/lib/caddy-config:/config\n", QUADLET)
         self.assertNotIn("Volume=/var/lib/caddy:/data:Z", QUADLET)

@@ -51,7 +51,5 @@ name = "jellyfin-api-key"
 [assets]
 path = "/usr/share/custom-coreos/jellyfin-exporter"
 
-[unit.extra]
-Service = [
-    '''ExecStartPre=/usr/bin/bash -lc 'if /usr/bin/ss -H -ltn | /usr/bin/grep -Eq ":9594[[:space:]]"; then echo "Refusing to start while a process already listens on Jellyfin exporter host port 9594" >&2; exit 1; fi'''',
-]
+[startup]
+reject-published-tcp-ports = true
