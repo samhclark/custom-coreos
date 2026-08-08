@@ -29,7 +29,8 @@ This configures:
 - SSH access for 'core' user
 - Hostname set to 'nas'
 
-The published Ignition file and the checked-in [`butane.yaml`](/var/home/sam/Code/github.com/samhclark/custom-coreos/butane.yaml) are personal configuration for one machine, not a generic installer profile.
+The published Ignition file and [`butane.yaml`](butane.yaml) are personal
+configuration for one machine, not a generic installer profile.
 
 ### Container Image
 
@@ -65,7 +66,7 @@ This is not intended to be a polished appliance for other people. It is my own N
 ### Prerequisites
 
 - `make` (GNU Make, standard on Linux)
-- `podman` or `docker`
+- `podman`
 - `gh` (GitHub CLI)
 - `skopeo`
 - `jq`
@@ -114,10 +115,16 @@ make cleanup-dry-run RETENTION_DAYS=90
 
 ### Build Process
 
-**2-stage container build** using prebuilt ZFS kernel modules:
+**4-stage container build** using prebuilt ZFS kernel modules:
 
-1. **Pull Prebuilt ZFS Modules**: Extract ZFS RPMs from fedora-zfs-kmods registry
-2. **Final Assembly**: Install ZFS + Tailscale with inline kernel validation and service setup
+1. **Patched crun builder**: Build the pinned crun release with the narrow
+   `krun.tap_name` integration patch.
+2. **SOPS binary source**: Import the pinned SOPS binary from the upstream
+   image whose signature CI verifies.
+3. **Prebuilt ZFS modules**: Pull the matching ZFS RPM image from the
+   `fedora-zfs-kmods` registry.
+4. **Final CoreOS assembly**: Install the host packages and ZFS RPMs, copy the
+   runtime overlay, enable units, install SELinux policy, and run bootc lint.
 
 ### Dependencies
 
@@ -135,7 +142,7 @@ The resulting container images are signed by Cosign.
 The keys were generated with the following command:
 
 ```
-$ GITHUB_TOKEN="$(gh auth token)" COSIGN_PASSWORD="$(head -c 33 /dev/urandom | base64)" cosign generate-key-pair github://samhclark/custom-silverblue --output-file cosign.pub
+$ GITHUB_TOKEN="$(gh auth token)" COSIGN_PASSWORD="$(head -c 33 /dev/urandom | base64)" cosign generate-key-pair github://samhclark/custom-coreos --output-file cosign.pub
 Password written to COSIGN_PASSWORD github actions secret
 Private key written to COSIGN_PRIVATE_KEY github actions secret
 Public key written to COSIGN_PUBLIC_KEY github actions secret
@@ -163,7 +170,7 @@ $ sha256sum cosign.pub
 - **Features**: Automatic version discovery, compatibility checking, build attestations
 
 ### Ignition Files (`pages.yaml`)
-- **Trigger**: Changes to `butane.yaml` + manual
+- **Trigger**: Changes to `butane.yaml`, its Make target, or the Pages template + manual
 - **Output**: `https://samhclark.github.io/custom-coreos/ignition.json`
 - **Features**: Butane→Ignition conversion, GitHub Pages deployment
 
@@ -222,10 +229,10 @@ Rootless service accounts use namespaced host usernames and a reserved high UID 
 - Reserve `51000-51999` for image-managed service accounts.
 - Use `511xx` for storage, `512xx` for observability, and `513xx` for ingress/edge.
 - Prefer names such as `_nas_grafana` over upstream defaults such as `grafana`.
-- Current allocations: Garage uses `_nas_garage` with host UID/GID `51110`, Jellyfin uses `_nas_jellyfin` with `51120`, Grafana uses `_nas_grafana` with `51210`, vmalert uses `_nas_vmalert` with `51220`, blackbox exporter uses `_nas_blackbox` with `51230`, Alertmanager uses `_nas_alertmanager` with `51240`, VictoriaMetrics uses `_nas_victoriametrics` with `51250`, the Jellyfin exporter uses `_nas_jellyfinmetrics` with `51260`, and Caddy uses `_nas_caddy` with `51310`.
 - UIDs are allocate-only: never reuse a UID from a retired service, because numeric file ownership (especially inside ZFS snapshots) outlives the user.
 - Rootless Quadlets for image-managed service users belong under `/etc/containers/systemd/users/$UID/`, not under `/usr/share/containers/systemd/users/$UID/`.
-- See `docs/rootless-quadlet-playbook.md` for the full migration pattern and starter templates.
+- `quadlets/*.toml` and `AGENTS.md` are the allocation sources of truth; see
+  `docs/rootless-quadlet-playbook.md` for the compiler-driven service workflow.
 
 That bootstrap path is not especially elegant, but it is acceptable for a single-user personal system.
 
@@ -342,10 +349,12 @@ Apply fix declaratively:
 ## File Structure
 
 ```
-├── Containerfile              # 2-stage build definition
+├── Containerfile              # Four-stage bootc image build
 ├── butane.yaml               # CoreOS configuration
 ├── Makefile                  # Development commands
-├── ignition.json            # Generated Ignition file (auto-updated)
+├── ignition.json            # Locally generated and gitignored
+├── quadlets/                # Declarative service sources
+├── quadletgen/              # Typed fleet compiler
 ├── .github/workflows/       # CI/CD workflows
 │   ├── build.yaml          # Main container build
 │   ├── pages.yaml          # Ignition file serving  
