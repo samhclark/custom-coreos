@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .compiler import Artifact
-from .render_service import GENERATED_HEADER_PREFIX, GENERATED_HEADER_SUFFIX
+from .headers import GENERATED_HEADER_PREFIX, GENERATED_HEADER_SUFFIX
 
 
 def sync_artifacts(

@@ -9,6 +9,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 TOML_PATH = REPO / "quadlets/jellyfin-exporter.toml"
 CONTAINERFILE = (REPO / "Containerfile").read_text()
+ASSET_MANIFEST = (
+    REPO / "overlay-root/usr/share/custom-coreos/fleet/assets.list"
+).read_text()
 EXPORTER = (
     REPO / "overlay-root/usr/share/custom-coreos/jellyfin-exporter/jellyfin_exporter.py"
 ).read_text()
@@ -34,12 +37,12 @@ class JellyfinExporterIntegrationTests(unittest.TestCase):
 
     def test_image_labels_exporter_assets_for_container_access(self):
         self.assertIn(
-            'semanage fcontext -a -t container_file_t -r s0 "/usr/share/custom-coreos/jellyfin-exporter(/.*)?"',
+            'semanage fcontext -a -t container_file_t -r s0 "${asset}(/.*)?"',
             CONTAINERFILE,
         )
         self.assertIn(
-            "/usr/share/custom-coreos/jellyfin-exporter /usr/share/custom-coreos/victoria-metrics",
-            CONTAINERFILE,
+            "/usr/share/custom-coreos/jellyfin-exporter",
+            ASSET_MANIFEST,
         )
 
     def test_exporter_does_not_emit_sensitive_session_identity(self):

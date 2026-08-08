@@ -16,6 +16,12 @@ from .render_network import (
     nft_nat,
     nftables_policy_dropin,
 )
+from .render_manifest import (
+    account_units_manifest,
+    active_taps_manifest,
+    assets_manifest,
+    secrets_manifest,
+)
 from .render_service import (
     container_unit,
     ensure_account_script,
@@ -105,6 +111,22 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
         ),
         Artifact(Path("etc/nftables/nas-krun-filter.nft"), nft_filter(fleet)),
         Artifact(Path("etc/nftables/nas-krun-nat.nft"), nft_nat(fleet)),
+        Artifact(
+            Path("usr/share/custom-coreos/fleet/account-units.list"),
+            account_units_manifest(fleet),
+        ),
+        Artifact(
+            Path("usr/share/custom-coreos/fleet/active-taps.tsv"),
+            active_taps_manifest(fleet),
+        ),
+        Artifact(
+            Path("usr/share/custom-coreos/fleet/secrets.tsv"),
+            secrets_manifest(fleet),
+        ),
+        Artifact(
+            Path("usr/share/custom-coreos/fleet/assets.list"),
+            assets_manifest(fleet),
+        ),
     ]
     paths = [artifact.path for artifact in artifacts]
     if len(set(paths)) != len(paths):

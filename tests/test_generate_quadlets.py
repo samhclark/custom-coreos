@@ -95,6 +95,99 @@ class CompilerCharacterizationTests(unittest.TestCase):
         )
 
 
+class FleetManifestTests(unittest.TestCase):
+    def setUp(self):
+        self.fleet = current_fleet()
+        self.artifacts = {
+            artifact.path: artifact.content
+            for artifact in compile_fleet(self.fleet)
+        }
+
+    def rows(self, path: str):
+        return [
+            line.split("\t")
+            for line in self.artifacts[Path(path)].splitlines()
+            if line and not line.startswith("#")
+        ]
+
+    def test_manifests_encode_account_and_active_tap_membership(self):
+        account_units = [
+            line
+            for line in self.artifacts[
+                Path("usr/share/custom-coreos/fleet/account-units.list")
+            ].splitlines()
+            if line and not line.startswith("#")
+        ]
+        tap_rows = self.rows("usr/share/custom-coreos/fleet/active-taps.tsv")
+
+        self.assertEqual(
+            account_units,
+            sorted(
+                f"ensure-nas-{service.host.slug}-account.service"
+                for service in self.fleet.services
+            ),
+        )
+        self.assertEqual(
+            tap_rows,
+            [
+                [
+                    service.tap_name,
+                    f"user@{service.host.uid}.service",
+                    f"ensure-nas-{service.host.slug}-account.service",
+                ]
+                for service in self.fleet.active_taps
+            ],
+        )
+
+    def test_secret_and_asset_manifests_are_derived_from_typed_fields(self):
+        secret_rows = self.rows("usr/share/custom-coreos/fleet/secrets.tsv")
+        asset_rows = [
+            [line]
+            for line in self.artifacts[
+                Path("usr/share/custom-coreos/fleet/assets.list")
+            ].splitlines()
+            if line and not line.startswith("#")
+        ]
+
+        expected_secrets = [
+            [service.info.name, service.host.username, secret.name]
+            for service in sorted(
+                self.fleet.services,
+                key=lambda item: item.source.name,
+            )
+            for secret in service.container.secrets
+        ]
+        expected_assets = [
+            [service.assets.path]
+            for service in sorted(
+                self.fleet.services,
+                key=lambda item: item.assets.path if item.assets else "",
+            )
+            if service.assets is not None
+        ]
+        self.assertEqual(secret_rows, expected_secrets)
+        self.assertEqual(asset_rows, expected_assets)
+
+    def test_non_python_consumers_no_longer_parse_or_duplicate_the_fleet(self):
+        containerfile = (REPO / "Containerfile").read_text()
+        distributor = (
+            OVERLAY / "usr/local/bin/sops-distribute-secrets.sh"
+        ).read_text()
+        diagnostics = (
+            REPO / "scripts/collect-krun-network-diagnostics.sh"
+        ).read_text()
+
+        self.assertNotIn("COPY quadlets/", containerfile)
+        self.assertIn("fleet/account-units.list", containerfile)
+        self.assertIn("fleet/assets.list", containerfile)
+        self.assertNotIn("ensure-nas-alertmanager-account.service \\", containerfile)
+        self.assertIn("fleet/secrets.tsv", distributor)
+        self.assertNotIn("read_quadlet_secret_rows", distributor)
+        self.assertNotIn("QUADLET_DIR", distributor)
+        self.assertIn("fleet/active-taps.tsv", diagnostics)
+        self.assertNotIn("krun-51110 krun-51120", diagnostics)
+
+
 class StrictParserTests(unittest.TestCase):
     def load(self, source: str):
         with tempfile.TemporaryDirectory(dir=REPO) as directory:
@@ -244,6 +337,26 @@ name = "token"
             "supports only",
         )
 
+    def test_manifest_fields_reject_delimiters(self):
+        self.assert_invalid(
+            service_toml(
+                container=(
+                    "[[container.secrets]]\n"
+                    'name = "bad\\tname"'
+                )
+            ),
+            "must match",
+        )
+        self.assert_invalid(
+            service_toml(
+                extra=(
+                    "[assets]\n"
+                    'path = "/usr/share/bad\\npath"'
+                )
+            ),
+            "tabs or newlines",
+        )
+
 
 class FleetValidationTests(unittest.TestCase):
     def write(self, directory: Path, filename: str, source: str):
@@ -281,10 +394,34 @@ class FleetValidationTests(unittest.TestCase):
             disabled = self.write(
                 directory,
                 "disabled.toml",
-                service_toml(name="disabled", container="enabled = false"),
+                service_toml(
+                    name="disabled",
+                    container=(
+                        "enabled = false\n"
+                        'network = "host"\n\n'
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:8080"\n'
+                        "container = 8080\n\n"
+                        "[[container.secrets]]\n"
+                        'name = "disabled-token"'
+                    ),
+                    krun=(
+                        "enabled = true\ncpus = 1\nram-mib = 128\n"
+                        'network = "tap"\n'
+                        'ipv4 = "10.253.99.2/30"'
+                    ),
+                    extra=(
+                        "\n[assets]\n"
+                        'path = "/usr/share/custom-coreos/disabled"'
+                    ),
+                ),
             )
             fleet = Fleet.build([disabled])
-            paths = {artifact.path for artifact in compile_fleet(fleet)}
+            artifacts = {
+                artifact.path: artifact.content
+                for artifact in compile_fleet(fleet)
+            }
+            paths = set(artifacts)
 
         self.assertIn(Path("usr/lib/sysusers.d/nas-disabled.conf"), paths)
         self.assertIn(Path("etc/subuid"), paths)
@@ -293,6 +430,22 @@ class FleetValidationTests(unittest.TestCase):
             paths,
         )
         self.assertFalse(fleet.active_taps)
+        self.assertIn(
+            "ensure-nas-disabled-account.service",
+            artifacts[Path("usr/share/custom-coreos/fleet/account-units.list")],
+        )
+        self.assertNotIn(
+            "krun-51999\t",
+            artifacts[Path("usr/share/custom-coreos/fleet/active-taps.tsv")],
+        )
+        self.assertIn(
+            "disabled\t_nas_disabled\tdisabled-token",
+            artifacts[Path("usr/share/custom-coreos/fleet/secrets.tsv")],
+        )
+        self.assertIn(
+            "/usr/share/custom-coreos/disabled",
+            artifacts[Path("usr/share/custom-coreos/fleet/assets.list")],
+        )
 
 
 class ArtifactSynchronizationTests(unittest.TestCase):

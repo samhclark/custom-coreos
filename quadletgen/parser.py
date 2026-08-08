@@ -34,6 +34,7 @@ from .model import (
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 USERNAME_RE = re.compile(r"^_nas_[a-z0-9]+$")
 PINNED_IMAGE_RE = re.compile(r"^[^@\s]+:[^@:\s]+@sha256:[0-9a-f]{64}$")
+SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -271,6 +272,8 @@ def _parse_secrets(raw: object, name: str) -> tuple[SecretMount, ...]:
         item_path = f"{path}[{index}]"
         table = _table(item, item_path, {"name", "target"})
         secret_name = _string(_required(table, "name", item_path), f"{item_path}.name")
+        if not SECRET_NAME_RE.fullmatch(secret_name):
+            _fail(f"{item_path}.name", f"must match {SECRET_NAME_RE.pattern}")
         if secret_name in seen:
             _fail(item_path, f"duplicate secret {secret_name!r}")
         seen.add(secret_name)
@@ -434,7 +437,10 @@ def _parse_assets(raw: object, name: str) -> AssetsSpec | None:
         return None
     path = f"{name}: [assets]"
     table = _table(raw, path, {"path"})
-    return AssetsSpec(_string(_required(table, "path", path), f"{path}.path"))
+    asset_path = _string(_required(table, "path", path), f"{path}.path")
+    if "\t" in asset_path or "\n" in asset_path:
+        _fail(f"{path}.path", "cannot contain tabs or newlines")
+    return AssetsSpec(asset_path)
 
 
 def _parse_unit(raw: object, name: str) -> UnitSpec:
