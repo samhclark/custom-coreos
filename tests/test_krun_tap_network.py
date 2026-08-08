@@ -1,6 +1,5 @@
 # ABOUTME: Regression tests for the generated libkrun TAP network data plane.
 
-import importlib.util
 import os
 import shutil
 import subprocess
@@ -11,13 +10,11 @@ import unittest
 import uuid
 from pathlib import Path
 
+from quadletgen.model import Fleet, KrunNetwork
+from quadletgen.parser import load_service
+
 
 REPO = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location(
-    "generate_quadlets", REPO / "generate-quadlets.py"
-)
-GENERATOR = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(GENERATOR)
 PATCH = (
     REPO / "patches/crun/0001-krun-add-tap-network-annotation.patch"
 ).read_text()
@@ -51,21 +48,23 @@ SELINUX_VALIDATION = (
 class KrunTapNetworkTests(unittest.TestCase):
     def load_configs(self):
         return [
-            GENERATOR.load_service(path)
+            load_service(path)
             for path in sorted((REPO / "quadlets").glob("*.toml"))
         ]
 
     def test_every_generated_microvm_uses_a_unique_tap_and_subnet(self):
         configs = self.load_configs()
-        GENERATOR.validate_fleet(configs)
+        fleet = Fleet.build(configs)
 
         taps = set()
         subnets = set()
-        for cfg in configs:
-            self.assertEqual(cfg["container"]["network"], "host")
-            self.assertEqual(cfg["krun"]["network"], "tap")
-            taps.add(GENERATOR.tap_name(cfg))
-            subnets.add(GENERATOR.tap_guest(cfg).network)
+        for service in fleet.services:
+            self.assertEqual(service.container.network, "host")
+            self.assertIsNotNone(service.krun)
+            assert service.krun is not None
+            self.assertIs(service.krun.network, KrunNetwork.TAP)
+            taps.add(service.tap_name)
+            subnets.add(service.tap_guest.network)
 
         self.assertEqual(len(taps), len(configs))
         self.assertEqual(len(subnets), len(configs))
@@ -173,9 +172,9 @@ class KrunTapNetworkTests(unittest.TestCase):
         self.assertIn("IPv4RouteLocalnet=yes", network)
 
     def test_networkd_waits_for_tap_owner_accounts(self):
-        for cfg in self.load_configs():
+        for service in self.load_configs():
             self.assertIn(
-                f"ensure-nas-{cfg['_slug']}-account.service",
+                f"ensure-nas-{service.host.slug}-account.service",
                 NETWORKD_DROPIN,
             )
 

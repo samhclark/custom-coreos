@@ -53,6 +53,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Install development dependencies
+        run: python3 -m pip install --requirement requirements-dev.txt
+
+      - name: Type-check quadlet generator
+        run: make typecheck
+
       - name: Test quadlet generator
         run: python3 -m unittest discover -s tests -v
 
