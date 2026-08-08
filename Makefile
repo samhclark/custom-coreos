@@ -93,6 +93,10 @@ check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
 test: ## Run unit tests
 	@python3 -m unittest discover -s tests -v
 
+.PHONY: typecheck
+typecheck: ## Run strict static type checks for the Quadlet generator
+	@$(PYTHON) -m mypy
+
 ##@ Building
 
 .PHONY: build
