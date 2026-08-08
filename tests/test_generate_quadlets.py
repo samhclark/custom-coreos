@@ -188,6 +188,68 @@ class FleetManifestTests(unittest.TestCase):
         self.assertNotIn("krun-51110 krun-51120", diagnostics)
 
 
+class StartupPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.artifacts = {
+            artifact.path: artifact.content
+            for artifact in compile_fleet(current_fleet())
+        }
+
+    def test_current_services_use_typed_startup_policy_only(self):
+        for toml_path in (REPO / "quadlets").glob("*.toml"):
+            self.assertNotIn("[unit.extra]", toml_path.read_text())
+
+        garage = self.artifacts[
+            Path("etc/containers/systemd/users/51110/garage.container")
+        ]
+        jellyfin = self.artifacts[
+            Path("etc/containers/systemd/users/51120/jellyfin.container")
+        ]
+        vmalert = self.artifacts[
+            Path("etc/containers/systemd/users/51220/vmalert.container")
+        ]
+        self.assertIn(
+            "nas-wait-for-readiness.sh marker /run/garage-datasets/ready "
+            "3600 2 /var/lib/garage/meta=tank/garage/meta "
+            "/var/lib/garage/data=tank/garage/data",
+            garage,
+        )
+        self.assertIn(
+            "nas-assert-tcp-ports-free.sh 3900 3902 3903",
+            garage,
+        )
+        self.assertIn(
+            "/var/zfs/tank/videos=tank/videos",
+            jellyfin,
+        )
+        self.assertIn(
+            "nas-wait-for-readiness.sh http "
+            "http://127.0.0.1:8428/-/healthy 300 2",
+            vmalert,
+        )
+        for artifact in self.artifacts.values():
+            self.assertNotIn("ExecStartPre=/usr/bin/bash -lc", artifact)
+
+    def test_data_subdirectories_are_owned_by_tmpfiles(self):
+        tmpfiles = self.artifacts[
+            Path("usr/lib/tmpfiles.d/nas-alertmanager-rootless.conf")
+        ]
+        child = (
+            "d /var/lib/alertmanager/data 0750 "
+            "_nas_alertmanager _nas_alertmanager -"
+        )
+        recursive_label = (
+            "Z /var/lib/alertmanager 0750 "
+            "_nas_alertmanager _nas_alertmanager -"
+        )
+        self.assertIn(child, tmpfiles)
+        self.assertLess(tmpfiles.index(child), tmpfiles.index(recursive_label))
+        alertmanager = self.artifacts[
+            Path("etc/containers/systemd/users/51240/alertmanager.container")
+        ]
+        self.assertNotIn("install -d", alertmanager)
+
+
 class StrictParserTests(unittest.TestCase):
     def load(self, source: str):
         with tempfile.TemporaryDirectory(dir=REPO) as directory:
@@ -355,6 +417,55 @@ name = "token"
                 )
             ),
             "tabs or newlines",
+        )
+
+    def test_startup_policy_rejects_ambiguous_or_persistent_readiness(self):
+        cases = {
+            "both targets": (
+                "[startup.readiness]\n"
+                'marker = "/run/service/ready"\n'
+                'url = "http://127.0.0.1/ready"\n'
+                "timeout-sec = 5\ninterval-sec = 1"
+            ),
+            "persistent marker": (
+                "[startup.readiness]\n"
+                'marker = "/var/lib/service/ready"\n'
+                "timeout-sec = 5\ninterval-sec = 1"
+            ),
+            "missing interval": (
+                "[startup.readiness]\n"
+                'marker = "/run/service/ready"\n'
+                "timeout-sec = 5"
+            ),
+            "URL without host": (
+                "[startup.readiness]\n"
+                'url = "http:///ready"\n'
+                "timeout-sec = 5\ninterval-sec = 1"
+            ),
+        }
+        for label, startup in cases.items():
+            with self.subTest(label=label):
+                self.assert_invalid(service_toml(extra=startup), "startup.readiness")
+
+    def test_startup_port_guard_and_subdirectories_are_validated(self):
+        self.assert_invalid(
+            service_toml(
+                extra=(
+                    "[startup]\n"
+                    "reject-published-tcp-ports = true"
+                )
+            ),
+            "requires at least one published TCP port",
+        )
+        self.assert_invalid(
+            service_toml(
+                extra=(
+                    "[data]\n"
+                    'path = "/var/lib/service"\n'
+                    'subdirectories = ["../escape"]'
+                )
+            ),
+            "unsafe relative path",
         )
 
 

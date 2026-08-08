@@ -74,10 +74,7 @@ path = "/usr/share/custom-coreos/caddy"
 [unit]
 timeout-start-sec = 330
 
-[unit.extra]
-# The root service and user manager intentionally have no cross-manager
-# ordering. Wait for the current-boot readiness marker and independently
-# confirm both state roots remain writable.
-Service = [
-    '''ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do if /usr/bin/test -e /run/caddy-state/ready && /usr/bin/test -w /var/lib/caddy && /usr/bin/test -w /var/lib/caddy-config; then exit 0; fi; sleep 2; done; echo "Caddy state was not ready within 300 seconds" >&2; exit 1'''',
-]
+[startup.readiness]
+marker = "/run/caddy-state/ready"
+timeout-sec = 300
+interval-sec = 2

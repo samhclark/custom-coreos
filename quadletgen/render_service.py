@@ -7,9 +7,11 @@ import textwrap
 from .headers import generated_header
 from .model import (
     Fleet,
+    HttpReadiness,
     KrunDisabled,
     KrunPasst,
     KrunTap,
+    MarkerReadiness,
     Protocol,
     SUBID_COUNT,
     Service,
@@ -33,13 +35,10 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     info = service.info
     container = service.container
     krun = service.krun
-    extra = service.unit.extra
-
     lines = [header(service)]
     lines += ["[Unit]", f"Description={info.description}"]
     if info.documentation is not None:
         lines.append(f"Documentation={info.documentation}")
-    lines += extra.unit
 
     lines += ["", "[Container]"]
     lines.append(f"ContainerName={info.name}")
@@ -108,8 +107,6 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     if container.exec is not None:
         lines += ["", f"Exec={container.exec}"]
 
-    lines += extra.container
-
     lines += ["", "[Service]"]
     if service.active_tap:
         lines.append("ExecStartPre=/usr/bin/test -c /dev/net/tun")
@@ -126,7 +123,33 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         f"{info.name}/{secret.name}"
         for secret in container.secrets
     ]
-    lines += extra.service
+    readiness = service.startup.readiness
+    if isinstance(readiness, MarkerReadiness):
+        mounts = "".join(
+            f" {mount.path}={mount.source}"
+            for mount in readiness.mounts
+        )
+        lines.append(
+            "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh "
+            f"marker {readiness.marker} {readiness.timeout_sec} "
+            f"{readiness.interval_sec}{mounts}"
+        )
+    elif isinstance(readiness, HttpReadiness):
+        lines.append(
+            "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh "
+            f"http {readiness.url} {readiness.timeout_sec} "
+            f"{readiness.interval_sec}"
+        )
+    if service.startup.reject_published_tcp_ports:
+        host_ports = " ".join(
+            str(port.host_port)
+            for port in container.ports
+            if port.protocol is Protocol.TCP
+        )
+        lines.append(
+            "ExecStartPre=/usr/local/bin/nas-assert-tcp-ports-free.sh "
+            f"{host_ports}"
+        )
     if service.active_tap:
         lines.append(
             "ExecStartPost=/usr/bin/bash -ceu '"
@@ -143,7 +166,6 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         lines.append(f"TimeoutStartSec={service.unit.timeout_start_sec}")
 
     lines += ["", "[Install]", "WantedBy=default.target"]
-    lines += extra.install
     return "\n".join(lines) + "\n"
 
 
@@ -180,6 +202,11 @@ def tmpfiles_conf(service: Service) -> str:
             f"d {service.data.path} {service.data.mode} "
             f"{host.username} {host.username} -"
         )
+        for subdirectory in service.data.subdirectories:
+            lines.append(
+                f"d {service.data.path}/{subdirectory} {service.data.mode} "
+                f"{host.username} {host.username} -"
+            )
         lines.append(
             f"Z {service.data.path} {service.data.mode} "
             f"{host.username} {host.username} -"

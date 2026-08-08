@@ -44,9 +44,7 @@ path = "/usr/share/custom-coreos/vmalert"
 [unit]
 timeout-start-sec = 330
 
-[unit.extra]
-# Rootless user services must not depend on system units; wait for the local
-# VictoriaMetrics to answer instead (bounded readiness loop, 300s budget).
-Service = [
-    '''ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do /usr/bin/curl -fsS http://127.0.0.1:8428/-/healthy >/dev/null 2>&1 && exit 0; sleep 2; done; echo "VictoriaMetrics did not become ready on 127.0.0.1:8428 within 300 seconds" >&2; exit 1'''',
-]
+[startup.readiness]
+url = "http://127.0.0.1:8428/-/healthy"
+timeout-sec = 300
+interval-sec = 2

@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ipaddress
+import posixpath
 import re
 import tomllib
 from pathlib import Path
 from typing import Mapping, NoReturn
+from urllib.parse import urlsplit
 
 from .model import (
     AssetsSpec,
@@ -14,6 +16,7 @@ from .model import (
     ContainerSpec,
     DataSpec,
     HostIdentity,
+    HttpReadiness,
     IngressRule,
     KrunDisabled,
     KrunNetwork,
@@ -21,12 +24,15 @@ from .model import (
     KrunSpec,
     KrunTap,
     KrunTsi,
+    MarkerReadiness,
     Protocol,
     PublishedPort,
+    ReadinessSpec,
+    RequiredMount,
     SecretMount,
     Service,
     ServiceInfo,
-    UnitExtra,
+    StartupSpec,
     UnitSpec,
     VolumeMount,
 )
@@ -35,6 +41,7 @@ NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 USERNAME_RE = re.compile(r"^_nas_[a-z0-9]+$")
 PINNED_IMAGE_RE = re.compile(r"^[^@\s]+:[^@:\s]+@sha256:[0-9a-f]{64}$")
 SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+SUBDIRECTORY_RE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -425,10 +432,26 @@ def _parse_data(raw: object, name: str) -> DataSpec | None:
     if raw is None:
         return None
     path = f"{name}: [data]"
-    table = _table(raw, path, {"path", "mode"})
+    table = _table(raw, path, {"path", "mode", "subdirectories"})
+    subdirectories = _string_array(
+        table.get("subdirectories", []),
+        f"{path}.subdirectories",
+    )
+    for subdirectory in subdirectories:
+        if (
+            not SUBDIRECTORY_RE.fullmatch(subdirectory)
+            or any(part in {".", ".."} for part in subdirectory.split("/"))
+        ):
+            _fail(
+                f"{path}.subdirectories",
+                f"contains unsafe relative path {subdirectory!r}",
+            )
+    if len(set(subdirectories)) != len(subdirectories):
+        _fail(f"{path}.subdirectories", "contains duplicates")
     return DataSpec(
         _string(_required(table, "path", path), f"{path}.path"),
         _string(table.get("mode", "0750"), f"{path}.mode"),
+        subdirectories,
     )
 
 
@@ -447,25 +470,147 @@ def _parse_unit(raw: object, name: str) -> UnitSpec:
     if raw is None:
         return UnitSpec()
     path = f"{name}: [unit]"
-    table = _table(raw, path, {"restart-sec", "timeout-start-sec", "extra"})
-    extra_table = _table(
-        table.get("extra"),
-        f"{name}: [unit.extra]",
-        {"Unit", "Container", "Service", "Install"},
-        required=False,
-    )
-    extra = UnitExtra(
-        unit=_string_array(extra_table.get("Unit", []), f"{name}: [unit.extra].Unit"),
-        container=_string_array(extra_table.get("Container", []), f"{name}: [unit.extra].Container"),
-        service=_string_array(extra_table.get("Service", []), f"{name}: [unit.extra].Service"),
-        install=_string_array(extra_table.get("Install", []), f"{name}: [unit.extra].Install"),
-    )
+    table = _table(raw, path, {"restart-sec", "timeout-start-sec"})
     return UnitSpec(
         restart_sec=_integer(table.get("restart-sec", 30), f"{path}.restart-sec", minimum=0),
         timeout_start_sec=_integer(table["timeout-start-sec"], f"{path}.timeout-start-sec", minimum=1)
         if "timeout-start-sec" in table else None,
-        extra=extra,
     )
+
+
+def _parse_required_mounts(raw: object, name: str) -> tuple[RequiredMount, ...]:
+    path = f"{name}: [[startup.readiness.mounts]]"
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        _fail(path, "must be an array of tables")
+    result = []
+    seen = set()
+    for index, item in enumerate(raw, start=1):
+        item_path = f"{path}[{index}]"
+        table = _table(item, item_path, {"path", "source"})
+        mount_path = _string(
+            _required(table, "path", item_path),
+            f"{item_path}.path",
+        )
+        source = _string(
+            _required(table, "source", item_path),
+            f"{item_path}.source",
+        )
+        for value, field in ((mount_path, "path"), (source, "source")):
+            if any(character.isspace() for character in value) or "=" in value:
+                _fail(
+                    f"{item_path}.{field}",
+                    "cannot contain whitespace or equals signs",
+                )
+        if not mount_path.startswith("/") or posixpath.normpath(mount_path) != mount_path:
+            _fail(f"{item_path}.path", "must be an absolute normalized path")
+        key = (mount_path, source)
+        if key in seen:
+            _fail(item_path, "duplicates an earlier mount requirement")
+        seen.add(key)
+        result.append(RequiredMount(mount_path, source))
+    return tuple(result)
+
+
+def _parse_startup(
+    raw: object,
+    name: str,
+    container: ContainerSpec,
+) -> StartupSpec:
+    if raw is None:
+        return StartupSpec()
+    path = f"{name}: [startup]"
+    table = _table(raw, path, {"readiness", "reject-published-tcp-ports"})
+    reject_conflicts = (
+        _boolean(
+            table["reject-published-tcp-ports"],
+            f"{path}.reject-published-tcp-ports",
+        )
+        if "reject-published-tcp-ports" in table
+        else False
+    )
+    if reject_conflicts and not any(
+        port.protocol is Protocol.TCP for port in container.ports
+    ):
+        _fail(
+            f"{path}.reject-published-tcp-ports",
+            "requires at least one published TCP port",
+        )
+    readiness_raw = table.get("readiness")
+    if readiness_raw is None:
+        return StartupSpec(reject_published_tcp_ports=reject_conflicts)
+
+    readiness_path = f"{name}: [startup.readiness]"
+    readiness = _table(
+        readiness_raw,
+        readiness_path,
+        {"marker", "url", "timeout-sec", "interval-sec", "mounts"},
+    )
+    marker_present = "marker" in readiness
+    url_present = "url" in readiness
+    if marker_present == url_present:
+        _fail(readiness_path, "requires exactly one of marker or url")
+    timeout_sec = _integer(
+        _required(readiness, "timeout-sec", readiness_path),
+        f"{readiness_path}.timeout-sec",
+        minimum=1,
+    )
+    interval_sec = _integer(
+        _required(readiness, "interval-sec", readiness_path),
+        f"{readiness_path}.interval-sec",
+        minimum=1,
+    )
+    if interval_sec > timeout_sec:
+        _fail(
+            f"{readiness_path}.interval-sec",
+            "cannot exceed timeout-sec",
+        )
+    if marker_present:
+        marker = _string(readiness["marker"], f"{readiness_path}.marker")
+        if (
+            not marker.startswith("/run/")
+            or posixpath.normpath(marker) != marker
+            or any(character.isspace() for character in marker)
+        ):
+            _fail(
+                f"{readiness_path}.marker",
+                "must be a normalized path below /run without whitespace",
+            )
+        readiness_spec: ReadinessSpec = MarkerReadiness(
+            marker,
+            timeout_sec,
+            interval_sec,
+            _parse_required_mounts(readiness.get("mounts"), name),
+        )
+    else:
+        if "mounts" in readiness:
+            _fail(
+                f"{readiness_path}.mounts",
+                "is supported only with marker readiness",
+            )
+        url = _string(readiness["url"], f"{readiness_path}.url")
+        try:
+            parsed_url = urlsplit(url)
+            hostname = parsed_url.hostname
+        except ValueError:
+            _fail(
+                f"{readiness_path}.url",
+                "must be a valid HTTP(S) URL",
+            )
+        if (
+            parsed_url.scheme not in {"http", "https"}
+            or hostname is None
+            or parsed_url.username is not None
+            or parsed_url.password is not None
+            or any(character.isspace() for character in url)
+        ):
+            _fail(
+                f"{readiness_path}.url",
+                "must be an HTTP(S) URL with a host and no credentials or whitespace",
+            )
+        readiness_spec = HttpReadiness(url, timeout_sec, interval_sec)
+    return StartupSpec(readiness_spec, reject_conflicts)
 
 
 def load_service(toml_path: Path) -> Service:
@@ -475,7 +620,16 @@ def load_service(toml_path: Path) -> Service:
     top = _table(
         raw,
         name,
-        {"service", "host", "container", "krun", "data", "assets", "unit"},
+        {
+            "service",
+            "host",
+            "container",
+            "krun",
+            "data",
+            "assets",
+            "startup",
+            "unit",
+        },
     )
     for required in ("service", "host", "container"):
         if required not in top:
@@ -498,5 +652,6 @@ def load_service(toml_path: Path) -> Service:
         krun=krun,
         data=_parse_data(top.get("data"), name),
         assets=_parse_assets(top.get("assets"), name),
+        startup=_parse_startup(top.get("startup"), name, container),
         unit=_parse_unit(top.get("unit"), name),
     )

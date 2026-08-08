@@ -142,6 +142,7 @@ KrunSpec: TypeAlias = KrunDisabled | KrunTsi | KrunPasst | KrunTap
 class DataSpec:
     path: str
     mode: str = "0750"
+    subdirectories: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,18 +151,39 @@ class AssetsSpec:
 
 
 @dataclass(frozen=True, slots=True)
-class UnitExtra:
-    unit: tuple[str, ...] = ()
-    container: tuple[str, ...] = ()
-    service: tuple[str, ...] = ()
-    install: tuple[str, ...] = ()
+class RequiredMount:
+    path: str
+    source: str
+
+
+@dataclass(frozen=True, slots=True)
+class MarkerReadiness:
+    marker: str
+    timeout_sec: int
+    interval_sec: int
+    mounts: tuple[RequiredMount, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class HttpReadiness:
+    url: str
+    timeout_sec: int
+    interval_sec: int
+
+
+ReadinessSpec: TypeAlias = MarkerReadiness | HttpReadiness
+
+
+@dataclass(frozen=True, slots=True)
+class StartupSpec:
+    readiness: ReadinessSpec | None = None
+    reject_published_tcp_ports: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class UnitSpec:
     restart_sec: int = 30
     timeout_start_sec: int | None = None
-    extra: UnitExtra = field(default_factory=UnitExtra)
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,6 +195,7 @@ class Service:
     krun: KrunSpec | None = None
     data: DataSpec | None = None
     assets: AssetsSpec | None = None
+    startup: StartupSpec = field(default_factory=StartupSpec)
     unit: UnitSpec = field(default_factory=UnitSpec)
 
     @property

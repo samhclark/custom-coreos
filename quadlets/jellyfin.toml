@@ -71,10 +71,22 @@ container = 8096
 [unit]
 timeout-start-sec = 3900
 
-[unit.extra]
-# A user service cannot order itself after the root ZFS preparation unit.
-# Wait for its current-boot marker and independently verify every mounted path.
-Service = [
-    '''ExecStartPre=/usr/bin/bash -lc 'for i in {1..1800}; do if /usr/bin/test -e /run/jellyfin-storage/ready && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/jellyfin/config 2>/dev/null)" == "tank/jellyfin/config" ]] && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/jellyfin/cache 2>/dev/null)" == "tank/jellyfin/cache" ]] && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/zfs/tank/videos 2>/dev/null)" == "tank/videos" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/jellyfin/config 2>/dev/null)" == "51120:51120" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/jellyfin/cache 2>/dev/null)" == "51120:51120" ]] && /usr/bin/test -w /var/lib/jellyfin/config && /usr/bin/test -w /var/lib/jellyfin/cache && /usr/bin/test -r /var/zfs/tank/videos/movies && /usr/bin/test -x /var/zfs/tank/videos/movies && /usr/bin/test -r /var/zfs/tank/videos/tv-shows && /usr/bin/test -x /var/zfs/tank/videos/tv-shows; then exit 0; fi; sleep 2; done; echo "Jellyfin storage was not ready within 3600 seconds" >&2; exit 1'''',
-    '''ExecStartPre=/usr/bin/bash -lc 'if /usr/bin/ss -H -ltn | /usr/bin/grep -Eq ":8096[[:space:]]"; then echo "Refusing to start while a process already listens on Jellyfin host port 8096" >&2; exit 1; fi'''',
-]
+[startup]
+reject-published-tcp-ports = true
+
+[startup.readiness]
+marker = "/run/jellyfin-storage/ready"
+timeout-sec = 3600
+interval-sec = 2
+
+[[startup.readiness.mounts]]
+path = "/var/lib/jellyfin/config"
+source = "tank/jellyfin/config"
+
+[[startup.readiness.mounts]]
+path = "/var/lib/jellyfin/cache"
+source = "tank/jellyfin/cache"
+
+[[startup.readiness.mounts]]
+path = "/var/zfs/tank/videos"
+source = "tank/videos"

@@ -60,13 +60,7 @@ name = "pushover-api-token"
 [data]
 path = "/var/lib/alertmanager"
 mode = "0750"
+subdirectories = ["data"]
 
 [assets]
 path = "/usr/share/custom-coreos/alertmanager"
-
-[unit.extra]
-# The parent data directory is generator-managed. Create the mounted child as
-# the service user before starting the container.
-Service = [
-    "ExecStartPre=/usr/bin/install -d -m 0750 /var/lib/alertmanager/data",
-]

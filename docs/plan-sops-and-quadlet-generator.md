@@ -11,6 +11,8 @@
 > "Background" and the phased rollout steps preserve the pre-implementation design history;
 > use `docs/roadmap.md`, `docs/rootless-quadlet-playbook.md`, and the live files
 > under `quadlets/` and `overlay-root/` for current behavior.
+> In particular, the historical `[unit.extra]` escape hatch shown below has
+> been retired; current startup policy is the typed `[startup]` schema.
 
 This plan covers two related improvements to the NAS infrastructure:
 
