@@ -9,7 +9,7 @@ ConditionPathIsDirectory=/sys/module/zfs
 [Service]
 Type=oneshot
 User=root
-ExecStart=/bin/sh /etc/systemd/system/zfs-snapshot-monthly.sh %I
+ExecStart=/usr/local/bin/zfs-snapshot-retained.sh tank/%I monthly 13
 StandardOutput=journal
 StandardError=journal
 PrivateNetwork=yes
