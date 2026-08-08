@@ -82,6 +82,16 @@ test: ## Run unit tests
 typecheck: ## Run strict static type checks for the Quadlet generator
 	@$(PYTHON) -m mypy
 
+.PHONY: verify-generated
+verify-generated: typecheck test ## Validate types, tests, and generated artifact parity
+	@$(PYTHON) generate-quadlets.py
+	@if [ -n "$$(git status --porcelain=v1 --untracked-files=all -- overlay-root/)" ]; then \
+		git diff -- overlay-root/; \
+		git status --short --untracked-files=all -- overlay-root/; \
+		printf "$(COLOR_RED)Generated files are out of date. Run python3 generate-quadlets.py and commit the result.$(COLOR_RESET)\n"; \
+		exit 1; \
+	fi
+
 ##@ Building
 
 .PHONY: build
@@ -143,6 +153,9 @@ workflow-status: ## Show recent build workflow runs
 all-workflows: ## Show recent runs for all workflows
 	@printf "$(COLOR_BLUE)Build:$(COLOR_RESET)\n"
 	@$(GH) run list --workflow=build.yaml --limit=3
+	@echo ""
+	@printf "$(COLOR_BLUE)Build Check:$(COLOR_RESET)\n"
+	@$(GH) run list --workflow=build-check.yaml --limit=3
 	@echo ""
 	@printf "$(COLOR_BLUE)Cleanup:$(COLOR_RESET)\n"
 	@$(GH) run list --workflow=cleanup-images.yaml --limit=3
