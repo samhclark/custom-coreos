@@ -9,8 +9,7 @@ ARG ZFS_VERSION
 #####
 FROM quay.io/fedora/fedora:44 AS crun-builder
 
-ADD --checksum=sha256:62b82f7db89df3652970d9ad76f635a177d09bcb543c8d1dae13a749cd3e6e35 \
-    https://github.com/containers/crun/releases/download/1.28/crun-1.28.tar.zst \
+ADD https://github.com/containers/crun/releases/download/1.28/crun-1.28.tar.zst \
     /tmp/crun-1.28.tar.zst
 COPY patches/crun/0001-krun-add-tap-network-annotation.patch /tmp/
 
@@ -21,6 +20,8 @@ RUN dnf install -y --setopt=install_weak_deps=False \
         wasmedge-devel zstd
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    echo "62b82f7db89df3652970d9ad76f635a177d09bcb543c8d1dae13a749cd3e6e35  /tmp/crun-1.28.tar.zst" \
+        | sha256sum --check --strict; \
     mkdir /tmp/crun; \
     tar --extract --zstd --file /tmp/crun-1.28.tar.zst \
         --directory /tmp/crun --strip-components=1; \
