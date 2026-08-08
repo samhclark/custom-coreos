@@ -9,13 +9,25 @@ Image=docker.io/library/python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=1
 Annotation=krun.ram_mib=128
+Annotation=krun.tap_name=krun-51260
 StopSignal=SIGINT
 Network=host
+AddDevice=/dev/net/tun
+AddHost=garage.krun:10.253.1.2
+AddHost=jellyfin.krun:10.253.2.2
+AddHost=grafana.krun:10.253.3.2
+AddHost=vmalert.krun:10.253.4.2
+AddHost=blackbox-exporter.krun:10.253.5.2
+AddHost=alertmanager.krun:10.253.6.2
+AddHost=victoria-metrics.krun:10.253.7.2
+AddHost=jellyfin-exporter.krun:10.253.8.2
+AddHost=caddy.krun:10.253.9.2
+AddHost=host.krun.internal:10.253.8.1
 User=0
 
-Environment=JELLYFIN_URL=http://127.0.0.1:8096
+Environment=JELLYFIN_URL=http://jellyfin.krun:8096
 Environment=JELLYFIN_API_KEY_FILE=/run/secrets/jellyfin-api-key
-Environment=LISTEN_HOST=127.0.0.1
+Environment=LISTEN_HOST=0.0.0.0
 Environment=LISTEN_PORT=9594
 
 # Image-controlled dependency-free exporter (read-only)
@@ -27,6 +39,8 @@ Volume=/run/nas-secrets/jellyfin-exporter/jellyfin-api-key:/run/secrets/jellyfin
 Exec=python3 /app/jellyfin_exporter.py
 
 [Service]
+ExecStartPre=/usr/bin/test -c /dev/net/tun
+ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51260
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/jellyfin-exporter/jellyfin-api-key
 ExecStartPre=/usr/bin/bash -lc 'if /usr/bin/ss -H -ltn | /usr/bin/grep -Eq ":9594[[:space:]]"; then echo "Refusing to start while a process already listens on Jellyfin exporter host port 9594" >&2; exit 1; fi'
 Restart=always

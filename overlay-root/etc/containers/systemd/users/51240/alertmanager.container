@@ -9,8 +9,20 @@ Image=docker.io/prom/alertmanager:v0.33.1@sha256:9e082985f56f4c8c9f724e18f2288c6
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=1
 Annotation=krun.ram_mib=256
+Annotation=krun.tap_name=krun-51240
 StopSignal=SIGINT
 Network=host
+AddDevice=/dev/net/tun
+AddHost=garage.krun:10.253.1.2
+AddHost=jellyfin.krun:10.253.2.2
+AddHost=grafana.krun:10.253.3.2
+AddHost=vmalert.krun:10.253.4.2
+AddHost=blackbox-exporter.krun:10.253.5.2
+AddHost=alertmanager.krun:10.253.6.2
+AddHost=victoria-metrics.krun:10.253.7.2
+AddHost=jellyfin-exporter.krun:10.253.8.2
+AddHost=caddy.krun:10.253.9.2
+AddHost=host.krun.internal:10.253.6.1
 DNS=100.100.100.100
 DNS=75.75.75.75
 DNS=75.75.76.76
@@ -28,9 +40,11 @@ Volume=/run/nas-secrets/alertmanager/pushover-user-key:/run/secrets/pushover-use
 # Runtime secret written at boot by sops-distribute-secrets.service
 Volume=/run/nas-secrets/alertmanager/pushover-api-token:/run/secrets/pushover-api-token:ro,Z
 
-Exec=--web.listen-address=127.0.0.1:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager --cluster.listen-address=
+Exec=--web.listen-address=0.0.0.0:9093 --config.file=/etc/alertmanager/alertmanager.yml --storage.path=/alertmanager --cluster.listen-address=
 
 [Service]
+ExecStartPre=/usr/bin/test -c /dev/net/tun
+ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51240
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/alertmanager/pushover-user-key
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/alertmanager/pushover-api-token
 ExecStartPre=/usr/bin/install -d -m 0750 /var/lib/alertmanager/data

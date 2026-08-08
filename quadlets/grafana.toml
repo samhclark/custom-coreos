@@ -24,16 +24,30 @@ container-user = 0
 enabled = true
 cpus = 2
 ram-mib = 2048
+network = "tap"
+ipv4 = "10.253.3.2/30"
+
+[[krun.ingress]]
+from = "caddy"
+ports = [3000]
+
+[[krun.ingress]]
+from = "victoria-metrics"
+ports = [3000]
 
 [container.environment]
 # GF_PLUGINS_PREINSTALL_SYNC installs the VictoriaMetrics datasource plugin
 # on first start.
 GF_PLUGINS_PREINSTALL_SYNC = "victoriametrics-metrics-datasource"
-GF_SERVER_HTTP_ADDR = "127.0.0.1"
+GF_SERVER_HTTP_ADDR = "0.0.0.0"
 GF_SERVER_HTTP_PORT = "3000"
 GF_AUTH_ANONYMOUS_ENABLED = "true"
 GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin"
 GF_AUTH_DISABLE_LOGIN_FORM = "true"
+
+[[container.ports]]
+host = "127.0.0.1:3000"
+container = 3000
 
 [[container.volumes]]
 comment = "Image-controlled provisioning configs (read-only)"

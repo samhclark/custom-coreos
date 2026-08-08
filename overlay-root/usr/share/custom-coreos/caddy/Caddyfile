@@ -16,27 +16,27 @@
 # Garage S3-compatible object storage
 # Admin API - for garage CLI and metrics
 garage.i.samhclark.com {
-	reverse_proxy 10.0.0.1:3903
+	reverse_proxy garage.krun:3903
 }
 
 # S3 API - supports both path-style and virtual-hosted style
 # Path style: s3.i.samhclark.com/bucket/key
 # Virtual-hosted: bucket.s3.i.samhclark.com/key
 s3.i.samhclark.com, *.s3.i.samhclark.com {
-	reverse_proxy 10.0.0.1:3900
+	reverse_proxy garage.krun:3900
 }
 
 # VictoriaMetrics - time series database and web UI
 metrics.i.samhclark.com {
-	reverse_proxy 10.0.0.1:8428
+	reverse_proxy victoria-metrics.krun:8428
 }
 
 # Grafana - dashboards and visualization
 visualize.i.samhclark.com {
-	reverse_proxy 10.0.0.1:3000
+	reverse_proxy grafana.krun:3000
 }
 
 # Jellyfin - media library and streaming
 jellyfin.i.samhclark.com {
-	reverse_proxy 10.0.0.1:8096
+	reverse_proxy jellyfin.krun:8096
 }

@@ -14,24 +14,23 @@ display-name = "Caddy"
 
 [container]
 image = "ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:78331c4abc23f4f3f39675745af20b06d9aae97ae244772414e7933c8c1ab054"
-# Keep crun's broad inner passt listeners inside this container's private
-# namespace. Each -T entry exposes one host-loopback backend to that namespace;
-# Caddy reaches the allowlist through the guest gateway at 10.0.0.1.
-network = "pasta:-T,3000,-T,3900,-T,3903,-T,8096,-T,8428"
+network = "host"
 # Avoid the host's loopback-only systemd-resolved stub inside the nested guest.
 # MagicDNS preserves tailnet resolution; Comcast resolvers provide fallbacks
 # for ACME and Cloudflare DNS API access.
 dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
-# Network namespaces do not inherit the host's low-port sysctl. Inner passt
-# needs the same threshold to claim guest-facing TCP/UDP 80 and 443.
-sysctls = ["net.ipv4.ip_unprivileged_port_start=80"]
 container-user = 0
 
 [krun]
 enabled = true
 cpus = 2
 ram-mib = 512
-network = "passt"
+network = "tap"
+ipv4 = "10.253.9.2/30"
+
+[[krun.ingress]]
+from = "victoria-metrics"
+ports = [2019]
 
 [[container.ports]]
 host = "0.0.0.0:80"

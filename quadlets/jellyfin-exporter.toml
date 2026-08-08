@@ -19,15 +19,25 @@ container-user = 0
 exec = "python3 /app/jellyfin_exporter.py"
 
 [container.environment]
-JELLYFIN_URL = "http://127.0.0.1:8096"
+JELLYFIN_URL = "http://jellyfin.krun:8096"
 JELLYFIN_API_KEY_FILE = "/run/secrets/jellyfin-api-key"
-LISTEN_HOST = "127.0.0.1"
+LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = "9594"
 
 [krun]
 enabled = true
 cpus = 1
 ram-mib = 128
+network = "tap"
+ipv4 = "10.253.8.2/30"
+
+[[krun.ingress]]
+from = "victoria-metrics"
+ports = [9594]
+
+[[container.ports]]
+host = "127.0.0.1:9594"
+container = 9594
 
 [[container.volumes]]
 comment = "Image-controlled dependency-free exporter (read-only)"

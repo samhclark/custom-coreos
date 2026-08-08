@@ -14,12 +14,27 @@ display-name = "Garage"
 
 [container]
 image = "docker.io/dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690"
+network = "host"
 container-user = 0
 
 [krun]
 enabled = true
 cpus = 2
 ram-mib = 1024
+network = "tap"
+ipv4 = "10.253.1.2/30"
+
+[[krun.ingress]]
+from = "caddy"
+ports = [3900, 3903]
+
+[[krun.ingress]]
+from = "victoria-metrics"
+ports = [3903]
+
+[[krun.ingress]]
+from = "blackbox-exporter"
+ports = [3903]
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"

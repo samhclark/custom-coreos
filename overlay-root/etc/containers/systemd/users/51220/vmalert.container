@@ -9,15 +9,29 @@ Image=docker.io/victoriametrics/vmalert:v1.148.0@sha256:268ab5df69360a236e1382db
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=1
 Annotation=krun.ram_mib=256
+Annotation=krun.tap_name=krun-51220
 StopSignal=SIGINT
 Network=host
+AddDevice=/dev/net/tun
+AddHost=garage.krun:10.253.1.2
+AddHost=jellyfin.krun:10.253.2.2
+AddHost=grafana.krun:10.253.3.2
+AddHost=vmalert.krun:10.253.4.2
+AddHost=blackbox-exporter.krun:10.253.5.2
+AddHost=alertmanager.krun:10.253.6.2
+AddHost=victoria-metrics.krun:10.253.7.2
+AddHost=jellyfin-exporter.krun:10.253.8.2
+AddHost=caddy.krun:10.253.9.2
+AddHost=host.krun.internal:10.253.4.1
 
 # Image-controlled alerting rules (read-only)
 Volume=/usr/share/custom-coreos/vmalert:/etc/vmalert:ro
 
-Exec=-datasource.url=http://127.0.0.1:8428 -remoteWrite.url=http://127.0.0.1:8428 -remoteRead.url=http://127.0.0.1:8428 -notifier.url=http://127.0.0.1:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=127.0.0.1:8880
+Exec=-datasource.url=http://victoria-metrics.krun:8428 -remoteWrite.url=http://victoria-metrics.krun:8428 -remoteRead.url=http://victoria-metrics.krun:8428 -notifier.url=http://alertmanager.krun:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=0.0.0.0:8880
 
 [Service]
+ExecStartPre=/usr/bin/test -c /dev/net/tun
+ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51220
 ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do /usr/bin/curl -fsS http://127.0.0.1:8428/-/healthy >/dev/null 2>&1 && exit 0; sleep 2; done; echo "VictoriaMetrics did not become ready on 127.0.0.1:8428 within 300 seconds" >&2; exit 1'
 Restart=always
 RestartSec=30

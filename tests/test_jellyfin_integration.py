@@ -25,27 +25,27 @@ JELLYFIN_QUADLET = (
 
 
 class JellyfinIntegrationTests(unittest.TestCase):
-    def test_caddy_routes_selected_hostname_through_passt_backend_allowlist(self):
+    def test_caddy_routes_selected_hostname_to_jellyfin_tap(self):
         self.assertIn(
             "jellyfin.i.samhclark.com {\n"
-            "\treverse_proxy 10.0.0.1:8096\n"
+            "\treverse_proxy jellyfin.krun:8096\n"
             "}",
             CADDYFILE,
         )
 
-    def test_jellyfin_uses_passt_and_disables_unsupported_exec_healthcheck(self):
-        self.assertIn("Network=pasta", JELLYFIN_QUADLET)
-        self.assertIn("Annotation=krun.use_passt=1", JELLYFIN_QUADLET)
+    def test_jellyfin_uses_tap_and_disables_unsupported_exec_healthcheck(self):
+        self.assertIn("Network=host", JELLYFIN_QUADLET)
+        self.assertIn("Annotation=krun.tap_name=krun-51120", JELLYFIN_QUADLET)
         self.assertIn("HealthCmd=none", JELLYFIN_QUADLET)
-        self.assertIn("PublishPort=127.0.0.1:8096:8096", JELLYFIN_QUADLET)
+        self.assertNotIn("PublishPort=", JELLYFIN_QUADLET)
 
     def test_victoria_metrics_probes_jellyfin_health_via_blackbox(self):
         self.assertIn("job_name: 'jellyfin-health'", SCRAPE_CONFIG)
         self.assertIn(
-            "targets: ['http://127.0.0.1:8096/health']",
+            "targets: ['http://jellyfin.krun:8096/health']",
             SCRAPE_CONFIG,
         )
-        self.assertIn("replacement: 127.0.0.1:9115", SCRAPE_CONFIG)
+        self.assertIn("replacement: blackbox-exporter.krun:9115", SCRAPE_CONFIG)
 
     def test_alerts_distinguish_service_failure_from_probe_failure(self):
         self.assertIn("alert: JellyfinHealthDown", ALERT_RULES)
@@ -58,7 +58,7 @@ class JellyfinIntegrationTests(unittest.TestCase):
 
     def test_victoria_metrics_scrapes_playback_exporter(self):
         self.assertIn("job_name: 'jellyfin-exporter'", SCRAPE_CONFIG)
-        self.assertIn("targets: ['127.0.0.1:9594']", SCRAPE_CONFIG)
+        self.assertIn("targets: ['jellyfin-exporter.krun:9594']", SCRAPE_CONFIG)
 
     def test_playback_dashboard_contains_live_and_stall_diagnostics(self):
         self.assertIn('"uid": "jellyfin-playback"', DASHBOARD)
