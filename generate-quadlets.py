@@ -841,16 +841,17 @@ def nft_filter(configs: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def networkd_account_ordering(configs: list[dict]) -> str:
+def networkd_dependencies(configs: list[dict]) -> str:
     account_units = [
         f"ensure-nas-{cfg['_slug']}-account.service"
         for cfg in active_taps(configs)
     ]
     return "\n".join(
         [
-            fleet_header("networkd TAP account ordering"),
+            fleet_header("networkd TAP dependencies"),
             "[Unit]",
             f"After={' '.join(account_units)}",
+            "Wants=nas-krun-network-policy.service",
             "",
         ]
     )
@@ -1178,7 +1179,7 @@ def main() -> None:
     write(
         OVERLAY
         / "etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf",
-        networkd_account_ordering(configs),
+        networkd_dependencies(configs),
     )
     write(OVERLAY / "etc/nftables/nas-krun-filter.nft", nft_filter(configs))
     write(OVERLAY / "etc/nftables/nas-krun-nat.nft", nft_nat(configs))

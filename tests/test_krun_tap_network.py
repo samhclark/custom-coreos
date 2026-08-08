@@ -1,10 +1,14 @@
 # ABOUTME: Regression tests for the generated libkrun TAP network data plane.
 
 import importlib.util
+import os
 import shutil
 import subprocess
+import tempfile
+import time
 import tomllib
 import unittest
+import uuid
 from pathlib import Path
 
 
@@ -30,6 +34,10 @@ POLICY_UNIT = (
 NFTABLES_DROPIN = (
     REPO
     / "overlay-root/etc/systemd/system/nftables.service.d/10-nas-krun-policy.conf"
+).read_text()
+NETWORKD_DROPIN = (
+    REPO
+    / "overlay-root/etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf"
 ).read_text()
 
 
@@ -111,15 +119,125 @@ class KrunTapNetworkTests(unittest.TestCase):
         self.assertIn("IPv4RouteLocalnet=yes", network)
 
     def test_networkd_waits_for_tap_owner_accounts(self):
-        ordering = (
-            REPO
-            / "overlay-root/etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf"
-        ).read_text()
         for cfg in self.load_configs():
             self.assertIn(
                 f"ensure-nas-{cfg['_slug']}-account.service",
-                ordering,
+                NETWORKD_DROPIN,
             )
+
+    def test_networkd_automatic_restart_rearms_policy(self):
+        self.assertIn("Wants=nas-krun-network-policy.service", NETWORKD_DROPIN)
+
+        if not shutil.which("systemctl") or not os.environ.get("XDG_RUNTIME_DIR"):
+            self.skipTest("a running systemd user manager is unavailable")
+        probe = subprocess.run(
+            ["systemctl", "--user", "is-system-running"],
+            capture_output=True,
+            text=True,
+        )
+        if probe.stdout.strip() not in {"running", "degraded"}:
+            self.skipTest("a running systemd user manager is unavailable")
+
+        suffix = uuid.uuid4().hex
+        dependency = f"test-krun-networkd-{suffix}.service"
+        policy = f"test-krun-policy-{suffix}.service"
+        unit_dir = Path(os.environ["XDG_RUNTIME_DIR"]) / "systemd/user"
+        unit_dir.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.TemporaryDirectory(prefix="krun-policy-test-") as state_dir:
+            state = Path(state_dir)
+            attempts = state / "attempts"
+            events = state / "events"
+            dependency_path = unit_dir / dependency
+            policy_path = unit_dir / policy
+            dependency_path.write_text(
+                "\n".join(
+                    [
+                        "[Unit]",
+                        f"Wants={policy}",
+                        "",
+                        "[Service]",
+                        "Type=simple",
+                        "ExecStart=/bin/bash -ceu '"
+                        f"count=$(cat {attempts} 2>/dev/null || echo 0); "
+                        f"count=$((count + 1)); echo $count > {attempts}; "
+                        'if (( count == 1 )); then sleep 0.5; exit 1; fi; '
+                        "exec sleep 30'",
+                        "Restart=on-failure",
+                        "RestartSec=0.1",
+                        "",
+                    ]
+                )
+            )
+            policy_path.write_text(
+                "\n".join(
+                    [
+                        "[Unit]",
+                        f"BindsTo={dependency}",
+                        f"After={dependency}",
+                        "",
+                        "[Service]",
+                        "Type=oneshot",
+                        f"ExecStart=/bin/bash -c 'echo start >> {events}'",
+                        f"ExecStop=/bin/bash -c 'echo stop >> {events}'",
+                        "RemainAfterExit=yes",
+                        "",
+                    ]
+                )
+            )
+
+            try:
+                subprocess.run(
+                    ["systemctl", "--user", "daemon-reload"], check=True
+                )
+                subprocess.run(
+                    ["systemctl", "--user", "start", dependency], check=True
+                )
+
+                deadline = time.monotonic() + 10
+                observed = []
+                while time.monotonic() < deadline:
+                    observed = (
+                        events.read_text().splitlines() if events.exists() else []
+                    )
+                    if observed[:3] == ["start", "stop", "start"]:
+                        break
+                    time.sleep(0.1)
+
+                restart_count = subprocess.run(
+                    [
+                        "systemctl",
+                        "--user",
+                        "show",
+                        dependency,
+                        "--property=NRestarts",
+                        "--value",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+                self.assertGreaterEqual(int(restart_count), 1)
+                self.assertEqual(observed[:3], ["start", "stop", "start"])
+                self.assertEqual(
+                    subprocess.run(
+                        ["systemctl", "--user", "is-active", policy],
+                        capture_output=True,
+                        text=True,
+                    ).stdout.strip(),
+                    "active",
+                )
+            finally:
+                subprocess.run(
+                    ["systemctl", "--user", "stop", dependency, policy],
+                    capture_output=True,
+                )
+                dependency_path.unlink(missing_ok=True)
+                policy_path.unlink(missing_ok=True)
+                subprocess.run(
+                    ["systemctl", "--user", "daemon-reload"],
+                    capture_output=True,
+                )
 
     def test_nft_policy_has_antispoof_edges_publication_and_nat(self):
         self.assertIn(

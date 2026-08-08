@@ -35,7 +35,8 @@ The generator emits:
   `VNetHeader=yes`;
 - a matching `.network` with the gateway and a one-address DHCP server using
   Rapid Commit;
-- a networkd service drop-in that waits for every generated TAP owner account;
+- a networkd service drop-in that waits for every generated TAP owner account
+  and pulls the policy service on every start, including automatic restarts;
 - `AddDevice=/dev/net/tun`, `Annotation=krun.tap_name=...`, stable `*.krun`
   `/etc/hosts` entries, and no Podman publisher in every Quadlet;
 - nftables anti-spoofing, explicit inter-guest edges, public ingress, loopback
@@ -47,8 +48,8 @@ The generator emits:
 - fail-closed shutdown ordering: loss or shutdown of networkd/nftables first
   removes readiness and synchronously stops the dedicated service user
   managers. The nftables stop override quiesces the guests before flushing the
-  ruleset, while dependency restarts propagate back to the policy service so it
-  can republish readiness and restart the dedicated user managers;
+  ruleset. Networkd also pulls the policy service on restart so it can republish
+  readiness and restart the dedicated user managers;
 - a post-start TCP check against each guest's first published TCP service. A
   missed one-shot libkrun DHCP exchange therefore fails startup, and the
   Quadlet's restart policy boots a fresh guest for another DHCP attempt.
