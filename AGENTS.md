@@ -228,7 +228,8 @@ Images include labels for future deduplication:
 - `overlay-root/` - Systemd units, ZFS scripts, Quadlets, cosign policy files
 - `scripts/query-coreos-kernel.sh` - Kernel version discovery (called by Makefile and CI)
 - `scripts/resolve-zfs-version.sh` - ZFS version discovery (called by Makefile and CI)
-- `scripts/cleanup-dry-run.sh` - Local dry-run of container image cleanup logic
+- `scripts/select-expired-images.sh` - Local/CI GHCR cleanup query boundary
+- `scripts/plan-image-cleanup.py` - Typed, pure package-version cleanup planner
 
 ### CI/CD Workflows
 - `.github/workflows/build.yaml` - Main container build

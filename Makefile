@@ -163,10 +163,10 @@ all-workflows: ## Show recent runs for all workflows
 	@printf "$(COLOR_BLUE)Pages:$(COLOR_RESET)\n"
 	@$(GH) run list --workflow=pages.yaml --limit=3
 
-RETENTION_DAYS ?= 30
+RETENTION_DAYS ?= 90
 .PHONY: cleanup-dry-run
-cleanup-dry-run: ## Test cleanup logic locally; set RETENTION_DAYS=N to configure (default: 30)
-	@./scripts/cleanup-dry-run.sh $(RETENTION_DAYS)
+cleanup-dry-run: ## Plan cleanup locally; set RETENTION_DAYS=N to configure (default: 90)
+	@./scripts/select-expired-images.sh $(RETENTION_DAYS)
 
 ##@ Dependencies
 
