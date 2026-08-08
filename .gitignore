@@ -1,4 +1,5 @@
 ignition.json
+_site/
 .codex
 
 # Plaintext secret material and local age identities.

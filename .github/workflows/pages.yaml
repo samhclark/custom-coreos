@@ -5,6 +5,8 @@ on:
     branches: [ main ]
     paths: 
       - 'butane.yaml'
+      - 'Makefile'
+      - 'pages/**'
       - '.github/workflows/pages.yaml'
   workflow_dispatch:
 
@@ -27,65 +29,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       
-      - name: Generate Ignition file from Butane config
+      - name: Generate and stage Pages artifact
         run: |
-          echo "🔧 Generating Ignition file from butane.yaml..."
-          
-          # Generate Ignition JSON using Butane container
-          podman run --rm --interactive \
-            --security-opt label=disable \
-            --volume "${PWD}":/pwd --workdir /pwd \
-            quay.io/coreos/butane:release < butane.yaml > ignition.json
-          
-          echo "✅ Generated ignition.json ($(wc -c < ignition.json) bytes)"
-          
-          # Create a simple index.html for the GitHub Pages site
-          cat > index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Custom CoreOS Ignition Files</title>
-              <meta charset="utf-8">
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; }
-                  .file { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
-                  code { background: #f5f5f5; padding: 2px 4px; border-radius: 3px; }
-                  pre { background: #f5f5f5; padding: 10px; border-radius: 5px; overflow-x: auto; }
-              </style>
-          </head>
-          <body>
-              <h1>Custom CoreOS Ignition Files</h1>
-              <p>Automatically generated Ignition files for CoreOS installation.</p>
-              
-              <div class="file">
-                  <h2>Ignition Configuration</h2>
-                  <p><strong>File:</strong> <a href="ignition.json">ignition.json</a></p>
-                  <p><strong>Usage:</strong> Use this URL during CoreOS installation:</p>
-                  <pre><code>https://samhclark.github.io/custom-coreos/ignition.json</code></pre>
-                  <p><strong>Generated:</strong> $(date -u)</p>
-                  <p><strong>Size:</strong> $(wc -c < ignition.json) bytes</p>
-              </div>
-              
-              <div class="file">
-                  <h2>Features</h2>
-                  <ul>
-                      <li>LUKS encrypted root filesystem with TPM2 unlock</li>
-                      <li>Btrfs root filesystem</li>
-                      <li>SSH key configuration for 'core' user</li>
-                      <li>Hostname set to 'nas'</li>
-                  </ul>
-              </div>
-              
-              <div class="file">
-                  <h2>Installation</h2>
-                  <p>Use this Ignition file during CoreOS installation by providing the URL above.</p>
-                  <p>The configuration will automatically set up encrypted storage with TPM2-based unlocking.</p>
-              </div>
-          </body>
-          </html>
-          EOF
-          
-          echo "✅ Generated index.html"
+          make generate-ignition
+          jq --exit-status . ignition.json >/dev/null
+          install -d -m 0755 _site
+          install -m 0644 ignition.json pages/index.html _site/
+          mapfile -t site_files < <(
+            find _site -maxdepth 1 -type f -printf '%f\n' | sort
+          )
+          [[ "${site_files[*]}" == "ignition.json index.html" ]]
           
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
@@ -93,7 +46,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: '.'
+          path: '_site'
           
   deploy:
     environment:
