@@ -1,5 +1,9 @@
 # Routed libkrun TAP network
 
+> Historical implementation and deployment record. The routed TAP design and
+> narrow SELinux module are deployed; use the generated files and `AGENTS.md`
+> for current behavior rather than treating the evidence below as a runbook.
+
 ## Decision
 
 Use one root-managed TAP and one routed IPv4 `/30` per libkrun microVM. The
@@ -134,15 +138,15 @@ Quadlet's direct guest-listener check, and served its loopback metrics endpoint
 without a new TUN device or `tun_socket` AVC. This validates the complete
 host-to-guest TAP attachment path for one representative service.
 
-`scripts/validate-krun-tun-selinux.sh` provides a reversible production check:
-it stops the failed restart loops, installs the exact CIL file, and starts only
-Blackbox exporter. Its rollback action stops that representative service and
-removes the local module.
+The one-off live-policy validation helper used during this investigation has
+been retired. The image now installs the exact reviewed module during the
+build. Removing that module on a running host is not a safe rollback: it breaks
+the confinement contract required by active TAP guests and can leave service
+user managers stopped.
 
-## Remaining deployment evidence
+## Deployment outcome
 
-The next production step is the single-service SELinux validation above. After
-that passes and the corrected image boots without failed network-policy or
-wait-online units, validate the complete nine-service ruleset: one
-representative loopback publication, Caddy HTTP/1.1/2/3, service-to-service
-denials and allows, outbound DNS/ACME, and Jellyfin seek/rewind on the NAS.
+The representative SELinux validation passed, and the corrected image became
+the deployed platform for the generated service fleet. Current operational
+status and remaining service-specific validation work are tracked in
+`AGENTS.md` and `docs/roadmap.md`.
