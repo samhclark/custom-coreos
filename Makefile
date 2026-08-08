@@ -97,7 +97,8 @@ test: ## Run unit tests
 
 .PHONY: build
 build: ## Build the container image
-	@ZFS_VERSION=$$(./scripts/resolve-zfs-version.sh $(ZFS_STREAM)); \
+	@set -e; \
+	ZFS_VERSION=$$(./scripts/resolve-zfs-version.sh $(ZFS_STREAM)); \
 	KERNEL_VERSION=$$(./scripts/query-coreos-kernel.sh); \
 	IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:zfs-$${ZFS_VERSION}_kernel-$${KERNEL_VERSION}"; \
 	$(SKOPEO) inspect "docker://$$IMAGE" >/dev/null 2>&1 || \
