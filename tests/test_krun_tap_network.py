@@ -21,6 +21,7 @@ SPEC.loader.exec_module(GENERATOR)
 PATCH = (
     REPO / "patches/crun/0001-krun-add-tap-network-annotation.patch"
 ).read_text()
+CONTAINERFILE = (REPO / "Containerfile").read_text()
 FILTER = (
     REPO / "overlay-root/etc/nftables/nas-krun-filter.nft"
 ).read_text()
@@ -353,6 +354,18 @@ exit 1
         self.assertIn('dlsym (handle, "krun_add_net_tap")', PATCH)
         self.assertIn("COMPAT_NET_FEATURES, NET_FLAG_DHCP_CLIENT", PATCH)
         self.assertIn("krun.tap_name and krun.use_passt are mutually exclusive", PATCH)
+
+    def test_crun_source_is_verified_before_extraction(self):
+        checksum = (
+            "62b82f7db89df3652970d9ad76f635a177d09bcb543c8d1dae13a749cd3e6e35"
+        )
+        self.assertIn(f'{checksum}  /tmp/crun-1.28.tar.zst', CONTAINERFILE)
+        self.assertIn("sha256sum --check --strict", CONTAINERFILE)
+        self.assertNotIn("ADD --checksum", CONTAINERFILE)
+        self.assertLess(
+            CONTAINERFILE.index("sha256sum --check --strict"),
+            CONTAINERFILE.index("tar --extract --zstd"),
+        )
 
 
 if __name__ == "__main__":
