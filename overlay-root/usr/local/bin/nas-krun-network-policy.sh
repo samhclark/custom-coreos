@@ -9,8 +9,12 @@ TAPS=("krun-51110" "krun-51120" "krun-51210" "krun-51220" "krun-51230" "krun-512
 GATEWAYS=("10.253.1.1/30" "10.253.2.1/30" "10.253.3.1/30" "10.253.4.1/30" "10.253.5.1/30" "10.253.6.1/30" "10.253.7.1/30" "10.253.8.1/30" "10.253.9.1/30")
 USER_UNITS=("user@51110.service" "user@51120.service" "user@51210.service" "user@51220.service" "user@51230.service" "user@51240.service" "user@51250.service" "user@51260.service" "user@51310.service")
 
+clear_readiness() {
+    rm -f "${READY_FILE}" "${READY_FILE}.tmp"
+}
+
 quiesce_guests() {
-    rm -f "${READY_FILE}"
+    clear_readiness
     systemctl stop "${USER_UNITS[@]}"
     for unit in "${USER_UNITS[@]}"; do
         if systemctl is-active --quiet "${unit}"; then
@@ -21,9 +25,10 @@ quiesce_guests() {
 }
 
 publish_readiness() {
-    trap 'rm -f "${READY_FILE}"' ERR
+    trap 'clear_readiness' ERR
+    trap 'clear_readiness; exit 1' HUP INT TERM
     install -d -o root -g root -m 0755 "${READY_DIR}"
-    rm -f "${READY_FILE}"
+    clear_readiness
 
     /usr/lib/systemd/systemd-networkd-wait-online --quiet --timeout=60 \
         --ipv4 --interface="krun-51110:off" --interface="krun-51120:off" --interface="krun-51210:off" --interface="krun-51220:off" --interface="krun-51230:off" --interface="krun-51240:off" --interface="krun-51250:off" --interface="krun-51260:off" --interface="krun-51310:off"
@@ -42,8 +47,8 @@ publish_readiness() {
     chown root:root "${READY_FILE}.tmp"
     chmod 0644 "${READY_FILE}.tmp"
     mv -f "${READY_FILE}.tmp" "${READY_FILE}"
-    systemctl start "${USER_UNITS[@]}"
-    trap - ERR
+    systemctl start --no-block "${USER_UNITS[@]}"
+    trap - ERR HUP INT TERM
 }
 
 case "${1:-}" in

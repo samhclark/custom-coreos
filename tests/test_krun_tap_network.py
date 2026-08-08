@@ -40,6 +40,12 @@ NETWORKD_DROPIN = (
     REPO
     / "overlay-root/etc/systemd/system/systemd-networkd.service.d/10-nas-krun-accounts.conf"
 ).read_text()
+SELINUX_POLICY = (
+    REPO / "overlay-root/usr/share/selinux/targeted/nas-krun-tun.cil"
+).read_text()
+SELINUX_VALIDATION = (
+    REPO / "scripts/validate-krun-tun-selinux.sh"
+).read_text()
 
 
 class KrunTapNetworkTests(unittest.TestCase):
@@ -89,8 +95,16 @@ class KrunTapNetworkTests(unittest.TestCase):
             "ExecStop=/usr/local/bin/nas-krun-network-policy.sh quiesce",
             POLICY_UNIT,
         )
-        self.assertIn("rm -f \"${READY_FILE}\"", POLICY_SCRIPT)
+        self.assertIn(
+            'rm -f "${READY_FILE}" "${READY_FILE}.tmp"', POLICY_SCRIPT
+        )
+        self.assertIn(
+            "trap 'clear_readiness; exit 1' HUP INT TERM", POLICY_SCRIPT
+        )
         self.assertIn('systemctl stop "${USER_UNITS[@]}"', POLICY_SCRIPT)
+        self.assertIn(
+            'systemctl start --no-block "${USER_UNITS[@]}"', POLICY_SCRIPT
+        )
         self.assertIn("nft list chain inet filter nas_krun_input", POLICY_SCRIPT)
         self.assertIn("systemd-networkd-wait-online", POLICY_SCRIPT)
         self.assertIn("ExecStop=\n", NFTABLES_DROPIN)
@@ -98,6 +112,45 @@ class KrunTapNetworkTests(unittest.TestCase):
         self.assertLess(
             POLICY_SCRIPT.index('systemctl stop "${USER_UNITS[@]}"'),
             POLICY_SCRIPT.index("nft flush ruleset"),
+        )
+
+    def test_tap_device_selinux_access_is_narrow(self):
+        self.assertEqual(
+            SELINUX_POLICY,
+            "(block nas_krun_tun\n"
+            "  (allow container_kvm_t tun_tap_device_t "
+            "(chr_file (open)))\n"
+            "  (allow container_kvm_t systemd_networkd_t "
+            "(tun_socket (relabelfrom)))\n"
+            ")\n",
+        )
+        self.assertIn(
+            "semodule -i /usr/share/selinux/targeted/nas-krun-tun.cil",
+            CONTAINERFILE,
+        )
+        self.assertNotIn("container_use_devices", CONTAINERFILE)
+        self.assertIn("semodule --install", SELINUX_VALIDATION)
+        self.assertIn("semodule --remove", SELINUX_VALIDATION)
+        self.assertIn(
+            "Refusing policy file with broad container device access "
+            "or unexpected content",
+            SELINUX_VALIDATION,
+        )
+        self.assertIn('[[ $(<"$policy_file") != "$expected_policy" ]]', SELINUX_VALIDATION)
+        self.assertNotIn("setsebool", SELINUX_VALIDATION)
+        self.assertNotIn("label=disable", SELINUX_VALIDATION)
+        self.assertIn(
+            'systemctl stop "${USER_UNITS[@]}"', SELINUX_VALIDATION
+        )
+
+    def test_generic_networkd_wait_online_is_disabled(self):
+        self.assertIn(
+            "systemctl disable systemd-networkd-wait-online.service",
+            CONTAINERFILE,
+        )
+        self.assertIn(
+            "/usr/lib/systemd/systemd-networkd-wait-online",
+            POLICY_SCRIPT,
         )
 
     def test_networkd_grants_tap_to_service_and_enables_vnet_headers(self):

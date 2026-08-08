@@ -87,11 +87,62 @@ The first boot attempt also established why `AddDevice=/dev/net/tun` is
 required: without it, libkrun reached the TAP backend but failed with
 `OpenNetTun(ENOENT)` after crun entered the container mount namespace.
 
+## First production boot evidence (2026-08-08)
+
+The first complete deployment validated the host-side TAP construction but
+found three lifecycle and confinement gaps:
+
+1. All nine persistent TAPs were created with the intended owner, VNET header,
+   `/30` gateway, DHCP server, and `RequiredForOnline=no`. The policy's
+   explicit per-TAP wait, address checks, and nftables checks completed in
+   roughly 250 milliseconds and published a current-boot readiness marker.
+2. Enabling `systemd-networkd.service` also enabled its generic wait-online
+   service. NetworkManager owns the physical links, while networkd deliberately
+   ignores those links and excludes every TAP from the generic online target,
+   so the generic service had no eligible interface and timed out after 120
+   seconds. The policy then timed out while synchronously starting service user
+   managers that were ordered behind the delayed boot transaction. The image
+   now disables only the generic wait-online unit; the policy retains its
+   explicit TAP-scoped wait and queues user-manager starts without blocking.
+3. The policy's `ERR` trap did not run when systemd sent `SIGTERM`, leaving its
+   readiness marker behind after the unit failed. Readiness cleanup now handles
+   `HUP`, `INT`, and `TERM`, including the temporary marker file.
+
+Once the user managers finally started, every attempted microVM failed at
+libkrun's `open("/dev/net/tun", O_RDWR)` with an enforcing SELinux denial from
+`container_kvm_t` to `tun_tap_device_t`. Device injection, mode `0666`, and TAP
+ownership were all correct. Fedora's container policy already permits the
+remaining inherited TUN descriptor operations for `container_kvm_t`; the image
+therefore installs a local CIL module granting only the missing `open`
+permission. It intentionally does not enable the broad `container_use_devices`
+boolean or disable container labeling.
+
+The first single-service validation passed that original `open` check and then
+exposed the next SELinux hook: a persistent TAP retains its creator's internal
+`tun_socket` label (`systemd_networkd_t`) until the opener attaches it. The
+kernel requires the opener to relabel that socket to its own domain. Fedora
+already grants `container_kvm_t` the required self-domain `relabelto` and
+`attach_queue` permissions, so the local module adds only cross-domain
+`relabelfrom` for `systemd_networkd_t:tun_socket`. The TAP owner and the VMM's
+real, effective, saved, and filesystem UID/GID were all the intended service
+identity, ruling out the kernel's owner check as the source of `EACCES`.
+
+The second single-service validation installed the resulting two-permission
+module on the NAS with SELinux enforcing. Blackbox exporter attached to
+`krun-51230`, started its microVM listener at `10.253.5.2:9115`, passed the
+Quadlet's direct guest-listener check, and served its loopback metrics endpoint
+without a new TUN device or `tun_socket` AVC. This validates the complete
+host-to-guest TAP attachment path for one representative service.
+
+`scripts/validate-krun-tun-selinux.sh` provides a reversible production check:
+it stops the failed restart loops, installs the exact CIL file, and starts only
+Blackbox exporter. Its rollback action stops that representative service and
+removes the local module.
+
 ## Remaining deployment evidence
 
-Local testing does not prove NetworkManager/systemd-networkd coexistence during
-a real CoreOS boot, SELinux access for each lingering rootless service account,
-or behavior with the complete nine-service ruleset under real traffic. Before
-calling the migration operational, validate TAP ownership/addressing, one
+The next production step is the single-service SELinux validation above. After
+that passes and the corrected image boots without failed network-policy or
+wait-online units, validate the complete nine-service ruleset: one
 representative loopback publication, Caddy HTTP/1.1/2/3, service-to-service
 denials and allows, outbound DNS/ACME, and Jellyfin seek/rewind on the NAS.

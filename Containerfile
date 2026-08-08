@@ -85,7 +85,8 @@ RUN /bin/bash -c 'set -euo pipefail; \
       > /usr/lib/tmpfiles.d/nas-secrets.conf'
 
 RUN /bin/bash -c 'set -euo pipefail; \
-    semodule -i /usr/share/selinux/targeted/gssproxy-local.cil'
+    semodule -i /usr/share/selinux/targeted/gssproxy-local.cil; \
+    semodule -i /usr/share/selinux/targeted/nas-krun-tun.cil'
 
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     /bin/bash -c 'set -euo pipefail; \
@@ -136,6 +137,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         zfs-snapshots-yearly@videos.timer \
         disk-health-metrics.timer \
         node_exporter.service; \
+    systemctl disable systemd-networkd-wait-online.service; \
     systemctl disable zincati.service; \
     systemctl disable fwupd-refresh.timer; \
     dnf clean all; \

@@ -876,8 +876,12 @@ TAPS=({tap_names})
 GATEWAYS=({gateways})
 USER_UNITS=({user_units})
 
+clear_readiness() {{
+    rm -f "${{READY_FILE}}" "${{READY_FILE}}.tmp"
+}}
+
 quiesce_guests() {{
-    rm -f "${{READY_FILE}}"
+    clear_readiness
     systemctl stop "${{USER_UNITS[@]}}"
     for unit in "${{USER_UNITS[@]}}"; do
         if systemctl is-active --quiet "${{unit}}"; then
@@ -888,9 +892,10 @@ quiesce_guests() {{
 }}
 
 publish_readiness() {{
-    trap 'rm -f "${{READY_FILE}}"' ERR
+    trap 'clear_readiness' ERR
+    trap 'clear_readiness; exit 1' HUP INT TERM
     install -d -o root -g root -m 0755 "${{READY_DIR}}"
-    rm -f "${{READY_FILE}}"
+    clear_readiness
 
     /usr/lib/systemd/systemd-networkd-wait-online --quiet --timeout=60 \
         --ipv4 {wait_interfaces}
@@ -909,8 +914,8 @@ publish_readiness() {{
     chown root:root "${{READY_FILE}}.tmp"
     chmod 0644 "${{READY_FILE}}.tmp"
     mv -f "${{READY_FILE}}.tmp" "${{READY_FILE}}"
-    systemctl start "${{USER_UNITS[@]}}"
-    trap - ERR
+    systemctl start --no-block "${{USER_UNITS[@]}}"
+    trap - ERR HUP INT TERM
 }}
 
 case "${{1:-}}" in
