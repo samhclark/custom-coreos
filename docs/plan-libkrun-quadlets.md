@@ -1,7 +1,12 @@
 # Plan: Incremental libkrun Adoption for Rootless Quadlets
 
-This is the working plan for evaluating and, where it earns its keep, enabling
-libkrun for the NAS's rootless Quadlets.
+> Historical migration and evidence log. This plan is closed and its
+> TSI/private-passt network design was superseded by the deployed routed-TAP
+> architecture in `docs/plan-libkrun-tap-network.md`. Do not execute pending
+> actions or recovery commands from this document against the current host.
+
+This was the working plan for evaluating and enabling libkrun for the NAS's
+rootless Quadlets.
 
 The plan is intentionally optimized for the system that actually exists:
 
@@ -17,18 +22,15 @@ or zero-downtime machinery for a fleet of one.
 
 ## Current Status
 
-Update this block at the end of every implementation or NAS-validation session.
-Also append a row to the session log at the bottom of this file.
-
 | Field | Value |
 | --- | --- |
-| Overall status | All active rootless services use libkrun; Caddy and Jellyfin are configured to replace TSI with private nested passt after a production streaming stall exposed TSI head-of-line blocking |
-| Last completed work | 2026-08-07: diagnosed missing private-namespace low-port inheritance, added typed namespaced sysctls and guarded recovery tooling; all 66 tests, Quadlet translation, ShellCheck, and the full image build passed |
-| Current phase | Temporary low-port recovery is production-validated and active; permanent generated-Quadlet fix is locally validated, with redeployment pending |
-| Next concrete action | Deploy the permanent image normally, remove the exact temporary drop-in with `passt-low-port-recovery.sh --remove`, then repeat routes, HTTP/3, playback seeking, and monitoring validation |
+| Overall status | Closed and superseded by one generated root-managed routed TAP per active libkrun service |
+| Last completed work | The routed-TAP data plane, lifecycle policy, DHCP, nftables isolation, and narrow TUN SELinux policy replaced TSI/private passt |
+| Current phase | Historical record only |
+| Next concrete action | None from this plan; use `docs/roadmap.md` and current service checklists |
 | Production libkrun services | blackbox-exporter; vmalert; Alertmanager; Grafana; VictoriaMetrics; Garage; Caddy; Jellyfin; Jellyfin exporter |
 | Known production exceptions | The krun handler lacks `podman exec`; Jellyfin's image healthcheck is disabled in favor of blackbox probing, and service configuration changes use restarts |
-| Last NAS validation | 2026-08-07: the guarded temporary drop-in set Caddy's private-namespace threshold to 80; inner passt acquired TCP 80/443 and UDP 443, and loopback HTTPS to Jellyfin passed |
+| Current architecture | `docs/plan-libkrun-tap-network.md`, generated TOMLs, and `AGENTS.md` |
 
 ## Outcome
 

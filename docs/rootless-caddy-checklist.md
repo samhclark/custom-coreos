@@ -4,10 +4,6 @@
 > rootful-to-rootless cutover. The active image now uses
 > `prepare-caddy-state.service` and has no dependency on these migration
 > markers or rollback artifacts.
->
-> For the 2026-08 private-passt streaming-network change, use
-> `docs/passt-streaming-checklist.md`; the old `podman exec` checks below are
-> historical because the krun handler does not support exec.
 
 Use this after the NAS boots the image containing Caddy's phase-two rootless
 cutover. The expected host identity is `_nas_caddy` with UID/GID `51310`; the
