@@ -75,7 +75,7 @@ Important non-container units:
 
 - Secret material is encrypted in the repo with SOPS at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`
 - The SOPS age private key is expected on the NAS as a `systemd-creds` file at `/var/lib/nas-secrets/age-key.cred`
-- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, and Alertmanager secrets
+- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, Alertmanager, and Jellyfin exporter secrets
 - The root-owned distributor writes per-service runtime files under `/run/nas-secrets/<service>/`; consuming rootless services mount those files read-only instead of using Podman `Secret=`
 - Rootless Podman secrets are not a validated production path. NAS testing showed that the former shell secret driver could not use meaningful `systemd-creds` key modes from rootless Podman's user-namespace context; see `docs/plan-sops-and-quadlet-generator.md` Appendix D before changing the runtime-file design.
 
@@ -138,19 +138,28 @@ publish or deployment step by default.
 
 ## Architecture (Production)
 
-**2-stage build process** consuming prebuilt ZFS RPMs:
+**4-stage build process** consuming prebuilt ZFS RPMs:
 
-### Stage 1: Pull Prebuilt ZFS Kernel Modules
+### Stage 1: Build Patched crun
+
+Build the pinned crun release with the repo's narrow `krun.tap_name` patch.
+
+### Stage 2: Import SOPS
+
+Copy the pinned SOPS binary from the upstream image whose signature CI
+verifies.
+
+### Stage 3: Pull Prebuilt ZFS Kernel Modules
 ```dockerfile
 FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
 ```
 
-### Stage 2: Final Image Assembly
+### Stage 4: Final Image Assembly
 
 Starts `FROM quay.io/fedora/fedora-coreos:stable`, validates that the
-provided `KERNEL_VERSION` matches the base image's actual kernel, then in a
-single `RUN`: installs the host packages (nftables, node-exporter,
-smartmontools, tailscale, jq) plus the ZFS RPMs from stage 1, runs
+provided `KERNEL_VERSION` matches the base image's actual kernel, then installs
+the host packages (nftables, systemd-networkd, node-exporter, smartmontools,
+tailscale, jq) plus the ZFS RPMs from stage 3, runs
 `depmod`, and enables the systemd units. See the `Containerfile` itself for
 the authoritative package and unit lists — do not duplicate them here.
 
@@ -158,12 +167,12 @@ the authoritative package and unit lists — do not duplicate them here.
 
 ### Main Build (`.github/workflows/build.yaml`)
 - **Trigger**: Daily at 9:18 AM UTC + manual
-- **Jobs**: query-versions → build
+- **Jobs**: repository validation, SOPS verification, and version resolution → build
 - **Output**: `ghcr.io/samhclark/custom-coreos:stable`
 - **Features**: Version discovery, compatibility checking, build attestations
 
 ### Ignition Files (`.github/workflows/pages.yaml`)
-- **Trigger**: Push to main (butane.yaml changes) + manual
+- **Trigger**: Push to main (Butane config, Makefile generation logic, or Pages template changes) + manual
 - **Output**: `https://samhclark.github.io/custom-coreos/ignition.json`
 - **Features**: Butane→Ignition conversion, GitHub Pages deployment
 
@@ -180,7 +189,7 @@ the authoritative package and unit lists — do not duplicate them here.
 Use the `Containerfile` for configuration that adds **capabilities** to the system:
 - **Security**: Sigstore verification for container pulls via `/etc/containers/policy.json` (used by bootc)
 - **System Services**: NTP configuration, chronyd settings
-- **Package Installation**: ZFS modules, firewalld, Tailscale
+- **Package Installation**: ZFS modules, nftables, systemd-networkd, Tailscale
 - **Service Enablement**: systemd units (timers, tailscaled)
 
 ### Butane Configuration (Personal & Runtime)
@@ -221,10 +230,10 @@ Images include labels for future deduplication:
 ## Key Files
 
 ### Core Files
-- `Containerfile` - 2-stage build definition
+- `Containerfile` - 4-stage build definition
 - `butane.yaml` - Fedora CoreOS configuration with host identity + storage
 - `Makefile` - Development commands (`make help` to see all targets)
-- `ignition.json` - Generated Ignition file (auto-updated)
+- `ignition.json` - Locally generated, gitignored Ignition output
 - `overlay-root/` - Systemd units, ZFS scripts, Quadlets, cosign policy files
 - `scripts/query-coreos-kernel.sh` - Kernel version discovery (called by Makefile and CI)
 - `scripts/resolve-zfs-version.sh` - ZFS version discovery (called by Makefile and CI)
@@ -246,7 +255,7 @@ Images include labels for future deduplication:
 - `docs/rootless-garage-preflight.md` - Historical first-stage evidence collection before Garage's rootless ownership migration
 - `docs/rootless-garage-checklist.md` - Post-boot validation and rollback steps for the Garage rootless, ZFS ownership, and runtime-secret migration
 - `docs/rootless-caddy-preflight.md` - Completed first-stage validation and phase-two handoff for Caddy's rootless identity, runtime secret, low-port policy, persistent state, and guarded cutover
-- `docs/plan-libkrun-quadlets.md` - Working phased plan and cross-session evidence log for evaluating libkrun one rootless service at a time
+- `docs/plan-libkrun-quadlets.md` - Historical phased libkrun migration and evidence log
 - `docs/jellyfin-checklist.md` - First-deployment validation for Jellyfin storage, rootless libkrun runtime, health, and Caddy routing
 - `docs/jellyfin-monitoring-checklist.md` - API-key bootstrap, privacy contract, rollout checks, and interpretation guidance for the Jellyfin playback dashboard
 - `docs/plan-jellyfin-libkrun-hardware-transcoding.md` - Current evidence and decision log for preserving a VM boundary while pursuing Intel hardware transcoding
@@ -280,9 +289,9 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, Garage, and Jellyfin are deployed as rootless admin-managed user Quadlets; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work
+- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, Garage, Jellyfin, and Jellyfin exporter are deployed as rootless admin-managed user Quadlets; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work
 - All nine image-defined rootless services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
-- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. Adding a new rootless service means: new TOML with a UID from the identity scheme below, run the generator, add `systemctl enable ensure-nas-<slug>-account.service` to the Containerfile, add any secret values to `secrets.sops.yaml`.
+- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. The generated account-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` for declared secrets.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
@@ -291,7 +300,7 @@ Useful reference points for future rootless work:
 - Rootless Podman expects subordinate ID ranges. This repo ships explicit ranges for every `_nas_*` service user in `/etc/subuid` and `/etc/subgid`
 - If more rootless service users are added later, keep subordinate ID ranges non-overlapping and treat `/etc/subuid` and `/etc/subgid` as globally coordinated host resources
 - Do not use Podman `Secret=` for rootless services. Use per-service runtime files written by the root-owned SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only with `:ro,Z` (validated on the NAS 2026-07-03: rootless Podman can relabel `/run` tmpfs files to `container_file_t`; unrelabeled `var_run_t` files are blocked by SELinux).
-- linger state is managed by logind and lives under `/var/lib/systemd/linger`; `loginctl enable-linger` is the canonical interface even if a tmpfiles-based approach is possible
+- linger state lives under `/var/lib/systemd/linger`; generated tmpfiles provisioning creates each service marker before logind starts
 - Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently, or use a bounded `ExecStartPre=` readiness loop when startup requires a local dependency to answer first
 - Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
 - vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
