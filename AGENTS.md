@@ -59,7 +59,7 @@ Important non-container units:
 
 ### Monitoring Notes
 
-- Garage service availability should be based on the blackbox-exporter probe of `http://127.0.0.1:3903/health`, not on `up{job="garage"}` from the admin `/metrics` scrape
+- Garage service availability should be based on the blackbox-exporter probe of `http://garage.krun:3903/health`, not on `up{job="garage"}` from the admin `/metrics` scrape
 - Garage's `/metrics` endpoint is still useful for internal/storage metrics, but it can respond slowly enough to create false `up == 0` results even when the service is healthy
 
 ### Storage Layout Assumptions

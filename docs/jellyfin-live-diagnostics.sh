@@ -8,7 +8,7 @@ curl -sS -o /dev/null \
     http://127.0.0.1:8096/health
 curl -fsSG http://127.0.0.1:9115/probe \
     --data-urlencode 'module=http_2xx' \
-    --data-urlencode 'target=http://127.0.0.1:8096/health' |
+    --data-urlencode 'target=http://jellyfin.krun:8096/health' |
     grep -E '^probe_(success|duration_seconds|http_status_code|failed_due_to_regex|dns_lookup_time_seconds|ip_protocol)($|[[:space:]])'
 
 echo "== host and Jellyfin load =="

@@ -94,10 +94,10 @@ sudo -u _nas_jellyfin env \
   'runtime={{.OCIRuntime}} status={{.State.Status}} network={{.HostConfig.NetworkMode}} image={{.ImageName}} annotations={{json .Config.Annotations}} health={{json .Config.Healthcheck}}'
 ```
 
-Expect `runtime=krun`, `status=running`, `network=pasta`, the annotation
-`krun.use_passt=1`, and no executable healthcheck. Jellyfin's image healthcheck
-uses `podman exec`, which the krun handler does not support, so the Quadlet
-disables it; the external blackbox health probe is authoritative.
+Expect `runtime=krun`, `status=running`, `network=host`, the annotation
+`krun.tap_name=krun-51120`, and no executable healthcheck. Jellyfin's image
+healthcheck uses `podman exec`, which the krun handler does not support, so the
+Quadlet disables it; the external blackbox health probe is authoritative.
 
 Inspect the mounts:
 
@@ -123,11 +123,13 @@ Both media mounts must be read-only. Config and cache must be writable.
 ```bash
 curl -fsS http://127.0.0.1:8096/health
 curl -fsS https://jellyfin.i.samhclark.com/health
-sudo ss -ltnp | grep ':8096\b'
+sudo nft list chain ip nas_krun_nat output | grep 'tcp dport 8096'
+sudo ss -H -ltnp | grep ':8096\b' || echo 'expected: no host socket on 8096'
 ```
 
-Both health requests should return `Healthy`. Port 8096 should listen only on
-`127.0.0.1`, not on a LAN or public address.
+Both health requests should return `Healthy`. There should be no host socket
+for 8096; the nftables output chain should DNAT loopback traffic to
+`10.253.2.2:8096`.
 
 If local health works but HTTPS does not, inspect Caddy:
 

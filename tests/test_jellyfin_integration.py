@@ -22,6 +22,11 @@ DASHBOARD = (
 JELLYFIN_QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51120/jellyfin.container"
 ).read_text()
+LIVE_DIAGNOSTIC = (REPO / "docs/jellyfin-live-diagnostics.sh").read_text()
+CURRENT_GUIDES = [
+    (REPO / "docs/jellyfin-checklist.md").read_text(),
+    (REPO / "docs/jellyfin-first-boot-validation.md").read_text(),
+]
 
 
 class JellyfinIntegrationTests(unittest.TestCase):
@@ -46,6 +51,20 @@ class JellyfinIntegrationTests(unittest.TestCase):
             SCRAPE_CONFIG,
         )
         self.assertIn("replacement: blackbox-exporter.krun:9115", SCRAPE_CONFIG)
+
+    def test_operator_guidance_uses_tap_addresses_and_runtime(self):
+        self.assertIn(
+            "target=http://jellyfin.krun:8096/health", LIVE_DIAGNOSTIC
+        )
+        self.assertNotIn(
+            "target=http://127.0.0.1:8096/health", LIVE_DIAGNOSTIC
+        )
+        for guide in CURRENT_GUIDES:
+            self.assertIn("`network=host`", guide)
+            self.assertIn("`krun.tap_name=krun-51120`", guide)
+            self.assertIn("nft list chain ip nas_krun_nat output", guide)
+            self.assertNotIn("network=pasta", guide)
+            self.assertNotIn("krun.use_passt=1", guide)
 
     def test_alerts_distinguish_service_failure_from_probe_failure(self):
         self.assertIn("alert: JellyfinHealthDown", ALERT_RULES)
