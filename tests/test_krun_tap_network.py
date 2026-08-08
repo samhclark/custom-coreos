@@ -40,9 +40,6 @@ NETWORKD_DROPIN = (
 SELINUX_POLICY = (
     REPO / "overlay-root/usr/share/selinux/targeted/nas-krun-tun.cil"
 ).read_text()
-SELINUX_VALIDATION = (
-    REPO / "scripts/validate-krun-tun-selinux.sh"
-).read_text()
 
 
 class KrunTapNetworkTests(unittest.TestCase):
@@ -128,18 +125,9 @@ class KrunTapNetworkTests(unittest.TestCase):
             CONTAINERFILE,
         )
         self.assertNotIn("container_use_devices", CONTAINERFILE)
-        self.assertIn("semodule --install", SELINUX_VALIDATION)
-        self.assertIn("semodule --remove", SELINUX_VALIDATION)
-        self.assertIn(
-            "Refusing policy file with broad container device access "
-            "or unexpected content",
-            SELINUX_VALIDATION,
-        )
-        self.assertIn('[[ $(<"$policy_file") != "$expected_policy" ]]', SELINUX_VALIDATION)
-        self.assertNotIn("setsebool", SELINUX_VALIDATION)
-        self.assertNotIn("label=disable", SELINUX_VALIDATION)
-        self.assertIn(
-            'systemctl stop "${USER_UNITS[@]}"', SELINUX_VALIDATION
+        self.assertFalse(
+            (REPO / "scripts/validate-krun-tun-selinux.sh").exists(),
+            "the retired live-policy mutation helper must not return",
         )
 
     def test_generic_networkd_wait_online_is_disabled(self):
