@@ -54,19 +54,14 @@ kernel-version: ## Get the current kernel version from Fedora CoreOS stable
 
 .PHONY: versions
 versions: ## Show all relevant versions and verify ZFS kmod availability
-	@ZFS_VERSION=$$(./scripts/resolve-zfs-version.sh $(ZFS_STREAM)); \
-	KERNEL_VERSION=$$(./scripts/query-coreos-kernel.sh); \
-	IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:zfs-$${ZFS_VERSION}_kernel-$${KERNEL_VERSION}"; \
+	@set -- $$(SKOPEO_BIN="$(SKOPEO)" ./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
+	ZFS_VERSION="$$1"; \
+	KERNEL_VERSION="$$2"; \
+	IMAGE="$$3"; \
 	printf "ZFS Version:    %s\n" "$$ZFS_VERSION"; \
 	printf "Kernel Version: %s\n" "$$KERNEL_VERSION"; \
-	echo ""; \
-	printf "$(COLOR_BLUE)Checking: %s$(COLOR_RESET)\n" "$$IMAGE"; \
-	if $(SKOPEO) inspect "docker://$$IMAGE" >/dev/null 2>&1; then \
-		printf "$(COLOR_GREEN)ZFS kmods available$(COLOR_RESET)\n"; \
-	else \
-		printf "$(COLOR_RED)ZFS kmods not available$(COLOR_RESET)\n"; \
-		exit 1; \
-	fi
+	printf "Kmod Image:     %s\n" "$$IMAGE"; \
+	printf "$(COLOR_GREEN)ZFS kmods available$(COLOR_RESET)\n"
 
 ##@ Development
 
@@ -75,19 +70,9 @@ check: check-zfs-available ## Run all pre-build checks
 
 .PHONY: check-zfs-available
 check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
-	@ZFS_VERSION=$$(./scripts/resolve-zfs-version.sh $(ZFS_STREAM)); \
-	KERNEL_VERSION=$$(./scripts/query-coreos-kernel.sh); \
-	IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:zfs-$${ZFS_VERSION}_kernel-$${KERNEL_VERSION}"; \
-	printf "$(COLOR_BLUE)Checking availability: %s$(COLOR_RESET)\n" "$$IMAGE"; \
-	if $(SKOPEO) inspect "docker://$$IMAGE" >/dev/null 2>&1; then \
-		printf "$(COLOR_GREEN)ZFS kmods available for ZFS %s + kernel %s$(COLOR_RESET)\n" "$$ZFS_VERSION" "$$KERNEL_VERSION"; \
-	else \
-		printf "$(COLOR_RED)No prebuilt ZFS kmods found for this combination$(COLOR_RESET)\n"; \
-		printf "  ZFS:    %s\n" "$$ZFS_VERSION"; \
-		printf "  Kernel: %s\n" "$$KERNEL_VERSION"; \
-		printf "  Image:  %s\n" "$$IMAGE"; \
-		exit 1; \
-	fi
+	@SKOPEO_BIN="$(SKOPEO)" \
+		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)" >/dev/null
+	@printf "$(COLOR_GREEN)ZFS kmods available$(COLOR_RESET)\n"
 
 .PHONY: test
 test: ## Run unit tests
@@ -102,11 +87,9 @@ typecheck: ## Run strict static type checks for the Quadlet generator
 .PHONY: build
 build: ## Build the container image
 	@set -e; \
-	ZFS_VERSION=$$(./scripts/resolve-zfs-version.sh $(ZFS_STREAM)); \
-	KERNEL_VERSION=$$(./scripts/query-coreos-kernel.sh); \
-	IMAGE="ghcr.io/samhclark/fedora-zfs-kmods:zfs-$${ZFS_VERSION}_kernel-$${KERNEL_VERSION}"; \
-	$(SKOPEO) inspect "docker://$$IMAGE" >/dev/null 2>&1 || \
-		{ printf "$(COLOR_RED)ZFS kmods not available — cannot build$(COLOR_RESET)\n"; exit 1; }; \
+	set -- $$(SKOPEO_BIN="$(SKOPEO)" ./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
+	ZFS_VERSION="$$1"; \
+	KERNEL_VERSION="$$2"; \
 	printf "$(COLOR_BLUE)Building $(IMAGE_NAME):$(TAG) with ZFS=$$ZFS_VERSION kernel=$$KERNEL_VERSION$(COLOR_RESET)\n"; \
 	$(PODMAN) build --rm \
 		--build-arg ZFS_VERSION="$$ZFS_VERSION" \
