@@ -267,9 +267,21 @@ class StagedServiceTests(unittest.TestCase):
         cfg = {
             "_toml_path": Path("caddy.toml"),
             "_slug": "caddy",
-            "service": {"name": "caddy"},
-            "host": {"uid": 51310},
-            "container": {"enabled": False},
+            "service": {"name": "caddy", "description": "Test Caddy"},
+            "host": {"uid": 51310, "username": "_nas_caddy"},
+            "container": {
+                "enabled": False,
+                "image": "example.invalid/caddy:1@sha256:" + "a" * 64,
+                "network": "host",
+                "ports": [{"host": "127.0.0.1:8443", "container": 8443}],
+            },
+            "krun": {
+                "enabled": True,
+                "cpus": 1,
+                "ram-mib": 128,
+                "network": "tap",
+                "ipv4": "10.253.99.2/30",
+            },
         }
 
         paths = GENERATOR.generated_paths(cfg)
@@ -284,6 +296,36 @@ class StagedServiceTests(unittest.TestCase):
             / "etc/systemd/system/ensure-nas-caddy-account.service",
             paths,
         )
+        self.assertNotIn(
+            GENERATOR.OVERLAY
+            / "usr/lib/systemd/network/80-krun-51310.netdev",
+            paths,
+        )
+        self.assertNotIn("8443", GENERATOR.nft_nat([cfg]))
+        self.assertNotIn("krun-51310", GENERATOR.nft_filter([cfg]))
+        self.assertNotIn("caddy.krun", GENERATOR.container_unit(cfg, [cfg]))
+
+        active = {
+            "_toml_path": Path("active.toml"),
+            "_slug": "active",
+            "service": {"name": "active", "description": "Active service"},
+            "host": {"uid": 51998, "username": "_nas_active"},
+            "container": {
+                "image": "example.invalid/active:1@sha256:" + "b" * 64,
+                "network": "host",
+                "ports": [{"host": "127.0.0.1:8080", "container": 8080}],
+            },
+            "krun": {
+                "enabled": True,
+                "cpus": 1,
+                "ram-mib": 128,
+                "network": "tap",
+                "ipv4": "10.253.98.2/30",
+            },
+        }
+        active_unit = GENERATOR.container_unit(active, [active, cfg])
+        self.assertIn("active.krun", active_unit)
+        self.assertNotIn("caddy.krun", active_unit)
 
     def test_rejects_non_boolean_container_enabled_value(self):
         with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
@@ -436,6 +478,24 @@ image = "example.invalid/service:1@sha256:"""
             unit = GENERATOR.container_unit(cfg)
 
             self.assertIn("Annotation=krun.use_passt=1\n", unit)
+
+    def test_rejects_specific_address_tap_publication(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:
+            toml_path = self.write_service(
+                tmpdir,
+                "enabled = true\ncpus = 2\nram-mib = 512\n"
+                'network = "tap"\nipv4 = "10.253.99.2/30"',
+            )
+            with toml_path.open("a") as service_file:
+                service_file.write(
+                    '\n[[container.ports]]\nhost = "192.0.2.10:8443"\n'
+                    "container = 8443\n"
+                )
+
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                GENERATOR.load_service(toml_path)
 
     def test_service_without_krun_has_no_runtime_output(self):
         with tempfile.TemporaryDirectory(dir=REPO) as tmpdir:

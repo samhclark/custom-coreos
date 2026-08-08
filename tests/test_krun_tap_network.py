@@ -21,6 +21,16 @@ FILTER = (
     REPO / "overlay-root/etc/nftables/nas-krun-filter.nft"
 ).read_text()
 NAT = (REPO / "overlay-root/etc/nftables/nas-krun-nat.nft").read_text()
+POLICY_SCRIPT = (
+    REPO / "overlay-root/usr/local/bin/nas-krun-network-policy.sh"
+).read_text()
+POLICY_UNIT = (
+    REPO / "overlay-root/etc/systemd/system/nas-krun-network-policy.service"
+).read_text()
+NFTABLES_DROPIN = (
+    REPO
+    / "overlay-root/etc/systemd/system/nftables.service.d/10-nas-krun-policy.conf"
+).read_text()
 
 
 class KrunTapNetworkTests(unittest.TestCase):
@@ -55,6 +65,31 @@ class KrunTapNetworkTests(unittest.TestCase):
             self.assertIn("AddDevice=/dev/net/tun", unit)
             self.assertNotIn("PublishPort=", unit)
             self.assertNotIn("Annotation=krun.use_passt", unit)
+            self.assertIn("/run/nas-krun-network/policy-ready", unit)
+            self.assertIn("ExecStartPost=/usr/bin/bash", unit)
+            self.assertIn("/dev/tcp/", unit)
+
+    def test_policy_failure_cannot_leave_tap_guests_running(self):
+        self.assertIn(
+            "BindsTo=nftables.service systemd-networkd.service", POLICY_UNIT
+        )
+        self.assertIn(
+            "PartOf=nftables.service systemd-networkd.service", POLICY_UNIT
+        )
+        self.assertIn(
+            "ExecStop=/usr/local/bin/nas-krun-network-policy.sh quiesce",
+            POLICY_UNIT,
+        )
+        self.assertIn("rm -f \"${READY_FILE}\"", POLICY_SCRIPT)
+        self.assertIn('systemctl stop "${USER_UNITS[@]}"', POLICY_SCRIPT)
+        self.assertIn("nft list chain inet filter nas_krun_input", POLICY_SCRIPT)
+        self.assertIn("systemd-networkd-wait-online", POLICY_SCRIPT)
+        self.assertIn("ExecStop=\n", NFTABLES_DROPIN)
+        self.assertIn("quiesce-and-flush", NFTABLES_DROPIN)
+        self.assertLess(
+            POLICY_SCRIPT.index('systemctl stop "${USER_UNITS[@]}"'),
+            POLICY_SCRIPT.index("nft flush ruleset"),
+        )
 
     def test_networkd_grants_tap_to_service_and_enables_vnet_headers(self):
         config = (

@@ -31,8 +31,9 @@ Exec=-datasource.url=http://victoria-metrics.krun:8428 -remoteWrite.url=http://v
 
 [Service]
 ExecStartPre=/usr/bin/test -c /dev/net/tun
-ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51220
+ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/nas-krun-network/policy-ready && /usr/bin/test -e /sys/class/net/krun-51220; then exit 0; fi; sleep 1; done; echo "krun network policy was not ready within 90 seconds" >&2; exit 1'
 ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do /usr/bin/curl -fsS http://127.0.0.1:8428/-/healthy >/dev/null 2>&1 && exit 0; sleep 2; done; echo "VictoriaMetrics did not become ready on 127.0.0.1:8428 within 300 seconds" >&2; exit 1'
+ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.4.2/8880" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.4.2:8880 was not reachable" >&2; exit 1'
 Restart=always
 RestartSec=30
 TimeoutStartSec=330

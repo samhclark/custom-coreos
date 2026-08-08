@@ -42,9 +42,10 @@ Volume=/run/nas-secrets/caddy/cf-api-token:/run/secrets/cf-api-token:ro,Z
 
 [Service]
 ExecStartPre=/usr/bin/test -c /dev/net/tun
-ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51310
+ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/nas-krun-network/policy-ready && /usr/bin/test -e /sys/class/net/krun-51310; then exit 0; fi; sleep 1; done; echo "krun network policy was not ready within 90 seconds" >&2; exit 1'
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/caddy/cf-api-token
 ExecStartPre=/usr/bin/bash -lc 'for i in {1..150}; do if /usr/bin/test -e /run/caddy-state/ready && /usr/bin/test -w /var/lib/caddy && /usr/bin/test -w /var/lib/caddy-config; then exit 0; fi; sleep 2; done; echo "Caddy state was not ready within 300 seconds" >&2; exit 1'
+ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.9.2/80" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.9.2:80 was not reachable" >&2; exit 1'
 Restart=always
 RestartSec=30
 TimeoutStartSec=330

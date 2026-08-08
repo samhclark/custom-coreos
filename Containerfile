@@ -117,6 +117,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         ensure-nas-vmalert-account.service \
         bootc-fetch-apply-updates.timer \
         nftables.service \
+        nas-krun-network-policy.service \
         prepare-caddy-state.service \
         systemd-networkd.service \
         tailscaled.service \

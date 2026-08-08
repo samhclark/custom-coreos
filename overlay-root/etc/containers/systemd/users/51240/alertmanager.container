@@ -44,10 +44,11 @@ Exec=--web.listen-address=0.0.0.0:9093 --config.file=/etc/alertmanager/alertmana
 
 [Service]
 ExecStartPre=/usr/bin/test -c /dev/net/tun
-ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51240
+ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/nas-krun-network/policy-ready && /usr/bin/test -e /sys/class/net/krun-51240; then exit 0; fi; sleep 1; done; echo "krun network policy was not ready within 90 seconds" >&2; exit 1'
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/alertmanager/pushover-user-key
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/alertmanager/pushover-api-token
 ExecStartPre=/usr/bin/install -d -m 0750 /var/lib/alertmanager/data
+ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.6.2/9093" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.6.2:9093 was not reachable" >&2; exit 1'
 Restart=always
 RestartSec=30
 

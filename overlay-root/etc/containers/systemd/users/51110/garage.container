@@ -45,12 +45,13 @@ Volume=/run/nas-secrets/garage/garage-metrics-token:/run/secrets/garage-metrics-
 
 [Service]
 ExecStartPre=/usr/bin/test -c /dev/net/tun
-ExecStartPre=/usr/bin/test -e /sys/class/net/krun-51110
+ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/nas-krun-network/policy-ready && /usr/bin/test -e /sys/class/net/krun-51110; then exit 0; fi; sleep 1; done; echo "krun network policy was not ready within 90 seconds" >&2; exit 1'
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/garage/garage-rpc-secret
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/garage/garage-admin-token
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/garage/garage-metrics-token
 ExecStartPre=/usr/bin/bash -lc 'for i in {1..1800}; do if /usr/bin/test -e /run/garage-datasets/ready && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/garage/meta 2>/dev/null)" == "tank/garage/meta" ]] && [[ "$(/usr/bin/findmnt -rn -o SOURCE -T /var/lib/garage/data 2>/dev/null)" == "tank/garage/data" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/garage/meta 2>/dev/null)" == "51110:51110" ]] && [[ "$(/usr/bin/stat -c %%u:%%g /var/lib/garage/data 2>/dev/null)" == "51110:51110" ]] && /usr/bin/test -w /var/lib/garage/meta && /usr/bin/test -w /var/lib/garage/data; then exit 0; fi; sleep 2; done; echo "Garage storage was not ready within 3600 seconds" >&2; exit 1'
 ExecStartPre=/usr/bin/bash -lc 'if /usr/bin/ss -H -ltn | /usr/bin/grep -Eq ":390(0|2|3)[[:space:]]"; then echo "Refusing to start while a process already listens on a Garage host port" >&2; exit 1; fi'
+ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.1.2/3900" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.1.2:3900 was not reachable" >&2; exit 1'
 Restart=always
 RestartSec=30
 TimeoutStartSec=4200
