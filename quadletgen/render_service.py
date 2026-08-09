@@ -154,7 +154,7 @@ def container_unit(service: Service, fleet: Fleet) -> str:
             f"http {readiness.url} {readiness.timeout_sec} "
             f"{readiness.interval_sec}"
         )
-    if service.startup.reject_published_tcp_ports:
+    if service.startup.require_published_tcp_ports_free:
         host_ports = " ".join(
             str(port.host_port)
             for port in container.ports

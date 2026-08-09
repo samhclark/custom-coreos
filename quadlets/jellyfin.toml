@@ -73,7 +73,7 @@ container = 8096
 timeout-start-sec = 3900
 
 [startup]
-reject-published-tcp-ports = true
+require-published-tcp-ports-free = true
 
 [startup.readiness]
 marker = "/run/jellyfin-storage/ready"

@@ -534,7 +534,7 @@ name = "token"
             service_toml(
                 extra=(
                     "[startup]\n"
-                    "reject-published-tcp-ports = true"
+                    "require-published-tcp-ports-free = true"
                 )
             ),
             "requires at least one published TCP port",

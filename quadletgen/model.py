@@ -209,7 +209,7 @@ ReadinessSpec: TypeAlias = MarkerReadiness | HttpReadiness
 @dataclass(frozen=True, slots=True)
 class StartupSpec:
     readiness: ReadinessSpec | None = None
-    reject_published_tcp_ports: bool = False
+    require_published_tcp_ports_free: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -634,13 +634,13 @@ def _validate_data_and_assets(service: Service) -> None:
 def _validate_startup(service: Service) -> None:
     startup = service.startup
     path = f"{service.source.name}: [startup]"
-    if type(startup.reject_published_tcp_ports) is not bool:
-        _fail(f"{path}.reject-published-tcp-ports", "must be a boolean")
-    if startup.reject_published_tcp_ports and not any(
+    if type(startup.require_published_tcp_ports_free) is not bool:
+        _fail(f"{path}.require-published-tcp-ports-free", "must be a boolean")
+    if startup.require_published_tcp_ports_free and not any(
         port.protocol is Protocol.TCP for port in service.container.ports
     ):
         _fail(
-            f"{path}.reject-published-tcp-ports",
+            f"{path}.require-published-tcp-ports-free",
             "requires at least one published TCP port",
         )
     readiness = startup.readiness
