@@ -1,5 +1,8 @@
 # Jellyfin First-Boot Validation
 
+> **Archived evidence — not authoritative.** This first-deployment procedure
+> is complete. Do not execute it against the current NAS.
+
 Run these checks after the NAS first boots the image containing Jellyfin.
 
 The first storage-preparation run may take a while because it must relabel the

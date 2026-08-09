@@ -1,5 +1,8 @@
 # Routed libkrun TAP network
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed migration against the current NAS.
+
 > Historical implementation and deployment record. The routed TAP design and
 > narrow SELinux module are deployed; use the generated files and `AGENTS.md`
 > for current behavior rather than treating the evidence below as a runbook.

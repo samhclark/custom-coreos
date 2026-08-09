@@ -1,5 +1,8 @@
 # Rootless Caddy Rollout Checklist
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed rollout against the current NAS.
+
 > Historical record: this checklist describes the completed 2026-07-25
 > rootful-to-rootless cutover. The active image now uses
 > `prepare-caddy-state.service` and has no dependency on these migration

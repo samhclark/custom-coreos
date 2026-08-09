@@ -1,5 +1,8 @@
 # Caddy Rootless Migration Preflight (Completed)
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed preflight against the current NAS.
+
 > **Production status (2026-07-21):** The preflight completed successfully on
 > the NAS. Rootful Caddy remained healthy throughout, and the successful report
 > is recorded under `/var/lib/nas-migrations/caddy-rootless-preflight-v1/`.

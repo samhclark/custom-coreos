@@ -1,5 +1,8 @@
 # Rootless Alertmanager Rollout Checklist
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed rollout against the current NAS.
+
 > Historical record: this checklist describes the completed
 > rootful-to-rootless deployment and its one-time cleanup checks.
 

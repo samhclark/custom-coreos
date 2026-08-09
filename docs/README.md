@@ -23,5 +23,5 @@ here rather than reading rollout plans or evidence logs.
   — the one active investigation
 
 Completed migration plans and rollout evidence are retained only for
-provenance. They are not current instructions and will live under
+provenance. They are not current instructions and live under
 `docs/history/`.

@@ -258,18 +258,9 @@ Images include labels for future deduplication:
 - `AGENTS.md` - This file
 - `README.md` - User documentation
 - `docs/rootless-quadlet-playbook.md` - Repo-specific pattern for migrating and creating rootless Quadlets
-- `docs/rootless-grafana-checklist.md` - Post-boot validation and troubleshooting checklist for the first rootless Quadlet rollout
-- `docs/rootless-alertmanager-checklist.md` - Post-boot validation for the Alertmanager rootless and runtime-secret migration
-- `docs/rootless-victoria-metrics-checklist.md` - Post-boot validation for the VictoriaMetrics rootless, ZFS ownership, and runtime-secret migration
-- `docs/rootless-garage-preflight.md` - Historical first-stage evidence collection before Garage's rootless ownership migration
-- `docs/rootless-garage-checklist.md` - Post-boot validation and rollback steps for the Garage rootless, ZFS ownership, and runtime-secret migration
-- `docs/rootless-caddy-preflight.md` - Completed first-stage validation and phase-two handoff for Caddy's rootless identity, runtime secret, low-port policy, persistent state, and guarded cutover
-- `docs/plan-libkrun-quadlets.md` - Historical phased libkrun migration and evidence log
-- `docs/jellyfin-checklist.md` - First-deployment validation for Jellyfin storage, rootless libkrun runtime, health, and Caddy routing
 - `docs/jellyfin-monitoring-checklist.md` - API-key bootstrap, privacy contract, rollout checks, and interpretation guidance for the Jellyfin playback dashboard
 - `docs/plan-jellyfin-libkrun-hardware-transcoding.md` - Current evidence and decision log for preserving a VM boundary while pursuing Intel hardware transcoding
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
-- `docs/garage/configuration.md` - Vendored upstream Garage configuration reference
 
 ## Development Patterns
 
