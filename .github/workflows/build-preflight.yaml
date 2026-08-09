@@ -13,7 +13,7 @@ on:
         value: ${{ jobs.query-versions.outputs.zfs-version }}
 
 jobs:
-  verify-generated:
+  verify-repository:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,11 +22,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+
       - name: Install development dependencies
         run: python3 -m pip install --requirement requirements-dev.txt
 
-      - name: Validate repository and generated artifacts
-        run: make verify-generated
+      - name: Check repository
+        run: make check
+
+      - name: Run tests
+        run: make test
 
   verify-sops-image:
     runs-on: ubuntu-latest
