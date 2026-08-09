@@ -3,6 +3,8 @@ set -euo pipefail
 
 IMAGE="${1:-quay.io/fedora/fedora-coreos:stable}"
 CONTAINER_CLI="${CONTAINER_CLI:-}"
+skopeo_bin="${SKOPEO_BIN:-skopeo}"
+jq_bin="${JQ_BIN:-jq}"
 
 if [[ -z "${CONTAINER_CLI}" ]]; then
   if command -v podman >/dev/null 2>&1; then
@@ -14,15 +16,15 @@ if [[ -z "${CONTAINER_CLI}" ]]; then
   fi
 fi
 
-INSPECT_OUTPUT=$(skopeo inspect "docker://${IMAGE}")
-DIGEST=$(jq -r '.Digest' <<<"${INSPECT_OUTPUT}")
+INSPECT_OUTPUT=$("${skopeo_bin}" inspect "docker://${IMAGE}")
+DIGEST=$("${jq_bin}" -r '.Digest' <<<"${INSPECT_OUTPUT}")
 if [[ -n "${DIGEST}" && "${DIGEST}" != "null" ]]; then
   IMAGE_WITH_DIGEST="${IMAGE}@${DIGEST}"
 else
   IMAGE_WITH_DIGEST="${IMAGE}"
 fi
 
-KERNEL_VERSION=$(jq -r '.Labels["ostree.linux"]' <<<"${INSPECT_OUTPUT}")
+KERNEL_VERSION=$("${jq_bin}" -r '.Labels["ostree.linux"]' <<<"${INSPECT_OUTPUT}")
 
 if [[ -z "${KERNEL_VERSION}" || "${KERNEL_VERSION}" == "null" ]]; then
   if [[ -z "${CONTAINER_CLI}" ]]; then
