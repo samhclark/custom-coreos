@@ -158,9 +158,9 @@ marker = "/run/example-storage/ready"
 timeout-sec = 300
 interval-sec = 2
 
-[[startup.readiness.mounts]]
+[[startup.readiness.paths]]
 path = "/var/lib/example"
-source = "tank/example"
+mount-source = "tank/example"
 ```
 
 `[startup].require-published-tcp-ports-free = true` is an intentionally
