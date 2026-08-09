@@ -14,12 +14,12 @@ here rather than reading rollout plans or evidence logs.
 
 ## Development and operations
 
-- [`rootless-quadlet-playbook.md`](rootless-quadlet-playbook.md) — add or
+- [`development/rootless-quadlets.md`](development/rootless-quadlets.md) — add or
   change a generated rootless service
 - [`roadmap.md`](roadmap.md) — current work and settled invariants
-- [`jellyfin-monitoring-checklist.md`](jellyfin-monitoring-checklist.md) —
+- [`operations/jellyfin-monitoring.md`](operations/jellyfin-monitoring.md) —
   playback monitoring setup and interpretation
-- [`plan-jellyfin-libkrun-hardware-transcoding.md`](plan-jellyfin-libkrun-hardware-transcoding.md)
+- [`investigations/jellyfin-hardware-transcoding.md`](investigations/jellyfin-hardware-transcoding.md)
   — the one active investigation
 
 Completed migration plans and rollout evidence are retained only for

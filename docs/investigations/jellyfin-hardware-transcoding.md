@@ -1,4 +1,4 @@
-# Plan: Jellyfin Hardware Transcoding Under libkrun
+# Investigation: Jellyfin Hardware Transcoding Under libkrun
 
 This is the working handoff for deciding whether Jellyfin hardware
 transcoding can remain inside its libkrun microVM. The work is intentionally
@@ -548,7 +548,7 @@ must not turn this successful probe into an implicit production migration.
 - [Fedora 44 libkrun build configuration](https://src.fedoraproject.org/rpms/libkrun/raw/f44/f/libkrun.spec)
 - [Fedora 44 virglrenderer build configuration](https://src.fedoraproject.org/rpms/virglrenderer/raw/f44/f/virglrenderer.spec)
 - [smolvm GPU requirements and Venus example](https://github.com/smol-machines/smolvm#known-limitations)
-- [Vendored Quadlet `AddDevice=` reference](../vendored-docs/podman-systemd.unit.5.md#adddevice)
+- [Vendored Quadlet `AddDevice=` reference](../../vendored-docs/podman-systemd.unit.5.md#adddevice)
 
 ## Session Log
 

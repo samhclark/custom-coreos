@@ -43,7 +43,7 @@ architecture or operating instructions.
 1. **Jellyfin hardware transcoding.** Preserve the libkrun VM boundary while
    investigating safe Intel media-device exposure. Software processing is the
    production configuration until that evidence is complete. See
-   `docs/plan-jellyfin-libkrun-hardware-transcoding.md`.
+   `docs/investigations/jellyfin-hardware-transcoding.md`.
 2. **Service expansion.** Immich, Audiobookshelf, and the selected media
    automation services remain candidates. Add them only when storage,
    exposure, secrets, backup, and monitoring contracts are explicit.
