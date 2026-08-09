@@ -274,6 +274,23 @@ name = "token"
             ),
             "declared TCP container port",
         )
+        self.assert_invalid(
+            service_toml(
+                container=(
+                    f"{container}\n\n"
+                    "[[container.ports]]\n"
+                    'host = "127.0.0.1:9090"\n'
+                    "container = 9090"
+                ),
+                krun=(
+                    f"{base_krun}\nprobe-port = 9090\n\n"
+                    "[[krun.ingress]]\n"
+                    'from = "source"\n'
+                    "ports = [8080]"
+                ),
+            ),
+            "TAP ingress ports must also be declared TCP ports.*8080",
+        )
 
     def test_health_cmd_supports_only_explicit_disable(self):
         service = self.load(service_toml(container='health-cmd = "none"'))
