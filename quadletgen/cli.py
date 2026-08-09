@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import argparse
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 from .compiler import compile_fleet
 from .model import ConfigError, Fleet
 from .parser import load_service
 from .secrets import verify_sops
-from .sync import sync_artifacts
+from .sync import check_artifacts, sync_artifacts
 
 
-def run(repo: Path) -> int:
+def run(repo: Path, *, check: bool = False) -> int:
     quadlet_dir = repo / "quadlets"
     overlay = repo / "overlay-root"
     toml_paths = sorted(quadlet_dir.glob("*.toml"))
@@ -26,13 +28,26 @@ def run(repo: Path) -> int:
     for service in fleet.services:
         if not service.container.enabled:
             print(f"skip  quadlets/{service.source.name} container (disabled)")
-    sync_artifacts(repo, overlay, compile_fleet(fleet))
+    artifacts = compile_fleet(fleet)
+    if check:
+        check_artifacts(repo, overlay, artifacts)
+    else:
+        sync_artifacts(repo, overlay, artifacts)
     return 0
 
 
-def main(repo: Path) -> int:
+def main(repo: Path, argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Compile the rootless service fleet into the image overlay."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify generated output without modifying it",
+    )
+    arguments = parser.parse_args(argv)
     try:
-        return run(repo)
+        return run(repo, check=arguments.check)
     except ConfigError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
