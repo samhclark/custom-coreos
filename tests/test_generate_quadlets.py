@@ -825,6 +825,65 @@ class FleetValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "ranges overlap"):
                 Fleet.build([first, overlapping])
 
+    def test_rejects_host_port_collisions_for_non_tap_publishers(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            directory = Path(directory_name)
+            first = self.write(
+                directory,
+                "first.toml",
+                service_toml(
+                    name="first",
+                    uid=51970,
+                    subid_start=600000000,
+                    container=(
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:8080"\n'
+                        "container = 8080"
+                    ),
+                ),
+            )
+            second = self.write(
+                directory,
+                "second.toml",
+                service_toml(
+                    name="second",
+                    uid=51980,
+                    subid_start=700000000,
+                    container=(
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:8080"\n'
+                        "container = 8080"
+                    ),
+                ),
+            )
+            tap = self.write(
+                directory,
+                "tap.toml",
+                service_toml(
+                    name="tap",
+                    uid=51990,
+                    subid_start=800000000,
+                    container=(
+                        'network = "host"\n\n'
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:9090"\n'
+                        "container = 9090"
+                    ),
+                    krun=(
+                        "enabled = true\ncpus = 1\nram-mib = 128\n"
+                        'network = "tap"\n'
+                        'ipv4 = "10.253.99.2/30"\n'
+                        "probe-port = 9090"
+                    ),
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                ConfigError,
+                "host tcp port 8080 is also published by first.toml",
+            ):
+                Fleet.build([first, second, tap])
+
     def test_disabled_service_keeps_identity_but_has_no_runtime_artifacts(self):
         with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
             directory = Path(directory_name)
@@ -864,14 +923,14 @@ class FleetValidationTests(unittest.TestCase):
                     container=(
                         'network = "host"\n\n'
                         "[[container.ports]]\n"
-                        'host = "127.0.0.1:8081"\n'
-                        "container = 8081"
+                        'host = "127.0.0.1:8080"\n'
+                        "container = 8080"
                     ),
                     krun=(
                         "enabled = true\ncpus = 1\nram-mib = 128\n"
                         'network = "tap"\n'
                         'ipv4 = "10.253.98.2/30"\n'
-                        "probe-port = 8081"
+                        "probe-port = 8080"
                     ),
                 ),
             )

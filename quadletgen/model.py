@@ -259,7 +259,7 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
     seen: dict[tuple[str, object], str] = {}
     ranges: list[tuple[int, int, str]] = []
     tap_networks: dict[ipaddress.IPv4Network, str] = {}
-    tap_publications: dict[tuple[int, Protocol], str] = {}
+    host_publications: dict[tuple[int, Protocol], str] = {}
     tap_names = {service.info.name for service in services if service.active_tap}
 
     for service in services:
@@ -279,6 +279,16 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
         ranges.append(
             (service.host.subid_start, service.host.subid_start + SUBID_COUNT, name)
         )
+        if service.container.enabled:
+            for port in service.container.ports:
+                publication_key = (port.host_port, port.protocol)
+                if publication_key in host_publications:
+                    _fail(
+                        name,
+                        f"host {port.protocol.value} port {port.host_port} is also "
+                        f"published by {host_publications[publication_key]}",
+                    )
+                host_publications[publication_key] = name
         if not service.active_tap:
             continue
         tap = service.tap_spec
@@ -297,15 +307,6 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
                     "TAP ingress ports must also be declared in "
                     "[[container.ports]]: " + ", ".join(map(str, unknown_ports)),
                 )
-        for port in service.container.ports:
-            publication_key = (port.host_port, port.protocol)
-            if publication_key in tap_publications:
-                _fail(
-                    name,
-                    f"host {port.protocol.value} port {port.host_port} is also "
-                    f"published by {tap_publications[publication_key]}",
-                )
-            tap_publications[publication_key] = name
         if not any(
             port.protocol is Protocol.TCP
             and port.container_port == tap.probe_port
