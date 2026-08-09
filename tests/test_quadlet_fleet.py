@@ -25,23 +25,23 @@ class FleetValidationTests(unittest.TestCase):
         self.assertIsInstance(readiness, MarkerReadiness)
         assert isinstance(readiness, MarkerReadiness)
         required_path = readiness.paths[0]
-        cases = {
-            "service name": replace(
+        invalid_changes = {
+            "service name": lambda: replace(
                 service,
                 info=replace(service.info, name="../../../../outside"),
             ),
-            "container image": replace(
+            "container image": lambda: replace(
                 service,
                 container=replace(
                     service.container,
                     image="example.invalid/service:latest",
                 ),
             ),
-            "host UID": replace(
+            "host UID": lambda: replace(
                 service,
                 host=replace(service.host, uid=1),
             ),
-            "readiness path": replace(
+            "readiness path": lambda: replace(
                 service,
                 startup=replace(
                     service.startup,
@@ -57,10 +57,10 @@ class FleetValidationTests(unittest.TestCase):
                 ),
             ),
         }
-        for label, invalid in cases.items():
+        for label, make_invalid in invalid_changes.items():
             with self.subTest(label=label):
                 with self.assertRaises(ConfigError):
-                    Fleet.build([invalid])
+                    make_invalid()
 
     def test_rejects_duplicate_identity_and_overlapping_subids(self):
         with tempfile.TemporaryDirectory(dir=REPO) as directory_name:

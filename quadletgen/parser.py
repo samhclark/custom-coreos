@@ -34,7 +34,6 @@ from .model import (
     StartupSpec,
     UnitSpec,
     VolumeMount,
-    validate_service,
 )
 
 
@@ -614,7 +613,7 @@ def load_service(toml_path: Path) -> Service:
     host = _parse_host(top["host"], name)
     container = _parse_container(top["container"], name)
     krun = _parse_krun(top.get("krun"), name, container)
-    service = Service(
+    return Service(
         source=toml_path,
         info=info,
         host=host,
@@ -625,5 +624,3 @@ def load_service(toml_path: Path) -> Service:
         startup=_parse_startup(top.get("startup"), name),
         unit=_parse_unit(top.get("unit"), name),
     )
-    validate_service(service)
-    return service
