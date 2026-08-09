@@ -16,9 +16,12 @@ ZFS_STREAM ?= zfs-2.4
 PODMAN       ?= podman
 GH           ?= gh
 SKOPEO       ?= skopeo
-BUTANE_IMAGE ?= quay.io/coreos/butane:release
+JQ           ?= jq
+BUTANE_IMAGE ?= quay.io/coreos/butane:release@sha256:13fec166cb47a8e053dcc23256c0ca41aaa1c61cab39793832aaf8894ca78c8f
+SHELLCHECK_IMAGE ?= docker.io/koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
 PYTHON       ?= python3
-TY           ?= ty
+
+SHELL_SOURCES := $(shell git ls-files '*.sh' 'overlay-root/usr/local/bin/garage' ':!:docs/history/**')
 
 ## Colors
 COLOR_BLUE  = \033[34m
@@ -35,7 +38,8 @@ COLOR_RESET = \033[0m
 ##@ Default
 
 .PHONY: all
-all: deps check test build ## Run deps, check, test, and build (default)
+all: deps check test ## Run deps, check, test, and build (default)
+	@$(MAKE) --no-print-directory build
 
 ##@ Utility
 
@@ -55,7 +59,9 @@ kernel-version: ## Get the current kernel version from Fedora CoreOS stable
 
 .PHONY: versions
 versions: ## Show all relevant versions and verify ZFS kmod availability
-	@set -- $$(SKOPEO_BIN="$(SKOPEO)" ./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
+	@set -- $$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
+		CONTAINER_CLI="$(PODMAN)" \
+		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
 	ZFS_VERSION="$$1"; \
 	KERNEL_VERSION="$$2"; \
 	IMAGE="$$3"; \
@@ -67,38 +73,49 @@ versions: ## Show all relevant versions and verify ZFS kmod availability
 ##@ Development
 
 .PHONY: check
-check: check-zfs-available ## Run all pre-build checks
+check: typecheck check-generated check-shell check-ignition ## Run static, non-mutating repository checks
+
+.PHONY: check-generated
+check-generated: ## Verify generated artifacts are current without changing them
+	@$(PYTHON) generate-quadlets.py --check
+
+.PHONY: check-shell
+check-shell: ## Check all maintained shell programs
+	@$(PODMAN) run --rm \
+		--security-opt label=disable \
+		--volume "$(PWD)":/mnt:ro --workdir /mnt \
+		$(SHELLCHECK_IMAGE) --severity=warning $(SHELL_SOURCES)
+
+.PHONY: check-ignition
+check-ignition: ## Validate Butane strictly without writing ignition.json
+	@$(PODMAN) run --rm --interactive \
+		--security-opt label=disable \
+		--volume "$(PWD)":/pwd --workdir /pwd \
+		$(BUTANE_IMAGE) --strict < butane.yaml >/dev/null
 
 .PHONY: check-zfs-available
 check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
-	@SKOPEO_BIN="$(SKOPEO)" \
+	@GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
+		CONTAINER_CLI="$(PODMAN)" \
 		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)" >/dev/null
 	@printf "$(COLOR_GREEN)ZFS kmods available$(COLOR_RESET)\n"
 
 .PHONY: test
 test: ## Run unit tests
-	@python3 -m unittest discover -s tests -v
+	@$(PYTHON) -m unittest discover -s tests -v
 
 .PHONY: typecheck
 typecheck: ## Run strict static Python type checks
-	@$(TY) check
-
-.PHONY: verify-generated
-verify-generated: typecheck test ## Validate types, tests, and generated artifact parity
-	@$(PYTHON) generate-quadlets.py
-	@if [ -n "$$(git status --porcelain=v1 --untracked-files=all -- overlay-root/)" ]; then \
-		git diff -- overlay-root/; \
-		git status --short --untracked-files=all -- overlay-root/; \
-		printf "$(COLOR_RED)Generated files are out of date. Run python3 generate-quadlets.py and commit the result.$(COLOR_RESET)\n"; \
-		exit 1; \
-	fi
+	@$(PYTHON) -m ty check
 
 ##@ Building
 
 .PHONY: build
 build: ## Build the container image
 	@set -e; \
-	set -- $$(SKOPEO_BIN="$(SKOPEO)" ./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
+	set -- $$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
+		CONTAINER_CLI="$(PODMAN)" \
+		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
 	ZFS_VERSION="$$1"; \
 	KERNEL_VERSION="$$2"; \
 	printf "$(COLOR_BLUE)Building $(IMAGE_NAME):$(TAG) with ZFS=$$ZFS_VERSION kernel=$$KERNEL_VERSION$(COLOR_RESET)\n"; \
@@ -115,7 +132,7 @@ generate-ignition: ## Generate ignition.json from butane.yaml
 	@$(PODMAN) run --rm --interactive \
 		--security-opt label=disable \
 		--volume "$(PWD)":/pwd --workdir /pwd \
-		$(BUTANE_IMAGE) < butane.yaml > ignition.json
+		$(BUTANE_IMAGE) --strict < butane.yaml > ignition.json
 	@printf "$(COLOR_GREEN)Generated ignition.json$(COLOR_RESET)\n"
 
 .PHONY: generate-quadlets
@@ -172,7 +189,7 @@ cleanup-dry-run: ## Plan cleanup locally; set RETENTION_DAYS=N to configure (def
 ##@ Dependencies
 
 .PHONY: deps
-deps: deps-check-podman deps-check-gh deps-check-skopeo ## Check that required tools are available
+deps: deps-check-podman deps-check-gh deps-check-skopeo deps-check-jq deps-check-python deps-check-ty ## Check that required tools are available
 	@printf "$(COLOR_GREEN)All deps present!$(COLOR_RESET)\n"
 
 .PHONY: deps-check-podman
@@ -192,3 +209,23 @@ deps-check-skopeo: ## Check that skopeo is available
 	@command -v $(SKOPEO) > /dev/null || \
 		(printf "$(COLOR_RED)skopeo not found. Install via your system package manager.$(COLOR_RESET)\n" && false)
 	@printf "$(COLOR_BLUE)skopeo: $$($(SKOPEO) --version)$(COLOR_RESET)\n"
+
+.PHONY: deps-check-jq
+deps-check-jq: ## Check that jq is available
+	@command -v $(JQ) > /dev/null || \
+		(printf "$(COLOR_RED)$(JQ) not found. Install via your system package manager.$(COLOR_RESET)\n" && false)
+	@printf "$(COLOR_BLUE)jq: $$($(JQ) --version)$(COLOR_RESET)\n"
+
+.PHONY: deps-check-python
+deps-check-python: ## Check that Python is available
+	@command -v $(PYTHON) > /dev/null || \
+		(printf "$(COLOR_RED)$(PYTHON) not found. Install Python 3.11 or newer.$(COLOR_RESET)\n" && false)
+	@$(PYTHON) -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' || \
+		(printf "$(COLOR_RED)Python 3.11 or newer is required.$(COLOR_RESET)\n" && false)
+	@printf "$(COLOR_BLUE)python: $$($(PYTHON) --version)$(COLOR_RESET)\n"
+
+.PHONY: deps-check-ty
+deps-check-ty: deps-check-python ## Check that pinned Python development tools are installed
+	@$(PYTHON) -c 'import ty' 2>/dev/null || \
+		(printf "$(COLOR_RED)ty not found. Run $(PYTHON) -m pip install --requirement requirements-dev.txt.$(COLOR_RESET)\n" && false)
+	@printf "$(COLOR_BLUE)ty: $$($(PYTHON) -m ty --version)$(COLOR_RESET)\n"
