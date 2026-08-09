@@ -14,9 +14,11 @@ class BuildWorkflowTests(unittest.TestCase):
     def test_image_workflows_use_one_reusable_preflight(self):
         preflight = (WORKFLOWS / "build-preflight.yaml").read_text()
         self.assertIn("workflow_call:", preflight)
-        self.assertIn("verify-generated:", preflight)
+        self.assertIn("verify-repository:", preflight)
         self.assertIn("verify-sops-image:", preflight)
         self.assertIn("query-versions:", preflight)
+        self.assertEqual(preflight.count("run: make check"), 1)
+        self.assertEqual(preflight.count("run: make test"), 1)
 
         for filename in ("build.yaml", "build-check.yaml"):
             with self.subTest(filename=filename):
@@ -30,7 +32,8 @@ class BuildWorkflowTests(unittest.TestCase):
                 self.assertIn("needs: preflight", workflow)
                 self.assertIn("needs.preflight.outputs.zfs-version", workflow)
                 self.assertIn("needs.preflight.outputs.kernel-version", workflow)
-                self.assertNotIn("make verify-generated", workflow)
+                self.assertNotIn("make check", workflow)
+                self.assertNotIn("make test", workflow)
                 self.assertNotIn("Verify SOPS image signature", workflow)
                 self.assertNotIn("Resolve and verify build inputs", workflow)
 
