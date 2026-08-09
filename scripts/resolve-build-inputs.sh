@@ -25,12 +25,21 @@ zfs_stream="${1:-zfs-2.4}"
 
 zfs_version="$("${resolve_zfs_bin}" "${zfs_stream}")"
 kernel_version="$("${query_kernel_bin}")"
-for value in "${zfs_version}" "${kernel_version}"; do
-    if [[ ! "${value}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
-        echo "Resolved build input contains unsupported characters: ${value}" >&2
+
+validate_build_input() {
+    local name="$1"
+    local value="$2"
+    if [[ -z "${value}" || "${value}" == "null" ]]; then
+        echo "Failed to resolve ${name}" >&2
         exit 1
     fi
-done
+    if [[ ! "${value}" =~ ^[A-Za-z0-9._+-]+$ ]]; then
+        echo "Resolved ${name} contains unsupported characters: ${value}" >&2
+        exit 1
+    fi
+}
+validate_build_input "ZFS version" "${zfs_version}"
+validate_build_input "kernel version" "${kernel_version}"
 
 kmod_image="ghcr.io/samhclark/fedora-zfs-kmods:zfs-${zfs_version}_kernel-${kernel_version}"
 echo "Checking availability: ${kmod_image}" >&2

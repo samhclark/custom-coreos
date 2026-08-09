@@ -106,6 +106,34 @@ class BuildInputTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn("unsupported characters", result.stderr)
 
+    def test_empty_or_null_versions_fail_before_registry_access(self):
+        for value in ("", "null"):
+            with self.subTest(value=value):
+                bad_zfs = self.executable("bad-zfs", f"printf '%s\\n' '{value}'")
+                marker = self.directory / f"registry-called-{value or 'empty'}"
+                skopeo = self.executable(
+                    "unused-skopeo",
+                    'printf called > "${FAKE_REGISTRY_MARKER}"',
+                )
+                environment = self.environment | {
+                    "RESOLVE_ZFS_BIN": str(bad_zfs),
+                    "SKOPEO_BIN": str(skopeo),
+                    "FAKE_REGISTRY_MARKER": str(marker),
+                }
+
+                result = subprocess.run(
+                    [SCRIPT],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("Failed to resolve ZFS version", result.stderr)
+                self.assertFalse(marker.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
