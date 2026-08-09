@@ -27,6 +27,7 @@ cpus = 2
 ram-mib = 512
 network = "tap"
 ipv4 = "10.253.9.2/30"
+probe-port = 80
 
 [[krun.ingress]]
 from = "victoria-metrics"

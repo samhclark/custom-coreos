@@ -11,7 +11,6 @@ USER_HOME="/var/home/_nas_garage"
 USER_SHELL="/sbin/nologin"
 USER_SUBID_START="511100000"
 USER_SUBID_COUNT="65536"
-ASSETS_FCONTEXT="/usr/share/custom-coreos/garage(/.*)?"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -37,17 +36,6 @@ ensure_subid_entry() {
     if [[ "${current}" != "${expected}" ]]; then
         log "Leaving existing ${file} entry for ${USER_NAME}: ${current}"
     fi
-}
-
-ensure_fcontext_rule() {
-    local target="$1"
-
-    if semanage fcontext -a -t container_file_t -r s0 "${target}" 2>/dev/null; then
-        log "Added SELinux fcontext for ${target}"
-        return
-    fi
-
-    semanage fcontext -m -t container_file_t -r s0 "${target}"
 }
 
 if ! getent passwd "${USER_NAME}" >/dev/null; then
@@ -81,7 +69,6 @@ fi
 
 ensure_subid_entry /etc/subuid
 ensure_subid_entry /etc/subgid
-ensure_fcontext_rule "${ASSETS_FCONTEXT}"
 
 if systemctl is-failed --quiet "user@${USER_UID}.service"; then
     log "Retrying user@${USER_UID}.service after account setup"

@@ -7,10 +7,11 @@ import io
 import stat
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from quadletgen.compiler import Artifact, compile_fleet
-from quadletgen.model import ConfigError, Fleet, KrunNetwork, Protocol
+from quadletgen.model import ConfigError, DataSpec, Fleet, KrunNetwork, Protocol
 from quadletgen.parser import load_service
 from quadletgen.sync import sync_artifacts
 
@@ -187,6 +188,55 @@ class FleetManifestTests(unittest.TestCase):
         self.assertIn("fleet/active-taps.tsv", diagnostics)
         self.assertNotIn("krun-51110 krun-51120", diagnostics)
 
+    def test_selinux_labeling_has_one_owner_per_storage_class(self):
+        containerfile = (REPO / "Containerfile").read_text()
+        self.assertIn('awk "NF && !/^#/"', containerfile)
+        self.assertIn('restorecon -F -R -- "${asset}"', containerfile)
+        self.assertNotIn('restorecon -F -R "${image_assets[@]}"', containerfile)
+        self.assertNotIn('/var/lib/grafana(/.*)?', containerfile)
+
+        for service in self.fleet.services:
+            script = self.artifacts[
+                Path(
+                    f"usr/local/bin/ensure-nas-{service.host.slug}-account.sh"
+                )
+            ]
+            if service.assets is not None:
+                self.assertNotIn(service.assets.path, script)
+            if service.data is None:
+                self.assertNotIn("semanage fcontext", script)
+                self.assertNotIn("restorecon", script)
+            else:
+                self.assertIn(service.data.path, script)
+                self.assertIn("semanage fcontext", script)
+                self.assertIn("restorecon", script)
+
+    def test_runtime_data_path_is_escaped_for_selinux_regex(self):
+        changed = self.fleet.services[0]
+        changed = replace(
+            changed,
+            data=DataSpec("/var/lib/service.v2"),
+        )
+        fleet = Fleet.build(
+            [
+                changed if service.info.name == changed.info.name else service
+                for service in self.fleet.services
+            ]
+        )
+        artifacts = {
+            artifact.path: artifact.content
+            for artifact in compile_fleet(fleet)
+        }
+        script = artifacts[
+            Path(
+                f"usr/local/bin/ensure-nas-{changed.host.slug}-account.sh"
+            )
+        ]
+        self.assertIn(
+            'DATA_FCONTEXT="/var/lib/service\\.v2(/.*)?"',
+            script,
+        )
+
 
 class StartupPolicyTests(unittest.TestCase):
     def setUp(self):
@@ -251,15 +301,20 @@ class StartupPolicyTests(unittest.TestCase):
 
 
 class StrictParserTests(unittest.TestCase):
-    def load(self, source: str):
+    def load(self, source: str, filename: str = "service.toml"):
         with tempfile.TemporaryDirectory(dir=REPO) as directory:
-            path = Path(directory) / "service.toml"
+            path = Path(directory) / filename
             path.write_text(source)
             return load_service(path)
 
     def assert_invalid(self, source: str, message: str) -> None:
         with self.assertRaisesRegex(ConfigError, message):
             self.load(source)
+
+    def assert_invalid_field(self, source: str, field: str) -> None:
+        with self.assertRaises(ConfigError) as raised:
+            self.load(source)
+        self.assertIn(field, str(raised.exception))
 
     def test_rejects_unknown_keys_at_every_closed_boundary(self):
         self.assert_invalid(
@@ -289,6 +344,45 @@ class StrictParserTests(unittest.TestCase):
             "immutable name:tag@sha256 digest",
         )
 
+    def test_service_identity_matches_dns_and_source_filename_contracts(self):
+        for invalid_name in ("service-", "s" * 64):
+            with self.subTest(name=invalid_name):
+                self.assert_invalid(
+                    service_toml().replace(
+                        'name = "service"',
+                        f'name = "{invalid_name}"',
+                    ),
+                    "must match",
+                )
+
+        with self.assertRaisesRegex(ConfigError, "filename must be"):
+            self.load(service_toml(), filename="different.toml")
+
+    def test_host_identity_stays_inside_repository_allocators(self):
+        too_long_username = "_nas_" + "s" * 27
+        self.assert_invalid_field(
+            service_toml().replace(
+                'username = "_nas_service"',
+                f'username = "{too_long_username}"',
+            ),
+            "[host].username",
+        )
+        self.assert_invalid(
+            service_toml(uid=50999),
+            "must be at least 51000",
+        )
+        self.assert_invalid(
+            service_toml(subid_start=2**32),
+            "must be at most",
+        )
+        self.assert_invalid_field(
+            service_toml().replace(
+                'display-name = "Test service"',
+                'display-name = "Test:service"',
+            ),
+            "[host].display-name",
+        )
+
     def test_parses_typed_ports_dns_sysctls_and_secrets_in_source_order(self):
         service = self.load(
             service_toml(
@@ -301,7 +395,7 @@ host = "127.0.0.1:8080"
 container = 80
 
 [[container.ports]]
-host = "[::1]:5353"
+host = "[0:0:0:0:0:0:0:1]:5353"
 container = 5353
 protocol = "udp"
 
@@ -319,6 +413,7 @@ name = "token"
             [str(server) for server in service.container.dns],
             ["100.100.100.100", "2001:db8::53"],
         )
+        self.assertEqual(service.container.ports[1].host, "[::1]:5353")
         self.assertEqual(service.container.sysctls, ("net.ipv4.ip_forward=1",))
         self.assertEqual(service.container.secrets[0].name, "token")
 
@@ -341,6 +436,45 @@ name = "token"
                     ),
                     "container",
                 )
+
+    def test_enum_type_errors_remain_configuration_errors(self):
+        self.assert_invalid_field(
+            service_toml(
+                container=(
+                    "[[container.ports]]\n"
+                    'host = "127.0.0.1:8080"\n'
+                    "container = 80\n"
+                    'protocol = ["tcp"]'
+                )
+            ),
+            "[container].ports[1].protocol",
+        )
+        self.assert_invalid_field(
+            service_toml(
+                krun=(
+                    "enabled = true\ncpus = 1\nram-mib = 128\n"
+                    'network = ["tap"]'
+                )
+            ),
+            "[krun].network",
+        )
+
+    def test_duplicate_ports_use_typed_canonical_endpoints(self):
+        self.assert_invalid(
+            service_toml(
+                container=(
+                    "[[container.ports]]\n"
+                    'host = "[::1]:5353"\n'
+                    "container = 5353\n"
+                    'protocol = "udp"\n\n'
+                    "[[container.ports]]\n"
+                    'host = "[0:0:0:0:0:0:0:1]:5353"\n'
+                    "container = 5354\n"
+                    'protocol = "udp"'
+                )
+            ),
+            "duplicate published port",
+        )
 
     def test_rejects_host_ports_without_tap_exception(self):
         self.assert_invalid(
@@ -371,16 +505,22 @@ name = "token"
                     "krun",
                 )
 
-    def test_tap_derives_network_values_once_in_model(self):
+    def test_disabled_krun_normalizes_to_absence(self):
+        self.assertIsNone(self.load(service_toml(krun="enabled = false")).krun)
+
+    def test_tap_uses_explicit_probe_port_and_derives_network_values(self):
         service = self.load(
             service_toml(
                 container=(
                     'network = "host"\n\n[[container.ports]]\n'
+                    'host = "127.0.0.1:8081"\ncontainer = 8081\n\n'
+                    '[[container.ports]]\n'
                     'host = "127.0.0.1:8080"\ncontainer = 8080'
                 ),
                 krun=(
                     "enabled = true\ncpus = 1\nram-mib = 128\n"
-                    'network = "tap"\nipv4 = "10.253.99.2/30"'
+                    'network = "tap"\nipv4 = "10.253.99.2/30"\n'
+                    "probe-port = 8080"
                 ),
             )
         )
@@ -389,7 +529,39 @@ name = "token"
         self.assertEqual(service.tap_name, "krun-51999")
         self.assertEqual(str(service.tap_guest), "10.253.99.2/30")
         self.assertEqual(str(service.tap_gateway), "10.253.99.1/30")
-        self.assertEqual(service.tap_probe_port, 8080)
+        self.assertEqual(service.tap_spec.probe_port, 8080)
+        artifacts = {
+            artifact.path: artifact.content
+            for artifact in compile_fleet(Fleet.build([service]))
+        }
+        unit = artifacts[
+            Path("etc/containers/systemd/users/51999/service.container")
+        ]
+        self.assertIn("/dev/tcp/10.253.99.2/8080", unit)
+        self.assertNotIn("/dev/tcp/10.253.99.2/8081", unit)
+
+    def test_tap_probe_must_reference_a_declared_tcp_container_port(self):
+        container = (
+            'network = "host"\n\n[[container.ports]]\n'
+            'host = "127.0.0.1:8080"\ncontainer = 8080\n'
+            'protocol = "udp"'
+        )
+        base_krun = (
+            "enabled = true\ncpus = 1\nram-mib = 128\n"
+            'network = "tap"\nipv4 = "10.253.99.2/30"'
+        )
+
+        self.assert_invalid(
+            service_toml(container=container, krun=base_krun),
+            "missing 'probe-port'",
+        )
+        self.assert_invalid(
+            service_toml(
+                container=container,
+                krun=f"{base_krun}\nprobe-port = 8080",
+            ),
+            "declared TCP container port",
+        )
 
     def test_health_cmd_supports_only_explicit_disable(self):
         service = self.load(service_toml(container='health-cmd = "none"'))
@@ -399,6 +571,160 @@ name = "token"
             "supports only",
         )
 
+    def test_single_line_fields_reject_directive_injection(self):
+        cases = {
+            "[service].description": service_toml().replace(
+                'description = "Test service"',
+                'description = "Test service\\nRequires=evil.service"',
+            ),
+            "[service].documentation": service_toml().replace(
+                'description = "Test service"',
+                'description = "Test service"\n'
+                'documentation = "https://example.invalid/\\nRequires=evil.service"',
+            ),
+            "[host].display-name": service_toml().replace(
+                'display-name = "Test service"',
+                'display-name = "Test service\\nZ /tmp 0777 root root -"',
+            ),
+            "[container].exec": service_toml(
+                container='exec = "server\\nEnvironment=EVIL=1"'
+            ),
+            "[container].volumes[1].comment": service_toml(
+                container=(
+                    "[[container.volumes]]\n"
+                    'source = "/var/lib/service"\n'
+                    'target = "/data"\n'
+                    'comment = "safe\\nVolume=/tmp:/escape"'
+                )
+            ),
+        }
+        for field, source in cases.items():
+            with self.subTest(field=field):
+                self.assert_invalid_field(source, field)
+
+    def test_unit_atoms_reject_ambiguous_systemd_syntax(self):
+        cases = {
+            "[container].image": service_toml().replace(
+                "example.invalid/service:1@sha256:",
+                "example.invalid/%service:1@sha256:",
+            ),
+            "[container.environment].BAD": service_toml(
+                container='[container.environment]\nBAD = "two words"'
+            ),
+            "[container.environment].DOLLAR": service_toml(
+                container=(
+                    "[container.environment]\n"
+                    'DOLLAR = "${USER}"'
+                )
+            ),
+            "[container].sysctls": service_toml(
+                container='sysctls = ["net.ipv4.ip_forward=%n"]'
+            ),
+            "[container].exec": service_toml(container='exec = "server; reboot"'),
+            "[startup.readiness].url": service_toml(
+                extra=(
+                    "[startup.readiness]\n"
+                    'url = "http://127.0.0.1:bad/ready"\n'
+                    "timeout-sec = 5\ninterval-sec = 1"
+                )
+            ),
+        }
+        for field, source in cases.items():
+            with self.subTest(field=field):
+                self.assert_invalid_field(source, field)
+        self.assert_invalid_field(
+            service_toml(
+                extra=(
+                    "[startup.readiness]\n"
+                    'url = "http://${HOST}:8080/ready"\n'
+                    "timeout-sec = 5\ninterval-sec = 1"
+                )
+            ),
+            "[startup.readiness].url",
+        )
+
+    def test_environment_names_are_identifiers(self):
+        for environment_name in ("BAD-NAME", "1BAD"):
+            with self.subTest(name=environment_name):
+                self.assert_invalid_field(
+                    service_toml(
+                        container=(
+                            "[container.environment]\n"
+                            f'"{environment_name}" = "value"'
+                        )
+                    ),
+                    "[container.environment] key",
+                )
+
+    def test_paths_and_modes_match_their_output_grammars(self):
+        cases = {
+            "[container].volumes[1].source": service_toml(
+                container=(
+                    "[[container.volumes]]\n"
+                    'source = "/var/lib/../escape"\n'
+                    'target = "/data"'
+                )
+            ),
+            "[container].volumes[1].target": service_toml(
+                container=(
+                    "[[container.volumes]]\n"
+                    'source = "/var/lib/service"\n'
+                    'target = "/data:other"'
+                )
+            ),
+            "[container].volumes[1].options": service_toml(
+                container=(
+                    "[[container.volumes]]\n"
+                    'source = "/var/lib/service"\n'
+                    'target = "/data"\n'
+                    'options = "ro;rw"'
+                )
+            ),
+            "[container].secrets[1].target": service_toml(
+                container=(
+                    "[[container.secrets]]\n"
+                    'name = "token"\n'
+                    'target = "relative/path"'
+                )
+            ),
+            "[data].path": service_toml(
+                extra='[data]\npath = "/tmp/service"'
+            ),
+            "[data].mode": service_toml(
+                extra=(
+                    "[data]\n"
+                    'path = "/var/lib/service"\n'
+                    'mode = "0888"'
+                )
+            ),
+            "[assets].path": service_toml(
+                extra=(
+                    "[assets]\n"
+                    'path = "/usr/share/custom-coreos/somewhere-else"'
+                )
+            ),
+            "[startup.readiness].marker": service_toml(
+                extra=(
+                    "[startup.readiness]\n"
+                    'marker = "/run/service/../ready"\n'
+                    "timeout-sec = 5\ninterval-sec = 1"
+                )
+            ),
+            "[[startup.readiness.mounts]][1].source": service_toml(
+                extra=(
+                    "[startup.readiness]\n"
+                    'marker = "/run/service/ready"\n'
+                    "timeout-sec = 5\ninterval-sec = 1\n\n"
+                    "[[startup.readiness.mounts]]\n"
+                    'path = "/var/lib/service"\n'
+                    'source = "tank/service;bad"'
+                )
+            ),
+        }
+        for field, source in cases.items():
+            with self.subTest(field=field):
+                self.assert_invalid_field(source, field)
+
     def test_manifest_fields_reject_delimiters(self):
         self.assert_invalid(
             service_toml(
@@ -407,7 +733,7 @@ name = "token"
                     'name = "bad\\tname"'
                 )
             ),
-            "must match",
+            "control characters",
         )
         self.assert_invalid(
             service_toml(
@@ -416,7 +742,7 @@ name = "token"
                     'path = "/usr/share/bad\\npath"'
                 )
             ),
-            "tabs or newlines",
+            "control characters",
         )
 
     def test_startup_policy_rejects_ambiguous_or_persistent_readiness(self):
@@ -519,7 +845,8 @@ class FleetValidationTests(unittest.TestCase):
                     krun=(
                         "enabled = true\ncpus = 1\nram-mib = 128\n"
                         'network = "tap"\n'
-                        'ipv4 = "10.253.99.2/30"'
+                        'ipv4 = "10.253.99.2/30"\n'
+                        "probe-port = 8080"
                     ),
                     extra=(
                         "\n[assets]\n"
@@ -527,7 +854,28 @@ class FleetValidationTests(unittest.TestCase):
                     ),
                 ),
             )
-            fleet = Fleet.build([disabled])
+            active = self.write(
+                directory,
+                "active.toml",
+                service_toml(
+                    name="active",
+                    uid=51990,
+                    subid_start=800000000,
+                    container=(
+                        'network = "host"\n\n'
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:8081"\n'
+                        "container = 8081"
+                    ),
+                    krun=(
+                        "enabled = true\ncpus = 1\nram-mib = 128\n"
+                        'network = "tap"\n'
+                        'ipv4 = "10.253.98.2/30"\n'
+                        "probe-port = 8081"
+                    ),
+                ),
+            )
+            fleet = Fleet.build([disabled, active])
             artifacts = {
                 artifact.path: artifact.content
                 for artifact in compile_fleet(fleet)
@@ -540,7 +888,10 @@ class FleetValidationTests(unittest.TestCase):
             Path("etc/containers/systemd/users/51999/disabled.container"),
             paths,
         )
-        self.assertFalse(fleet.active_taps)
+        self.assertEqual(
+            [service.info.name for service in fleet.active_taps],
+            ["active"],
+        )
         self.assertIn(
             "ensure-nas-disabled-account.service",
             artifacts[Path("usr/share/custom-coreos/fleet/account-units.list")],
@@ -557,6 +908,59 @@ class FleetValidationTests(unittest.TestCase):
             "/usr/share/custom-coreos/disabled",
             artifacts[Path("usr/share/custom-coreos/fleet/assets.list")],
         )
+
+    def test_fleet_requires_at_least_one_active_tap(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            directory = Path(directory_name)
+            service = self.write(
+                directory,
+                "service.toml",
+                service_toml(),
+            )
+            with self.assertRaisesRegex(
+                ConfigError,
+                "must contain at least one active TAP service",
+            ):
+                Fleet.build([service])
+
+    def test_active_fleet_without_assets_emits_a_header_only_manifest(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            directory = Path(directory_name)
+            service = self.write(
+                directory,
+                "service.toml",
+                service_toml(
+                    container=(
+                        'network = "host"\n\n'
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:8080"\n'
+                        "container = 8080"
+                    ),
+                    krun=(
+                        "enabled = true\ncpus = 1\nram-mib = 128\n"
+                        'network = "tap"\n'
+                        'ipv4 = "10.253.99.2/30"\n'
+                        "probe-port = 8080"
+                    ),
+                ),
+            )
+            artifacts = {
+                artifact.path: artifact.content
+                for artifact in compile_fleet(Fleet.build([service]))
+            }
+
+        assets = artifacts[
+            Path("usr/share/custom-coreos/fleet/assets.list")
+        ]
+        self.assertEqual(
+            [line for line in assets.splitlines() if not line.startswith("#")],
+            [],
+        )
+        account_script = artifacts[
+            Path("usr/local/bin/ensure-nas-service-account.sh")
+        ]
+        self.assertNotIn("semanage fcontext", account_script)
+        self.assertNotIn("restorecon", account_script)
 
 
 class ArtifactSynchronizationTests(unittest.TestCase):

@@ -60,9 +60,11 @@ def assets_manifest(fleet: Fleet) -> str:
     ]
     lines.extend(
         sorted(
-            service.assets.path
-            for service in fleet.services
-            if service.assets is not None
+            {
+                service.assets.path
+                for service in fleet.services
+                if service.assets is not None
+            }
         )
     )
     return "\n".join(lines) + "\n"

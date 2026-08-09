@@ -1,4 +1,8 @@
-[tool.mypy]
-python_version = "3.11"
-strict = true
-files = ["generate-quadlets.py", "quadletgen", "scripts/plan-image-cleanup.py"]
+[tool.ty.environment]
+python-version = "3.11"
+
+[tool.ty.src]
+include = ["generate-quadlets.py", "quadletgen", "scripts/plan-image-cleanup.py"]
+
+[tool.ty.rules]
+all = "error"

@@ -11,7 +11,6 @@ USER_HOME="/var/home/_nas_alertmanager"
 USER_SHELL="/sbin/nologin"
 USER_SUBID_START="512400000"
 USER_SUBID_COUNT="65536"
-ASSETS_FCONTEXT="/usr/share/custom-coreos/alertmanager(/.*)?"
 DATA_FCONTEXT="/var/lib/alertmanager(/.*)?"
 
 log() {
@@ -82,12 +81,12 @@ fi
 
 ensure_subid_entry /etc/subuid
 ensure_subid_entry /etc/subgid
-ensure_fcontext_rule "${ASSETS_FCONTEXT}"
+
 ensure_fcontext_rule "${DATA_FCONTEXT}"
 
-if [[ -e /var/lib/alertmanager ]]; then
+if [[ -e "/var/lib/alertmanager" ]]; then
     log "Restoring SELinux labels for /var/lib/alertmanager"
-    restorecon -F -R /var/lib/alertmanager
+    restorecon -F -R -- "/var/lib/alertmanager"
 fi
 
 if systemctl is-failed --quiet "user@${USER_UID}.service"; then

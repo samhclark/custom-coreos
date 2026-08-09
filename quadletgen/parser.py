@@ -7,7 +7,7 @@ import posixpath
 import re
 import tomllib
 from pathlib import Path
-from typing import Mapping, NoReturn
+from typing import Literal, Mapping, NoReturn
 from urllib.parse import urlsplit
 
 from .model import (
@@ -18,7 +18,6 @@ from .model import (
     HostIdentity,
     HttpReadiness,
     IngressRule,
-    KrunDisabled,
     KrunNetwork,
     KrunPasst,
     KrunSpec,
@@ -33,15 +32,30 @@ from .model import (
     Service,
     ServiceInfo,
     StartupSpec,
+    SUBID_COUNT,
     UnitSpec,
     VolumeMount,
 )
 
-NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
-USERNAME_RE = re.compile(r"^_nas_[a-z0-9]+$")
+NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+USERNAME_RE = re.compile(r"^_nas_[a-z0-9]{1,26}$")
 PINNED_IMAGE_RE = re.compile(r"^[^@\s]+:[^@:\s]+@sha256:[0-9a-f]{64}$")
 SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 SUBDIRECTORY_RE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
+DISPLAY_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")
+ENVIRONMENT_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+FILE_MODE_RE = re.compile(r"^0[0-7]{3}$")
+PORTABLE_ABSOLUTE_PATH_RE = re.compile(
+    r"^/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+$"
+)
+VOLUME_OPTIONS_RE = re.compile(
+    r"^[A-Za-z0-9._=-]+(?:,[A-Za-z0-9._=-]+)*$"
+)
+ZFS_SOURCE_RE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
+EXEC_RE = re.compile(
+    r"^[A-Za-z0-9_./:=,@+-]+(?: [A-Za-z0-9_./:=,@+-]+)*$"
+)
+MAX_SUBID_START = 2**32 - SUBID_COUNT
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -74,15 +88,81 @@ def _required(table: Mapping[str, object], key: str, path: str) -> object:
 def _string(value: object, path: str, *, nonempty: bool = True) -> str:
     if not isinstance(value, str) or (nonempty and not value):
         _fail(path, "must be a non-empty string" if nonempty else "must be a string")
+    if any(not character.isprintable() for character in value):
+        _fail(path, "cannot contain control characters")
     return value
 
 
-def _integer(value: object, path: str, *, minimum: int | None = None) -> int:
+def _unit_line(value: object, path: str) -> str:
+    text = _string(value, path)
+    if any(character in '\\%"' for character in text):
+        _fail(path, "cannot contain double quotes, backslashes, or percent signs")
+    return text
+
+
+def _unit_atom(
+    value: object,
+    path: str,
+    *,
+    nonempty: bool = True,
+) -> str:
+    text = _string(value, path, nonempty=nonempty)
+    if any(character.isspace() for character in text) or any(
+        character in "\"'$\\%" for character in text
+    ):
+        _fail(
+            path,
+            "cannot contain whitespace, quotes, dollar signs, backslashes, "
+            "or percent signs",
+        )
+    return text
+
+
+def _absolute_path(value: object, path: str) -> str:
+    text = _string(value, path)
+    if (
+        not PORTABLE_ABSOLUTE_PATH_RE.fullmatch(text)
+        or posixpath.normpath(text) != text
+    ):
+        _fail(
+            path,
+            "must be a normalized absolute path with portable path segments",
+        )
+    return text
+
+
+def _integer(
+    value: object,
+    path: str,
+    *,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
     if type(value) is not int:
         _fail(path, "must be an integer")
     if minimum is not None and value < minimum:
         _fail(path, f"must be at least {minimum}")
+    if maximum is not None and value > maximum:
+        _fail(path, f"must be at most {maximum}")
     return value
+
+
+def _http_url(value: object, path: str) -> str:
+    url = _unit_atom(value, path)
+    try:
+        parsed_url = urlsplit(url)
+        hostname = parsed_url.hostname
+        _ = parsed_url.port
+    except ValueError:
+        _fail(path, "must be a valid HTTP(S) URL")
+    if (
+        parsed_url.scheme not in {"http", "https"}
+        or hostname is None
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+    ):
+        _fail(path, "must be an HTTP(S) URL with a host and no credentials")
+    return url
 
 
 def _boolean(value: object, path: str) -> bool:
@@ -119,12 +199,17 @@ def _parse_service_info(raw: object, name: str) -> ServiceInfo:
     service_name = _string(_required(table, "name", path), f"{path}.name")
     if not NAME_RE.fullmatch(service_name):
         _fail(f"{path}.name", f"must match {NAME_RE.pattern}")
+    documentation = (
+        _http_url(table["documentation"], f"{path}.documentation")
+        if "documentation" in table
+        else None
+    )
     return ServiceInfo(
         name=service_name,
-        description=_string(
+        description=_unit_line(
             _required(table, "description", path), f"{path}.description"
         ),
-        documentation=_optional_string(table, "documentation", path),
+        documentation=documentation,
     )
 
 
@@ -138,7 +223,17 @@ def _parse_host(raw: object, name: str) -> HostIdentity:
     username = _string(_required(table, "username", path), f"{path}.username")
     if not USERNAME_RE.fullmatch(username):
         _fail(f"{path}.username", f"must match {USERNAME_RE.pattern}")
-    uid = _integer(_required(table, "uid", path), f"{path}.uid", minimum=1)
+    uid = _integer(
+        _required(table, "uid", path),
+        f"{path}.uid",
+        minimum=51000,
+        maximum=51999,
+    )
+    display_name = _string(
+        _required(table, "display-name", path), f"{path}.display-name"
+    )
+    if not DISPLAY_NAME_RE.fullmatch(display_name):
+        _fail(f"{path}.display-name", f"must match {DISPLAY_NAME_RE.pattern}")
     return HostIdentity(
         username=username,
         uid=uid,
@@ -146,10 +241,9 @@ def _parse_host(raw: object, name: str) -> HostIdentity:
             _required(table, "subid-start", path),
             f"{path}.subid-start",
             minimum=1,
+            maximum=MAX_SUBID_START,
         ),
-        display_name=_string(
-            _required(table, "display-name", path), f"{path}.display-name"
-        ),
+        display_name=display_name,
     )
 
 
@@ -160,7 +254,13 @@ def _parse_ports(raw: object, name: str) -> tuple[PublishedPort, ...]:
     if not isinstance(raw, list):
         _fail(path, "must be an array of tables")
     result = []
-    seen: set[tuple[str, int, Protocol]] = set()
+    seen: set[
+        tuple[
+            ipaddress.IPv4Address | ipaddress.IPv6Address,
+            int,
+            Protocol,
+        ]
+    ] = set()
     for index, item in enumerate(raw, start=1):
         item_path = f"{path}[{index}]"
         table = _table(item, item_path, {"host", "container", "protocol"})
@@ -183,16 +283,22 @@ def _parse_ports(raw: object, name: str) -> tuple[PublishedPort, ...]:
         container_port = _port_number(
             _required(table, "container", item_path), f"{item_path}.container"
         )
-        protocol_text = table.get("protocol", Protocol.TCP.value)
+        protocol_text = _string(
+            table.get("protocol", Protocol.TCP.value),
+            f"{item_path}.protocol",
+        )
         if protocol_text not in {item.value for item in Protocol}:
             _fail(f"{item_path}.protocol", 'must be "tcp" or "udp"')
         protocol = Protocol(protocol_text)
-        key = (host, container_port, protocol)
+        key = (address, host_port, protocol)
         if key in seen:
-            _fail(item_path, f"duplicate published port {host}:{container_port}/{protocol.value!s}")
+            _fail(
+                item_path,
+                f"duplicate published port {host}/{protocol.value!s}",
+            )
         seen.add(key)
         result.append(
-            PublishedPort(host, address, host_port, container_port, protocol)
+            PublishedPort(address, host_port, container_port, protocol)
         )
     return tuple(result)
 
@@ -226,8 +332,10 @@ def _parse_sysctls(raw: object, name: str) -> tuple[str, ...]:
     values = _string_array(raw, path)
     seen = set()
     for value in values:
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+=[^\s=]+", value):
+        match = re.fullmatch(r"([A-Za-z0-9_.-]+)=([^=]+)", value)
+        if match is None:
             _fail(path, f"{value!r} must use name=value format")
+        _unit_atom(match.group(2), path)
         if value in seen:
             _fail(path, f"duplicate sysctl {value!r}")
         seen.add(value)
@@ -240,10 +348,18 @@ def _parse_environment(raw: object, name: str) -> tuple[tuple[str, str], ...]:
         return ()
     if not isinstance(raw, dict):
         _fail(path, "must be a table")
-    return tuple(
-        (_string(key, f"{path} key"), _string(value, f"{path}.{key}", nonempty=False))
-        for key, value in raw.items()
-    )
+    result = []
+    for key, value in raw.items():
+        environment_name = _string(key, f"{path} key")
+        if not ENVIRONMENT_NAME_RE.fullmatch(environment_name):
+            _fail(f"{path} key", f"must match {ENVIRONMENT_NAME_RE.pattern}")
+        environment_value = _unit_atom(
+            value,
+            f"{path}.{environment_name}",
+            nonempty=False,
+        )
+        result.append((environment_name, environment_value))
+    return tuple(result)
 
 
 def _parse_volumes(raw: object, name: str) -> tuple[VolumeMount, ...]:
@@ -256,11 +372,25 @@ def _parse_volumes(raw: object, name: str) -> tuple[VolumeMount, ...]:
     for index, item in enumerate(raw, start=1):
         item_path = f"{path}[{index}]"
         table = _table(item, item_path, {"source", "target", "options", "comment"})
+        source = _absolute_path(
+            _required(table, "source", item_path),
+            f"{item_path}.source",
+        )
+        target = _absolute_path(
+            _required(table, "target", item_path),
+            f"{item_path}.target",
+        )
+        options = _optional_string(table, "options", item_path)
+        if options is not None and not VOLUME_OPTIONS_RE.fullmatch(options):
+            _fail(
+                f"{item_path}.options",
+                f"must match {VOLUME_OPTIONS_RE.pattern}",
+            )
         result.append(
             VolumeMount(
-                source=_string(_required(table, "source", item_path), f"{item_path}.source"),
-                target=_string(_required(table, "target", item_path), f"{item_path}.target"),
-                options=_optional_string(table, "options", item_path),
+                source=source,
+                target=target,
+                options=options,
                 comment=_optional_string(table, "comment", item_path),
             )
         )
@@ -284,9 +414,12 @@ def _parse_secrets(raw: object, name: str) -> tuple[SecretMount, ...]:
         if secret_name in seen:
             _fail(item_path, f"duplicate secret {secret_name!r}")
         seen.add(secret_name)
-        result.append(
-            SecretMount(secret_name, _optional_string(table, "target", item_path))
+        target = (
+            _absolute_path(table["target"], f"{item_path}.target")
+            if "target" in table
+            else None
         )
+        result.append(SecretMount(secret_name, target))
     return tuple(result)
 
 
@@ -300,16 +433,31 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
             "dns", "sysctls", "environment", "volumes", "secrets", "ports", "exec",
         },
     )
-    image = _string(_required(table, "image", path), f"{path}.image")
+    image = _unit_atom(_required(table, "image", path), f"{path}.image")
     if not PINNED_IMAGE_RE.fullmatch(image):
         _fail(f"{path}.image", "must use an immutable name:tag@sha256 digest")
-    health_cmd = _optional_string(table, "health-cmd", path)
-    if health_cmd is not None and health_cmd != "none":
+    health_cmd_text = _optional_string(table, "health-cmd", path)
+    if health_cmd_text is not None and health_cmd_text != "none":
         _fail(f"{path}.health-cmd", 'currently supports only "none"')
+    health_cmd: Literal["none"] | None = (
+        "none" if health_cmd_text is not None else None
+    )
+    network_text = _optional_string(table, "network", path)
+    if network_text is not None and network_text != "host":
+        _fail(f"{path}.network", 'currently supports only "host"')
+    network: Literal["host"] | None = (
+        "host" if network_text is not None else None
+    )
+    exec_text = _optional_string(table, "exec", path)
+    if exec_text is not None and not EXEC_RE.fullmatch(exec_text):
+        _fail(
+            f"{path}.exec",
+            "must be a space-separated list of safe argument atoms",
+        )
     return ContainerSpec(
         image=image,
         enabled=_boolean(table["enabled"], f"{path}.enabled") if "enabled" in table else True,
-        network=_optional_string(table, "network", path),
+        network=network,
         container_user=_integer(table["container-user"], f"{path}.container-user", minimum=0)
         if "container-user" in table else None,
         health_cmd=health_cmd,
@@ -319,7 +467,7 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
         volumes=_parse_volumes(table.get("volumes"), name),
         secrets=_parse_secrets(table.get("secrets"), name),
         ports=_parse_ports(table.get("ports"), name),
-        exec=_optional_string(table, "exec", path),
+        exec=exec_text,
     )
 
 
@@ -376,23 +524,44 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
     table = _table(
         raw,
         path,
-        {"enabled", "cpus", "ram-mib", "network", "ipv4", "ingress", "host-access"},
+        {
+            "enabled",
+            "cpus",
+            "ram-mib",
+            "network",
+            "ipv4",
+            "probe-port",
+            "ingress",
+            "host-access",
+        },
     )
     enabled = _boolean(_required(table, "enabled", path), f"{path}.enabled")
     if not enabled:
         extra = sorted(set(table) - {"enabled"})
         if extra:
             _fail(path, f"fields are not allowed when disabled: {', '.join(extra)}")
-        return KrunDisabled()
+        return None
     cpus = _integer(_required(table, "cpus", path), f"{path}.cpus", minimum=1)
     ram_mib = _integer(_required(table, "ram-mib", path), f"{path}.ram-mib", minimum=128)
-    network_text = table.get("network", KrunNetwork.TSI.value)
+    network_text = _string(
+        table.get("network", KrunNetwork.TSI.value),
+        f"{path}.network",
+    )
     if network_text not in {item.value for item in KrunNetwork}:
         _fail(f"{path}.network", 'must be "tsi", "passt", or "tap"')
     network = KrunNetwork(network_text)
     if network is KrunNetwork.PASST and container.network == "host":
         _fail(path, 'network = "passt" requires a private container network namespace')
-    tap_only_present = any(key in table for key in ("ipv4", "ingress", "host-access"))
+    if container.network == "host":
+        for server in container.dns:
+            if server.is_loopback:
+                _fail(
+                    path,
+                    f'network = "host" cannot use loopback DNS server {str(server)!r}',
+                )
+    tap_only_present = any(
+        key in table for key in ("ipv4", "probe-port", "ingress", "host-access")
+    )
     if network is KrunNetwork.TAP:
         if container.network != "host":
             _fail(path, 'network = "tap" requires [container].network = "host"')
@@ -406,23 +575,32 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
         ipv4 = parsed
         if parsed.ip != parsed.network.network_address + 2:
             _fail(f"{path}.ipv4", "must be the second usable /30 address")
+        probe_port = _port_number(
+            _required(table, "probe-port", path),
+            f"{path}.probe-port",
+        )
+        if not any(
+            port.protocol is Protocol.TCP
+            and port.container_port == probe_port
+            for port in container.ports
+        ):
+            _fail(
+                f"{path}.probe-port",
+                "must reference a declared TCP container port",
+            )
         for port in container.ports:
             if str(port.host_address) not in {"127.0.0.1", "0.0.0.0"}:
                 _fail(path, 'TAP host publications support only "127.0.0.1" or "0.0.0.0" addresses')
-    elif tap_only_present:
-        _fail(path, 'TAP-only fields require network = "tap"')
-    if container.network == "host":
-        for server in container.dns:
-            if server.is_loopback:
-                _fail(path, f"network = \"host\" cannot use loopback DNS server {str(server)!r}")
-    if network is KrunNetwork.TAP:
         return KrunTap(
-            cpus,
-            ram_mib,
-            ipv4,
-            _parse_ingress(table.get("ingress"), name),
-            _parse_host_access(table.get("host-access"), name),
+            cpus=cpus,
+            ram_mib=ram_mib,
+            ipv4=ipv4,
+            probe_port=probe_port,
+            ingress=_parse_ingress(table.get("ingress"), name),
+            host_access=_parse_host_access(table.get("host-access"), name),
         )
+    if tap_only_present:
+        _fail(path, 'TAP-only fields require network = "tap"')
     if network is KrunNetwork.PASST:
         return KrunPasst(cpus, ram_mib)
     return KrunTsi(cpus, ram_mib)
@@ -448,21 +626,38 @@ def _parse_data(raw: object, name: str) -> DataSpec | None:
             )
     if len(set(subdirectories)) != len(subdirectories):
         _fail(f"{path}.subdirectories", "contains duplicates")
+    data_path = _absolute_path(
+        _required(table, "path", path),
+        f"{path}.path",
+    )
+    if not data_path.startswith("/var/"):
+        _fail(f"{path}.path", "must be below /var")
+    mode = _string(table.get("mode", "0750"), f"{path}.mode")
+    if not FILE_MODE_RE.fullmatch(mode):
+        _fail(f"{path}.mode", "must be a four-digit octal mode")
     return DataSpec(
-        _string(_required(table, "path", path), f"{path}.path"),
-        _string(table.get("mode", "0750"), f"{path}.mode"),
+        data_path,
+        mode,
         subdirectories,
     )
 
 
-def _parse_assets(raw: object, name: str) -> AssetsSpec | None:
+def _parse_assets(
+    raw: object,
+    name: str,
+    service_name: str,
+) -> AssetsSpec | None:
     if raw is None:
         return None
     path = f"{name}: [assets]"
     table = _table(raw, path, {"path"})
-    asset_path = _string(_required(table, "path", path), f"{path}.path")
-    if "\t" in asset_path or "\n" in asset_path:
-        _fail(f"{path}.path", "cannot contain tabs or newlines")
+    asset_path = _absolute_path(
+        _required(table, "path", path),
+        f"{path}.path",
+    )
+    expected = f"/usr/share/custom-coreos/{service_name}"
+    if asset_path != expected:
+        _fail(f"{path}.path", f"must be exactly {expected}")
     return AssetsSpec(asset_path)
 
 
@@ -489,7 +684,7 @@ def _parse_required_mounts(raw: object, name: str) -> tuple[RequiredMount, ...]:
     for index, item in enumerate(raw, start=1):
         item_path = f"{path}[{index}]"
         table = _table(item, item_path, {"path", "source"})
-        mount_path = _string(
+        mount_path = _absolute_path(
             _required(table, "path", item_path),
             f"{item_path}.path",
         )
@@ -497,14 +692,11 @@ def _parse_required_mounts(raw: object, name: str) -> tuple[RequiredMount, ...]:
             _required(table, "source", item_path),
             f"{item_path}.source",
         )
-        for value, field in ((mount_path, "path"), (source, "source")):
-            if any(character.isspace() for character in value) or "=" in value:
-                _fail(
-                    f"{item_path}.{field}",
-                    "cannot contain whitespace or equals signs",
-                )
-        if not mount_path.startswith("/") or posixpath.normpath(mount_path) != mount_path:
-            _fail(f"{item_path}.path", "must be an absolute normalized path")
+        if not ZFS_SOURCE_RE.fullmatch(source):
+            _fail(
+                f"{item_path}.source",
+                "must be a portable filesystem source name",
+            )
         key = (mount_path, source)
         if key in seen:
             _fail(item_path, "duplicates an earlier mount requirement")
@@ -567,15 +759,14 @@ def _parse_startup(
             "cannot exceed timeout-sec",
         )
     if marker_present:
-        marker = _string(readiness["marker"], f"{readiness_path}.marker")
-        if (
-            not marker.startswith("/run/")
-            or posixpath.normpath(marker) != marker
-            or any(character.isspace() for character in marker)
-        ):
+        marker = _absolute_path(
+            readiness["marker"],
+            f"{readiness_path}.marker",
+        )
+        if not marker.startswith("/run/"):
             _fail(
                 f"{readiness_path}.marker",
-                "must be a normalized path below /run without whitespace",
+                "must be below /run",
             )
         readiness_spec: ReadinessSpec = MarkerReadiness(
             marker,
@@ -589,26 +780,7 @@ def _parse_startup(
                 f"{readiness_path}.mounts",
                 "is supported only with marker readiness",
             )
-        url = _string(readiness["url"], f"{readiness_path}.url")
-        try:
-            parsed_url = urlsplit(url)
-            hostname = parsed_url.hostname
-        except ValueError:
-            _fail(
-                f"{readiness_path}.url",
-                "must be a valid HTTP(S) URL",
-            )
-        if (
-            parsed_url.scheme not in {"http", "https"}
-            or hostname is None
-            or parsed_url.username is not None
-            or parsed_url.password is not None
-            or any(character.isspace() for character in url)
-        ):
-            _fail(
-                f"{readiness_path}.url",
-                "must be an HTTP(S) URL with a host and no credentials or whitespace",
-            )
+        url = _http_url(readiness["url"], f"{readiness_path}.url")
         readiness_spec = HttpReadiness(url, timeout_sec, interval_sec)
     return StartupSpec(readiness_spec, reject_conflicts)
 
@@ -635,6 +807,12 @@ def load_service(toml_path: Path) -> Service:
         if required not in top:
             _fail(name, f"missing required [{required}] section")
     info = _parse_service_info(top["service"], name)
+    expected_filename = f"{info.name}.toml"
+    if toml_path.name != expected_filename:
+        _fail(
+            name,
+            f"filename must be {expected_filename!r} for service {info.name!r}",
+        )
     host = _parse_host(top["host"], name)
     container = _parse_container(top["container"], name)
     krun = _parse_krun(top.get("krun"), name, container)
@@ -651,7 +829,7 @@ def load_service(toml_path: Path) -> Service:
         container=container,
         krun=krun,
         data=_parse_data(top.get("data"), name),
-        assets=_parse_assets(top.get("assets"), name),
+        assets=_parse_assets(top.get("assets"), name, info.name),
         startup=_parse_startup(top.get("startup"), name, container),
         unit=_parse_unit(top.get("unit"), name),
     )

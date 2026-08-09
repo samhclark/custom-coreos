@@ -51,11 +51,17 @@ class HostIdentity:
 
 @dataclass(frozen=True, slots=True)
 class PublishedPort:
-    host: str
     host_address: ipaddress.IPv4Address | ipaddress.IPv6Address
     host_port: int
     container_port: int
     protocol: Protocol = Protocol.TCP
+
+    @property
+    def host(self) -> str:
+        address = str(self.host_address)
+        if isinstance(self.host_address, ipaddress.IPv6Address):
+            address = f"[{address}]"
+        return f"{address}:{self.host_port}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,9 +82,9 @@ class SecretMount:
 class ContainerSpec:
     image: str
     enabled: bool = True
-    network: str | None = None
+    network: Literal["host"] | None = None
     container_user: int | None = None
-    health_cmd: str | None = None
+    health_cmd: Literal["none"] | None = None
     dns: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...] = ()
     sysctls: tuple[str, ...] = ()
     environment: tuple[tuple[str, str], ...] = ()
@@ -95,15 +101,9 @@ class IngressRule:
 
 
 @dataclass(frozen=True, slots=True)
-class KrunDisabled:
-    enabled: Literal[False] = field(default=False, init=False)
-
-
-@dataclass(frozen=True, slots=True)
 class KrunTsi:
     cpus: int
     ram_mib: int
-    enabled: Literal[True] = field(default=True, init=False)
     network: Literal[KrunNetwork.TSI] = field(
         default=KrunNetwork.TSI,
         init=False,
@@ -114,7 +114,6 @@ class KrunTsi:
 class KrunPasst:
     cpus: int
     ram_mib: int
-    enabled: Literal[True] = field(default=True, init=False)
     network: Literal[KrunNetwork.PASST] = field(
         default=KrunNetwork.PASST,
         init=False,
@@ -126,16 +125,16 @@ class KrunTap:
     cpus: int
     ram_mib: int
     ipv4: ipaddress.IPv4Interface
+    probe_port: int
     ingress: tuple[IngressRule, ...] = ()
     host_access: tuple[int, ...] = ()
-    enabled: Literal[True] = field(default=True, init=False)
     network: Literal[KrunNetwork.TAP] = field(
         default=KrunNetwork.TAP,
         init=False,
     )
 
 
-KrunSpec: TypeAlias = KrunDisabled | KrunTsi | KrunPasst | KrunTap
+KrunSpec: TypeAlias = KrunTsi | KrunPasst | KrunTap
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,14 +227,6 @@ class Service:
         assert isinstance(gateway, ipaddress.IPv4Interface)
         return gateway
 
-    @property
-    def tap_probe_port(self) -> int:
-        for port in self.container.ports:
-            if port.protocol is Protocol.TCP:
-                return port.container_port
-        raise ConfigError(f"{self.source.name}: active TAP service has no TCP probe port")
-
-
 @dataclass(frozen=True, slots=True)
 class Fleet:
     services: tuple[Service, ...]
@@ -316,9 +307,14 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
                 )
             tap_publications[publication_key] = name
         if not any(
-            port.protocol is Protocol.TCP for port in service.container.ports
+            port.protocol is Protocol.TCP
+            and port.container_port == tap.probe_port
+            for port in service.container.ports
         ):
-            _fail(name, "active TAP services need a published TCP probe port")
+            _fail(
+                name,
+                "[krun].probe-port must reference a declared TCP container port",
+            )
 
     ranges.sort()
     for (_, previous_end, previous_name), (
@@ -332,3 +328,5 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
                 "subordinate ID ranges overlap between "
                 f"{previous_name} and {current_name}",
             )
+    if not tap_names:
+        _fail("fleet", "must contain at least one active TAP service")

@@ -29,6 +29,7 @@ cpus = 4
 ram-mib = 4096
 network = "tap"
 ipv4 = "10.253.2.2/30"
+probe-port = 8096
 
 [[krun.ingress]]
 from = "caddy"
