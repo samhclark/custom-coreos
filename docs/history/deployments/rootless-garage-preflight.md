@@ -1,5 +1,8 @@
 # Garage Rootless Migration Preflight (Completed)
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed preflight against the current NAS.
+
 This is the historical record of Garage's first, rootful hardening release.
 The NAS preflight completed successfully before the rootless cutover was
 implemented. The second release removes the timer, service, and script described

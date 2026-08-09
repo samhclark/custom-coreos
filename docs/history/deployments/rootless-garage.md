@@ -1,5 +1,8 @@
 # Rootless Garage Rollout Checklist
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed rollout against the current NAS.
+
 > Historical record: this checklist describes Garage's completed
 > rootful-to-rootless ownership migration. The active preparation service no
 > longer uses the preflight marker, migration marker, or rollback snapshot.

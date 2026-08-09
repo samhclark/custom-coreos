@@ -19,9 +19,9 @@ where production evidence justifies it.
 - CI runs strict typing, behavioral tests, generated-artifact parity, image
   builds, signature verification, and publication with pinned actions.
 
-Historical design and rollout evidence remains in the `docs/plan-*` and
-service-checklist documents. Those files explain why the current invariants
-exist; they are not the active architecture description.
+Historical design and rollout evidence remains below `docs/history/`. That
+subtree explains why current invariants exist but is not part of the active
+architecture or operating instructions.
 
 ## Settled invariants
 

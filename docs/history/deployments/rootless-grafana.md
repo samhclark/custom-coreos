@@ -1,5 +1,8 @@
 # Rootless Grafana Rollout Checklist
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed rollout against the current NAS.
+
 > Historical record: this checklist describes the first completed rootless
 > Quadlet conversion on the NAS.
 

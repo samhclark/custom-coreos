@@ -1,5 +1,8 @@
 # Plan: Incremental libkrun Adoption for Rootless Quadlets
 
+> **Archived evidence — not authoritative.** Do not execute commands or
+> pending actions from this completed migration against the current NAS.
+
 > Historical migration and evidence log. This plan is closed and its
 > TSI/private-passt network design was superseded by the deployed routed-TAP
 > architecture in `docs/plan-libkrun-tap-network.md`. Do not execute pending

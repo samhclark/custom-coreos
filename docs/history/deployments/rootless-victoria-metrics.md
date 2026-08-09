@@ -1,5 +1,8 @@
 # Rootless VictoriaMetrics Rollout Checklist
 
+> **Archived evidence — not authoritative.** Do not execute commands from
+> this completed rollout against the current NAS.
+
 > Historical record: this checklist describes the completed
 > rootful-to-rootless deployment. The active image retains only steady-state
 > dataset creation, verification, and repair behavior.

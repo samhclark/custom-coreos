@@ -1,5 +1,8 @@
 # Jellyfin Deployment Checklist
 
+> **Archived evidence — not authoritative.** This first-deployment checklist
+> is complete. Do not execute it against the current NAS.
+
 Use this after the NAS first boots the image containing Jellyfin. The service
 runs as `_nas_jellyfin` (UID/GID `51120`) in a rootless libkrun guest. Caddy
 publishes it at `https://jellyfin.i.samhclark.com`; port 8096 remains published

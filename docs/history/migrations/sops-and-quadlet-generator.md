@@ -1,5 +1,8 @@
 # Plan: SOPS Secrets Management and Quadlet Generator
 
+> **Archived evidence — not authoritative.** Do not execute commands or
+> pending actions from this completed migration against the current NAS.
+
 > **Implementation status (2026-07-21):** The SOPS distributor and Quadlet
 > generator described here are deployed. Grafana, vmalert, blackbox exporter,
 > Alertmanager, VictoriaMetrics, and Garage run as production-validated
