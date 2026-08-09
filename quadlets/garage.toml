@@ -88,10 +88,14 @@ marker = "/run/garage-datasets/ready"
 timeout-sec = 3600
 interval-sec = 2
 
-[[startup.readiness.mounts]]
+[[startup.readiness.paths]]
 path = "/var/lib/garage/meta"
-source = "tank/garage/meta"
+mount-source = "tank/garage/meta"
+owner = "service"
+access = ["write"]
 
-[[startup.readiness.mounts]]
+[[startup.readiness.paths]]
 path = "/var/lib/garage/data"
-source = "tank/garage/data"
+mount-source = "tank/garage/data"
+owner = "service"
+access = ["write"]

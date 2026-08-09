@@ -422,14 +422,34 @@ name = "token"
                     "timeout-sec = 5\ninterval-sec = 1"
                 )
             ),
-            "[[startup.readiness.mounts]][1].source": service_toml(
+            "[[startup.readiness.paths]][1].mount-source": service_toml(
                 extra=(
                     "[startup.readiness]\n"
                     'marker = "/run/service/ready"\n'
                     "timeout-sec = 5\ninterval-sec = 1\n\n"
-                    "[[startup.readiness.mounts]]\n"
+                    "[[startup.readiness.paths]]\n"
                     'path = "/var/lib/service"\n'
-                    'source = "tank/service;bad"'
+                    'mount-source = "tank/service;bad"'
+                )
+            ),
+            "[[startup.readiness.paths]][1].owner": service_toml(
+                extra=(
+                    "[startup.readiness]\n"
+                    'marker = "/run/service/ready"\n'
+                    "timeout-sec = 5\ninterval-sec = 1\n\n"
+                    "[[startup.readiness.paths]]\n"
+                    'path = "/var/lib/service"\n'
+                    'owner = "root"'
+                )
+            ),
+            "[[startup.readiness.paths]][1].access[1]": service_toml(
+                extra=(
+                    "[startup.readiness]\n"
+                    'marker = "/run/service/ready"\n'
+                    "timeout-sec = 5\ninterval-sec = 1\n\n"
+                    "[[startup.readiness.paths]]\n"
+                    'path = "/var/lib/service"\n'
+                    'access = ["delete"]'
                 )
             ),
         }
@@ -479,6 +499,13 @@ name = "token"
                 "[startup.readiness]\n"
                 'url = "http:///ready"\n'
                 "timeout-sec = 5\ninterval-sec = 1"
+            ),
+            "HTTP with path requirements": (
+                "[startup.readiness]\n"
+                'url = "http://127.0.0.1/ready"\n'
+                "timeout-sec = 5\ninterval-sec = 1\n\n"
+                "[[startup.readiness.paths]]\n"
+                'path = "/var/lib/service"'
             ),
         }
         for label, startup in cases.items():

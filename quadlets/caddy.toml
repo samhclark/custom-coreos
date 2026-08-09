@@ -79,3 +79,11 @@ timeout-start-sec = 330
 marker = "/run/caddy-state/ready"
 timeout-sec = 300
 interval-sec = 2
+
+[[startup.readiness.paths]]
+path = "/var/lib/caddy"
+access = ["write"]
+
+[[startup.readiness.paths]]
+path = "/var/lib/caddy-config"
+access = ["write"]

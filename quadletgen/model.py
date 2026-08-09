@@ -30,6 +30,16 @@ class KrunNetwork(str, Enum):
     TAP = "tap"
 
 
+class PathAccess(str, Enum):
+    READ = "read"
+    WRITE = "write"
+    EXECUTE = "execute"
+
+
+class RequiredOwner(str, Enum):
+    SERVICE = "service"
+
+
 @dataclass(frozen=True, slots=True)
 class ServiceInfo:
     name: str
@@ -150,9 +160,11 @@ class AssetsSpec:
 
 
 @dataclass(frozen=True, slots=True)
-class RequiredMount:
+class RequiredPath:
     path: str
-    source: str
+    mount_source: str | None = None
+    owner: RequiredOwner | None = None
+    access: tuple[PathAccess, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,7 +172,7 @@ class MarkerReadiness:
     marker: str
     timeout_sec: int
     interval_sec: int
-    mounts: tuple[RequiredMount, ...] = ()
+    paths: tuple[RequiredPath, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
