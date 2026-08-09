@@ -7,8 +7,8 @@ import unittest
 from dataclasses import replace
 from pathlib import Path
 
-from quadletgen.compiler import compile_fleet
-from quadletgen.model import DataSpec, Fleet, KrunNetwork
+from quadletgen.compiler import Artifact, compile_fleet
+from quadletgen.model import ConfigError, DataSpec, Fleet, KrunNetwork
 from tests.quadlet_test_support import (
     GENERATED_PREFIX,
     OVERLAY,
@@ -55,6 +55,12 @@ class CompilerCharacterizationTests(unittest.TestCase):
                 for service in fleet.active_taps
             )
         )
+
+    def test_artifact_paths_are_normalized_relative_overlay_paths(self):
+        for path in (Path("../escape"), Path("/absolute"), Path("bad\\name")):
+            with self.subTest(path=path):
+                with self.assertRaises(ConfigError):
+                    Artifact(path, "content")
 
 
 class FleetManifestTests(unittest.TestCase):

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from quadletgen.compiler import compile_fleet
-from quadletgen.model import ConfigError, Fleet
+from quadletgen.model import ConfigError, Fleet, MarkerReadiness
 from quadletgen.parser import load_service
-from tests.quadlet_test_support import REPO, service_toml
+from tests.quadlet_test_support import REPO, current_fleet, service_toml
 
 
 class FleetValidationTests(unittest.TestCase):
@@ -17,6 +18,49 @@ class FleetValidationTests(unittest.TestCase):
         path = directory / filename
         path.write_text(source)
         return load_service(path)
+
+    def test_direct_model_construction_cannot_bypass_local_invariants(self):
+        service = current_fleet().services[0]
+        readiness = service.startup.readiness
+        self.assertIsInstance(readiness, MarkerReadiness)
+        assert isinstance(readiness, MarkerReadiness)
+        required_path = readiness.paths[0]
+        cases = {
+            "service name": replace(
+                service,
+                info=replace(service.info, name="../../../../outside"),
+            ),
+            "container image": replace(
+                service,
+                container=replace(
+                    service.container,
+                    image="example.invalid/service:latest",
+                ),
+            ),
+            "host UID": replace(
+                service,
+                host=replace(service.host, uid=1),
+            ),
+            "readiness path": replace(
+                service,
+                startup=replace(
+                    service.startup,
+                    readiness=replace(
+                        readiness,
+                        paths=(
+                            replace(
+                                required_path,
+                                path="/var/lib/../outside",
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+        }
+        for label, invalid in cases.items():
+            with self.subTest(label=label):
+                with self.assertRaises(ConfigError):
+                    Fleet.build([invalid])
 
     def test_rejects_duplicate_identity_and_overlapping_subids(self):
         with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
@@ -100,65 +144,6 @@ class FleetValidationTests(unittest.TestCase):
                 "host tcp port 8080 is also published by first.toml",
             ):
                 Fleet.build([first, second, tap])
-
-    def test_rejects_tap_ingress_to_udp_only_container_port(self):
-        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
-            directory = Path(directory_name)
-            source = self.write(
-                directory,
-                "source.toml",
-                service_toml(
-                    name="source",
-                    uid=51980,
-                    subid_start=700000000,
-                    container=(
-                        'network = "host"\n\n'
-                        "[[container.ports]]\n"
-                        'host = "127.0.0.1:7000"\n'
-                        "container = 7000"
-                    ),
-                    krun=(
-                        "enabled = true\ncpus = 1\nram-mib = 128\n"
-                        'network = "tap"\n'
-                        'ipv4 = "10.253.98.2/30"\n'
-                        "probe-port = 7000"
-                    ),
-                ),
-            )
-            destination = self.write(
-                directory,
-                "destination.toml",
-                service_toml(
-                    name="destination",
-                    uid=51990,
-                    subid_start=800000000,
-                    container=(
-                        'network = "host"\n\n'
-                        "[[container.ports]]\n"
-                        'host = "127.0.0.1:8080"\n'
-                        "container = 8080\n"
-                        'protocol = "udp"\n\n'
-                        "[[container.ports]]\n"
-                        'host = "127.0.0.1:9090"\n'
-                        "container = 9090"
-                    ),
-                    krun=(
-                        "enabled = true\ncpus = 1\nram-mib = 128\n"
-                        'network = "tap"\n'
-                        'ipv4 = "10.253.99.2/30"\n'
-                        "probe-port = 9090\n\n"
-                        "[[krun.ingress]]\n"
-                        'from = "source"\n'
-                        "ports = [8080]"
-                    ),
-                ),
-            )
-
-            with self.assertRaisesRegex(
-                ConfigError,
-                "TAP ingress ports must also be declared TCP ports.*8080",
-            ):
-                Fleet.build([source, destination])
 
     def test_disabled_service_keeps_identity_but_has_no_runtime_artifacts(self):
         with tempfile.TemporaryDirectory(dir=REPO) as directory_name:

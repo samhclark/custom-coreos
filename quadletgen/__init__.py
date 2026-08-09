@@ -25,6 +25,7 @@ from .model import (
     StartupSpec,
     UnitSpec,
     VolumeMount,
+    validate_service,
 )
 from .parser import load_service
 
@@ -53,5 +54,6 @@ __all__ = [
     "StartupSpec",
     "UnitSpec",
     "VolumeMount",
+    "validate_service",
     "load_service",
 ]

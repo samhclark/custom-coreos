@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,11 +32,28 @@ from .render_service import (
 )
 
 
+ARTIFACT_PATH_RE = re.compile(
+    r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+)
+
+
 @dataclass(frozen=True)
 class Artifact:
     path: Path
     content: str
     executable: bool = False
+
+    def __post_init__(self) -> None:
+        if (
+            self.path.is_absolute()
+            or not ARTIFACT_PATH_RE.fullmatch(self.path.as_posix())
+            or ".." in self.path.parts
+        ):
+            raise ConfigError(
+                f"artifact path must be normalized and relative: {self.path}"
+            )
+        if type(self.executable) is not bool:
+            raise ConfigError("artifact executable flag must be a boolean")
 
 
 def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
