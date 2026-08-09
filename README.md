@@ -70,6 +70,7 @@ This is not intended to be a polished appliance for other people. It is my own N
 - `gh` (GitHub CLI)
 - `skopeo`
 - `jq`
+- Python 3.11 or newer with `requirements-dev.txt` installed
 
 ### Common Commands
 
@@ -77,11 +78,17 @@ This is not intended to be a polished appliance for other people. It is my own N
 # Show all available commands
 make help
 
-# Check current versions and compatibility
-make versions
+# Check static contracts without changing the repository
+make check
+
+# Run behavioral tests
+make test
 
 # Build locally
 make build
+
+# Trigger the production publishing workflow
+make publish
 
 # Generate Ignition file from butane.yaml
 make generate-ignition
@@ -99,8 +106,8 @@ make all-workflows      # All workflows
 ### Local Development
 
 ```bash
-# Check if prebuilt ZFS modules are available
-make check
+# Verify current upstream inputs and prebuilt ZFS modules
+make check-zfs-available
 
 # View version information
 make zfs-version         # Latest ZFS version
@@ -300,7 +307,7 @@ Fedora CoreOS normally points `/usr/local` at `/var/usrlocal`, but this image in
 **Solution**: Check [`fedora-zfs-kmods`](https://github.com/samhclark/fedora-zfs-kmods) - either the ZFS+kernel combination is incompatible or the build hasn't run yet.
 
 **Problem**: Local build fails
-**Solution**: Run `make check` to verify ZFS kmod availability
+**Solution**: Run `make check-zfs-available` to verify ZFS kmod availability
 
 ### Workflow Issues
 
@@ -341,7 +348,7 @@ Apply fix declaratively:
 
 ## Contributing
 
-1. **Local development**: Use `make build`
+1. **Local development**: Run `make check`, `make test`, and `make build`
 2. **Configuration changes**: Update `butane.yaml` and test with `make generate-ignition`
 3. **CI/CD changes**: Test workflow changes with manual triggers
 4. **Version updates**: The system automatically tracks latest versions
