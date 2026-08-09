@@ -239,7 +239,7 @@ Rootless service accounts use namespaced host usernames and a reserved high UID 
 - UIDs are allocate-only: never reuse a UID from a retired service, because numeric file ownership (especially inside ZFS snapshots) outlives the user.
 - Rootless Quadlets for image-managed service users belong under `/etc/containers/systemd/users/$UID/`, not under `/usr/share/containers/systemd/users/$UID/`.
 - `quadlets/*.toml` and `AGENTS.md` are the allocation sources of truth; see
-  `docs/rootless-quadlet-playbook.md` for the compiler-driven service workflow.
+  `docs/development/rootless-quadlets.md` for the compiler-driven service workflow.
 
 That bootstrap path is not especially elegant, but it is acceptable for a single-user personal system.
 

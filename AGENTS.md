@@ -257,9 +257,9 @@ Images include labels for future deduplication:
 - `docs/architecture/release-and-testing.md` - Canonical gates, accepted publishing risk, and test boundaries
 - `AGENTS.md` - This file
 - `README.md` - User documentation
-- `docs/rootless-quadlet-playbook.md` - Repo-specific pattern for migrating and creating rootless Quadlets
-- `docs/jellyfin-monitoring-checklist.md` - API-key bootstrap, privacy contract, rollout checks, and interpretation guidance for the Jellyfin playback dashboard
-- `docs/plan-jellyfin-libkrun-hardware-transcoding.md` - Current evidence and decision log for preserving a VM boundary while pursuing Intel hardware transcoding
+- `docs/development/rootless-quadlets.md` - Repo-specific pattern for migrating and creating rootless Quadlets
+- `docs/operations/jellyfin-monitoring.md` - API-key bootstrap, privacy contract, and interpretation guidance for the Jellyfin playback dashboard
+- `docs/investigations/jellyfin-hardware-transcoding.md` - Current evidence and decision log for preserving a VM boundary while pursuing Intel hardware transcoding
 - `vendored-docs/podman-systemd.unit.5.md` - Vendored Quadlet reference, useful for rootless/systemd placement questions
 
 ## Development Patterns

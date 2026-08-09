@@ -22,7 +22,7 @@ DASHBOARD = (
 JELLYFIN_QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51120/jellyfin.container"
 ).read_text()
-LIVE_DIAGNOSTIC = (REPO / "docs/jellyfin-live-diagnostics.sh").read_text()
+LIVE_DIAGNOSTIC = (REPO / "scripts/diagnostics/jellyfin-live.sh").read_text()
 
 
 class JellyfinIntegrationTests(unittest.TestCase):
