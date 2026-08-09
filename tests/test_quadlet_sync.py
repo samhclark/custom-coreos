@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import contextlib
 import io
+import stat
 import tempfile
 import unittest
 from pathlib import Path
 
 from quadletgen.compiler import Artifact
+from quadletgen.model import ConfigError
 from quadletgen.sync import sync_artifacts
 from tests.quadlet_test_support import GENERATED_PREFIX, REPO
 
@@ -56,6 +58,72 @@ class ArtifactSynchronizationTests(unittest.TestCase):
 
             self.assertTrue(link.is_symlink())
             self.assertTrue(target.exists())
+
+    def test_sync_rejects_symlink_at_expected_output(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            repo = Path(directory_name)
+            overlay = repo / "overlay-root"
+            target = repo / "outside"
+            link = overlay / "etc/systemd/system/current.service"
+            link.parent.mkdir(parents=True)
+            target.write_text("untouched\n")
+            link.symlink_to(target)
+            artifact = Artifact(
+                Path("etc/systemd/system/current.service"),
+                "replacement\n",
+            )
+
+            with self.assertRaisesRegex(ConfigError, "symlinked artifact"):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    sync_artifacts(repo, overlay, (artifact,))
+
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(target.read_text(), "untouched\n")
+
+    def test_sync_rejects_symlinked_output_parent(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            repo = Path(directory_name)
+            overlay = repo / "overlay-root"
+            outside = repo / "outside"
+            overlay.mkdir()
+            outside.mkdir()
+            (overlay / "etc").symlink_to(outside, target_is_directory=True)
+            artifact = Artifact(
+                Path("etc/systemd/system/current.service"),
+                "replacement\n",
+            )
+
+            with self.assertRaisesRegex(ConfigError, "symlinked output directory"):
+                with contextlib.redirect_stdout(io.StringIO()):
+                    sync_artifacts(repo, overlay, (artifact,))
+
+            self.assertFalse((outside / "systemd/system/current.service").exists())
+
+    def test_sync_normalizes_executable_mode_in_both_directions(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            repo = Path(directory_name)
+            overlay = repo / "overlay-root"
+            artifact_path = Path("usr/local/bin/generated")
+            output = overlay / artifact_path
+            output.parent.mkdir(parents=True)
+            output.write_text("content\n")
+            output.chmod(0o755)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                sync_artifacts(
+                    repo,
+                    overlay,
+                    (Artifact(artifact_path, "content\n"),),
+                )
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o644)
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                sync_artifacts(
+                    repo,
+                    overlay,
+                    (Artifact(artifact_path, "content\n", executable=True),),
+                )
+            self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o755)
 
 
 if __name__ == "__main__":
