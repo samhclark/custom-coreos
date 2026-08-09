@@ -230,6 +230,9 @@ class Service:
     startup: StartupSpec = field(default_factory=StartupSpec)
     unit: UnitSpec = field(default_factory=UnitSpec)
 
+    def __post_init__(self) -> None:
+        _validate_service(self)
+
     @property
     def active_tap(self) -> bool:
         return self.container.enabled and isinstance(self.krun, KrunTap)
@@ -266,8 +269,8 @@ class Fleet:
     services: tuple[Service, ...]
 
     def __post_init__(self) -> None:
-        for service in self.services:
-            validate_service(service)
+        if any(not isinstance(service, Service) for service in self.services):
+            _fail("fleet.services", "must contain only Service instances")
         ordered = tuple(sorted(self.services, key=lambda service: service.host.uid))
         object.__setattr__(self, "services", ordered)
         _validate_fleet(ordered)
@@ -705,10 +708,8 @@ def _validate_unit(service: Service) -> None:
         )
 
 
-def validate_service(service: Service) -> None:
+def _validate_service(service: Service) -> None:
     """Validate every local invariant required by compilers and renderers."""
-    if not isinstance(service, Service):
-        _fail("service", "must be a Service instance")
     if not isinstance(service.source, Path):
         _fail("service.source", "must be a pathlib.Path")
     for field_name, value, expected_type in (
