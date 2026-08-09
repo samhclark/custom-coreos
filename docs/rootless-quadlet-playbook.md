@@ -178,7 +178,8 @@ Install the pinned development dependency, then run:
 ```bash
 python3 -m pip install --requirement requirements-dev.txt
 python3 generate-quadlets.py
-make verify-generated
+make check
+make test
 make build
 ```
 

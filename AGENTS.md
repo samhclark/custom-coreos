@@ -110,7 +110,9 @@ publish or deployment step by default.
 - `make versions` - Show ZFS, kernel versions and compatibility status
 - `make zfs-version` - Get latest ZFS release
 - `make kernel-version` - Get current CoreOS kernel version (script-based fallback if labels are missing)
-- `make check` - Verify prebuilt ZFS kmods exist for current versions
+- `make check` - Run static, non-mutating repository validation
+- `make test` - Run behavioral unit and integration tests
+- `make check-zfs-available` - Verify prebuilt ZFS kmods exist for current versions
 
 ### Building
 - `make build` - Build image locally with automatic version discovery
@@ -131,6 +133,9 @@ publish or deployment step by default.
 - `make cleanup-dry-run RETENTION_DAYS=N` - Test cleanup logic with configurable retention
 
 ### Verification
+- Run `make check` for static contracts and generated parity.
+- Run `make test` for behavioral coverage. These are intentionally separate
+  canonical commands.
 - After changing `butane.yaml`: run `make generate-ignition` to verify the config is valid Butane.
 - After changing `Containerfile` or `overlay-root/`: run `make build` to verify the image builds.
 - These are independent — the Ignition file and the container image are separate artifacts with separate CI workflows.
@@ -291,7 +296,7 @@ Images include labels for future deduplication:
 Current state:
 - Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, Garage, Jellyfin, and Jellyfin exporter are deployed as rootless admin-managed user Quadlets; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work
 - All nine image-defined rootless services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
-- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-check.yaml` job `verify-generated`) fails on drift. The generated account-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` for declared secrets.
+- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` for declared secrets.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
@@ -362,6 +367,6 @@ SELinux labels are stored as xattrs on files. ZFS snapshots capture xattrs. Roll
 
 ## Troubleshooting
 
-**Build failures**: Check `make check` - likely no prebuilt ZFS kmods for current versions
+**Build failures**: Check `make check-zfs-available` - likely no prebuilt ZFS kmods for current versions
 **Workflow failures**: Check `make all-workflows` for status
 **Ignition issues**: Verify with `make generate-ignition` locally first

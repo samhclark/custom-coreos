@@ -69,7 +69,7 @@ exist; they are not the active architecture description.
 4. Run `python3 generate-quadlets.py`. The compiler derives account enablement,
    subordinate IDs, service files, network policy, secret routing, and asset
    labeling inventories.
-5. Run `make verify-generated` and `make build`, then commit the source and
+5. Run `make check`, `make test`, and `make build`, then commit the source and
    generated artifacts together.
 6. Add a Caddy route and service-specific operator checks only if the service
    is user-facing.
