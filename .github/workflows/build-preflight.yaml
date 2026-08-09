@@ -1,0 +1,76 @@
+# ABOUTME: Reusable validation and build-input resolution shared by image workflows.
+
+name: Build Preflight
+
+on:
+  workflow_call:
+    outputs:
+      kernel-version:
+        description: Fedora CoreOS kernel version selected for the build
+        value: ${{ jobs.query-versions.outputs.kernel-version }}
+      zfs-version:
+        description: ZFS version selected for the build
+        value: ${{ jobs.query-versions.outputs.zfs-version }}
+
+jobs:
+  verify-generated:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install development dependencies
+        run: python3 -m pip install --requirement requirements-dev.txt
+
+      - name: Validate repository and generated artifacts
+        run: make verify-generated
+
+  verify-sops-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve SOPS image from Containerfile
+        id: sops-image
+        run: |
+          SOPS_IMAGE="$(awk '$1 == "FROM" && $2 ~ /^ghcr.io\/getsops\/sops:/ { print $2; exit }' Containerfile)"
+          if [[ -z "${SOPS_IMAGE}" ]]; then
+            echo "Failed to find SOPS image in Containerfile" >&2
+            exit 1
+          fi
+          echo "image=${SOPS_IMAGE}" >> "${GITHUB_OUTPUT}"
+          echo "Verifying ${SOPS_IMAGE}"
+
+      - name: Verify SOPS image signature
+        uses: samhclark/cosign-exec-action@f8a4f58b424b15fa5fee1795fd25e6de48f9609d # v1.1.0
+        with:
+          registry-token: ${{ github.token }}
+          args: >-
+            verify ${{ steps.sops-image.outputs.image }}
+            --certificate-identity-regexp=https://github.com/getsops
+            --certificate-oidc-issuer=https://token.actions.githubusercontent.com
+            -o text
+
+  query-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      kernel-version: ${{ steps.build-inputs.outputs.kernel-version }}
+      zfs-version: ${{ steps.build-inputs.outputs.zfs-version }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve and verify build inputs
+        id: build-inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/resolve-build-inputs.sh --github-output "${GITHUB_OUTPUT}"
