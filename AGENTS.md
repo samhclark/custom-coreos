@@ -77,7 +77,7 @@ Important non-container units:
 - The SOPS age private key is expected on the NAS as a `systemd-creds` file at `/var/lib/nas-secrets/age-key.cred`
 - `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, Alertmanager, and Jellyfin exporter secrets
 - The root-owned distributor writes per-service runtime files under `/run/nas-secrets/<service>/`; consuming rootless services mount those files read-only instead of using Podman `Secret=`
-- Rootless Podman secrets are not a validated production path. NAS testing showed that the former shell secret driver could not use meaningful `systemd-creds` key modes from rootless Podman's user-namespace context; see `docs/plan-sops-and-quadlet-generator.md` Appendix D before changing the runtime-file design.
+- Rootless Podman secrets are not a validated production path. NAS testing showed that the former shell secret driver could not use meaningful `systemd-creds` key modes from rootless Podman's user-namespace context; see `docs/architecture/secrets.md` before changing the runtime-file design.
 
 ### Manual Bootstrap Reality
 
@@ -251,6 +251,10 @@ Images include labels for future deduplication:
 - `.github/workflows/cleanup-images.yaml` - Registry maintenance
 
 ### Documentation
+- `docs/README.md` - Small index of authoritative architecture, development, and operations documentation
+- `docs/architecture/secrets.md` - Current rootless runtime-secret boundary and supporting NAS evidence
+- `docs/architecture/libkrun-networking.md` - Current routed-TAP data plane and fail-closed lifecycle
+- `docs/architecture/release-and-testing.md` - Canonical gates, accepted publishing risk, and test boundaries
 - `AGENTS.md` - This file
 - `README.md` - User documentation
 - `docs/rootless-quadlet-playbook.md` - Repo-specific pattern for migrating and creating rootless Quadlets
