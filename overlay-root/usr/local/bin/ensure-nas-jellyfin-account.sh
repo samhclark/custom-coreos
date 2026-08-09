@@ -38,17 +38,6 @@ ensure_subid_entry() {
     fi
 }
 
-ensure_fcontext_rule() {
-    local target="$1"
-
-    if semanage fcontext -a -t container_file_t -r s0 "${target}" 2>/dev/null; then
-        log "Added SELinux fcontext for ${target}"
-        return
-    fi
-
-    semanage fcontext -m -t container_file_t -r s0 "${target}"
-}
-
 if ! getent passwd "${USER_NAME}" >/dev/null; then
     log "User ${USER_NAME} does not exist yet, skipping"
     exit 0

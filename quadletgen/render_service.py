@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import re
 import textwrap
 
 from .headers import generated_header
 from .model import (
     Fleet,
     HttpReadiness,
-    KrunDisabled,
     KrunPasst,
     KrunTap,
     MarkerReadiness,
@@ -43,7 +43,7 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     lines += ["", "[Container]"]
     lines.append(f"ContainerName={info.name}")
     lines.append(f"Image={container.image}")
-    if krun is not None and not isinstance(krun, KrunDisabled):
+    if krun is not None:
         lines.append("PodmanArgs=--runtime=krun")
         lines.append(f"Annotation=krun.cpus={krun.cpus}")
         lines.append(f"Annotation=krun.ram_mib={krun.ram_mib}")
@@ -151,13 +151,14 @@ def container_unit(service: Service, fleet: Fleet) -> str:
             f"{host_ports}"
         )
     if service.active_tap:
+        probe_port = service.tap_spec.probe_port
         lines.append(
             "ExecStartPost=/usr/bin/bash -ceu '"
             "for i in {1..30}; do "
-            f"if /usr/bin/timeout 1 /usr/bin/bash -c \"</dev/tcp/{service.tap_guest.ip}/{service.tap_probe_port}\" "
+            f"if /usr/bin/timeout 1 /usr/bin/bash -c \"</dev/tcp/{service.tap_guest.ip}/{probe_port}\" "
             ">/dev/null 2>&1; "
             "then exit 0; fi; sleep 1; done; "
-            f"echo \"libkrun guest {service.tap_guest.ip}:{service.tap_probe_port} was not reachable\" >&2; "
+            f"echo \"libkrun guest {service.tap_guest.ip}:{probe_port} was not reachable\" >&2; "
             "exit 1'"
         )
     lines.append("Restart=always")
@@ -230,30 +231,32 @@ def tmpfiles_conf(service: Service) -> str:
 def ensure_account_script(service: Service) -> str:
     host = service.host
 
-    fcontext_vars = []
-    fcontext_calls = []
-    if service.assets is not None:
-        fcontext_vars.append(f'ASSETS_FCONTEXT="{service.assets.path}(/.*)?"')
-        fcontext_calls.append('ensure_fcontext_rule "${ASSETS_FCONTEXT}"')
-    if service.data is not None:
-        fcontext_vars.append(f'DATA_FCONTEXT="{service.data.path}(/.*)?"')
-        fcontext_calls.append('ensure_fcontext_rule "${DATA_FCONTEXT}"')
-
+    data_fcontext_var = ""
+    fcontext_function = ""
     data_block = ""
     if service.data is not None:
-        data_block = f"""
-if [[ -e {service.data.path} ]]; then
-    log "Restoring SELinux labels for {service.data.path}"
-    restorecon -F -R {service.data.path}
-fi
-"""
+        data_fcontext = re.escape(service.data.path) + r"(/.*)?"
+        data_fcontext_var = f'\nDATA_FCONTEXT="{data_fcontext}"'
+        fcontext_function = """
 
-    fcontext_var_lines = (
-        "\n" + "\n".join(fcontext_vars) if fcontext_vars else ""
-    )
-    fcontext_call_lines = (
-        "\n".join(fcontext_calls) + "\n" if fcontext_calls else ""
-    )
+ensure_fcontext_rule() {
+    local target="$1"
+
+    if semanage fcontext -a -t container_file_t -r s0 "${target}" 2>/dev/null; then
+        log "Added SELinux fcontext for ${target}"
+        return
+    fi
+
+    semanage fcontext -m -t container_file_t -r s0 "${target}"
+}"""
+        data_block = f"""
+
+ensure_fcontext_rule "${{DATA_FCONTEXT}}"
+
+if [[ -e "{service.data.path}" ]]; then
+    log "Restoring SELinux labels for {service.data.path}"
+    restorecon -F -R -- "{service.data.path}"
+fi"""
 
     return f"""#!/bin/bash
 {header(service)}
@@ -267,7 +270,7 @@ USER_UID="{host.uid}"
 USER_HOME="/var/home/{host.username}"
 USER_SHELL="/sbin/nologin"
 USER_SUBID_START="{host.subid_start}"
-USER_SUBID_COUNT="{SUBID_COUNT}"{fcontext_var_lines}
+USER_SUBID_COUNT="{SUBID_COUNT}"{data_fcontext_var}
 
 log() {{
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -293,18 +296,7 @@ ensure_subid_entry() {{
     if [[ "${{current}}" != "${{expected}}" ]]; then
         log "Leaving existing ${{file}} entry for ${{USER_NAME}}: ${{current}}"
     fi
-}}
-
-ensure_fcontext_rule() {{
-    local target="$1"
-
-    if semanage fcontext -a -t container_file_t -r s0 "${{target}}" 2>/dev/null; then
-        log "Added SELinux fcontext for ${{target}}"
-        return
-    fi
-
-    semanage fcontext -m -t container_file_t -r s0 "${{target}}"
-}}
+}}{fcontext_function}
 
 if ! getent passwd "${{USER_NAME}}" >/dev/null; then
     log "User ${{USER_NAME}} does not exist yet, skipping"
@@ -336,8 +328,8 @@ if [[ "${{current_shell}}" != "${{USER_SHELL}}" ]]; then
 fi
 
 ensure_subid_entry /etc/subuid
-ensure_subid_entry /etc/subgid
-{fcontext_call_lines}{data_block}
+ensure_subid_entry /etc/subgid{data_block}
+
 if systemctl is-failed --quiet "user@${{USER_UID}}.service"; then
     log "Retrying user@${{USER_UID}}.service after account setup"
     systemctl reset-failed "user@${{USER_UID}}.service"

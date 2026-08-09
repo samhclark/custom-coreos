@@ -27,6 +27,7 @@ cpus = 1
 ram-mib = 256
 network = "tap"
 ipv4 = "10.253.6.2/30"
+probe-port = 9093
 
 [[krun.ingress]]
 from = "vmalert"

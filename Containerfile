@@ -149,13 +149,12 @@ RUN /bin/bash -c 'set -euo pipefail; \
 
 RUN /bin/bash -c 'set -euo pipefail; \
     mapfile -t image_assets < <( \
-        awk "!/^#/" /usr/share/custom-coreos/fleet/assets.list \
+        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/assets.list \
     ); \
     for asset in "${image_assets[@]}"; do \
         semanage fcontext -a -t container_file_t -r s0 "${asset}(/.*)?"; \
-    done; \
-    semanage fcontext -a -t container_file_t -r s0 "/var/lib/grafana(/.*)?"; \
-    restorecon -F -R "${image_assets[@]}"'
+        restorecon -F -R -- "${asset}"; \
+    done'
 
 RUN ["bootc", "container", "lint"]
 

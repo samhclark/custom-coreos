@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .headers import generated_header
-from .model import Fleet, Protocol, Service
+from .model import Fleet, Service
 
 
 KRUN_DNS_SERVERS = ("100.100.100.100", "75.75.75.75", "75.75.76.76")

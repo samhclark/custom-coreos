@@ -18,6 +18,7 @@ GH           ?= gh
 SKOPEO       ?= skopeo
 BUTANE_IMAGE ?= quay.io/coreos/butane:release
 PYTHON       ?= python3
+TY           ?= ty
 
 ## Colors
 COLOR_BLUE  = \033[34m
@@ -79,8 +80,8 @@ test: ## Run unit tests
 	@python3 -m unittest discover -s tests -v
 
 .PHONY: typecheck
-typecheck: ## Run strict static type checks for the Quadlet generator
-	@$(PYTHON) -m mypy
+typecheck: ## Run strict static Python type checks
+	@$(TY) check
 
 .PHONY: verify-generated
 verify-generated: typecheck test ## Validate types, tests, and generated artifact parity
