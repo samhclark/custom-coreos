@@ -5,7 +5,7 @@ Documentation=https://caddyserver.com/docs/
 
 [Container]
 ContainerName=caddy
-Image=ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:78331c4abc23f4f3f39675745af20b06d9aae97ae244772414e7933c8c1ab054
+Image=ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:fc548596b7bbc0ec5aa82a495e74652cecb4602fad3bb63b2d707ca4e6e1e555
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=512
