@@ -87,10 +87,10 @@ Host publication accepts only:
 - `127.0.0.1`: host-loopback access, typically for Caddy or monitoring;
 - `0.0.0.0`: all host addresses for intentionally public services.
 
-Use `[[krun.ingress]]` for service-to-service access. `from` names another
-active TOML service; its allowed destination ports must also be declared by the
-destination. Use `[krun].host-access` only for a guest that must reach a
-specific TCP listener on its own host gateway.
+Use `[[krun.ingress]]` for service-to-service TCP access. `from` names another
+active TOML service; its allowed destination ports must also be declared as TCP
+ports by the destination. Use `[krun].host-access` only for a guest that must
+reach a specific TCP listener on its own host gateway.
 
 The compiler generates TAP ownership, DHCP, peer `*.krun` host entries,
 anti-spoofing, explicit ingress, DNAT/SNAT, and outbound NAT. Do not add Podman

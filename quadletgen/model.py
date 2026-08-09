@@ -296,15 +296,19 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
         if network in tap_networks:
             _fail(name, f"TAP subnet {network} is also used by {tap_networks[network]}")
         tap_networks[network] = name
-        declared_ports = {port.container_port for port in service.container.ports}
+        declared_tcp_ports = {
+            port.container_port
+            for port in service.container.ports
+            if port.protocol is Protocol.TCP
+        }
         for rule in tap.ingress:
             if rule.source not in tap_names:
                 _fail(name, f"unknown TAP source service {rule.source!r}")
-            unknown_ports = sorted(set(rule.ports) - declared_ports)
+            unknown_ports = sorted(set(rule.ports) - declared_tcp_ports)
             if unknown_ports:
                 _fail(
                     name,
-                    "TAP ingress ports must also be declared in "
+                    "TAP ingress ports must also be declared TCP ports in "
                     "[[container.ports]]: " + ", ".join(map(str, unknown_ports)),
                 )
         if not any(

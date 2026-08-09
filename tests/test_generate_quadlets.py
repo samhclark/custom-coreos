@@ -884,6 +884,65 @@ class FleetValidationTests(unittest.TestCase):
             ):
                 Fleet.build([first, second, tap])
 
+    def test_rejects_tap_ingress_to_udp_only_container_port(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            directory = Path(directory_name)
+            source = self.write(
+                directory,
+                "source.toml",
+                service_toml(
+                    name="source",
+                    uid=51980,
+                    subid_start=700000000,
+                    container=(
+                        'network = "host"\n\n'
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:7000"\n'
+                        "container = 7000"
+                    ),
+                    krun=(
+                        "enabled = true\ncpus = 1\nram-mib = 128\n"
+                        'network = "tap"\n'
+                        'ipv4 = "10.253.98.2/30"\n'
+                        "probe-port = 7000"
+                    ),
+                ),
+            )
+            destination = self.write(
+                directory,
+                "destination.toml",
+                service_toml(
+                    name="destination",
+                    uid=51990,
+                    subid_start=800000000,
+                    container=(
+                        'network = "host"\n\n'
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:8080"\n'
+                        "container = 8080\n"
+                        'protocol = "udp"\n\n'
+                        "[[container.ports]]\n"
+                        'host = "127.0.0.1:9090"\n'
+                        "container = 9090"
+                    ),
+                    krun=(
+                        "enabled = true\ncpus = 1\nram-mib = 128\n"
+                        'network = "tap"\n'
+                        'ipv4 = "10.253.99.2/30"\n'
+                        "probe-port = 9090\n\n"
+                        "[[krun.ingress]]\n"
+                        'from = "source"\n'
+                        "ports = [8080]"
+                    ),
+                ),
+            )
+
+            with self.assertRaisesRegex(
+                ConfigError,
+                "TAP ingress ports must also be declared TCP ports.*8080",
+            ):
+                Fleet.build([source, destination])
+
     def test_disabled_service_keeps_identity_but_has_no_runtime_artifacts(self):
         with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
             directory = Path(directory_name)
