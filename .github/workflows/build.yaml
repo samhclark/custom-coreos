@@ -9,6 +9,10 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+concurrency:
+  group: custom-coreos-publisher
+  cancel-in-progress: false
+
 jobs:
   preflight:
     uses: ./.github/workflows/build-preflight.yaml

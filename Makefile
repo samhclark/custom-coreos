@@ -143,10 +143,13 @@ generate-quadlets: ## Generate quadlet files using the custom generator
 
 ##@ GitHub Workflows
 
-.PHONY: run-workflow
-run-workflow: ## Trigger the build GitHub Actions workflow
+.PHONY: publish
+publish: ## Trigger the production image publishing workflow
 	@$(GH) workflow run build.yaml
 	@printf "$(COLOR_GREEN)Triggered build.yaml$(COLOR_RESET)\n"
+
+.PHONY: run-workflow
+run-workflow: publish ## Compatibility alias for publish
 
 .PHONY: run-pages
 run-pages: ## Trigger Ignition file generation and GitHub Pages deployment
