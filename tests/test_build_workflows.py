@@ -53,6 +53,12 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertEqual(all_workflows.count(identity), 1)
         self.assertEqual(all_workflows.count(issuer), 1)
 
+    def test_production_publisher_is_serialized_without_cancellation(self):
+        workflow = (WORKFLOWS / "build.yaml").read_text()
+
+        self.assertIn("group: custom-coreos-publisher", workflow)
+        self.assertIn("cancel-in-progress: false", workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
