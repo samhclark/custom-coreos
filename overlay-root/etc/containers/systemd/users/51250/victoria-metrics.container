@@ -40,7 +40,7 @@ Exec=-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.conf
 ExecStartPre=/usr/bin/test -c /dev/net/tun
 ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/nas-krun-network/policy-ready && /usr/bin/test -e /sys/class/net/krun-51250; then exit 0; fi; sleep 1; done; echo "krun network policy was not ready within 90 seconds" >&2; exit 1'
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/victoria-metrics/garage-metrics-token
-ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh marker /run/victoria-metrics-dataset/ready 300 2 /var/lib/victoria-metrics=tank/victoria-metrics/data
+ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh marker /run/victoria-metrics-dataset/ready 300 2 --path /var/lib/victoria-metrics --source tank/victoria-metrics/data --owner 51250:51250 --access w
 ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.7.2/8428" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.7.2:8428 was not reachable" >&2; exit 1'
 Restart=always
 RestartSec=30

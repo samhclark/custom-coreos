@@ -221,8 +221,9 @@ class StartupPolicyTests(unittest.TestCase):
         ]
         self.assertIn(
             "nas-wait-for-readiness.sh marker /run/garage-datasets/ready "
-            "3600 2 /var/lib/garage/meta=tank/garage/meta "
-            "/var/lib/garage/data=tank/garage/data",
+            "3600 2 --path /var/lib/garage/meta --source tank/garage/meta "
+            "--owner 51110:51110 --access w --path /var/lib/garage/data "
+            "--source tank/garage/data --owner 51110:51110 --access w",
             garage,
         )
         self.assertIn(
@@ -230,7 +231,17 @@ class StartupPolicyTests(unittest.TestCase):
             garage,
         )
         self.assertIn(
-            "/var/zfs/tank/videos=tank/videos",
+            "--path /var/lib/jellyfin/config --source tank/jellyfin/config "
+            "--owner 51120:51120 --access w",
+            jellyfin,
+        )
+        self.assertIn(
+            "--path /var/zfs/tank/videos --source tank/videos",
+            jellyfin,
+        )
+        self.assertIn(
+            "--path /var/zfs/tank/videos/movies --access rx "
+            "--path /var/zfs/tank/videos/tv-shows --access rx",
             jellyfin,
         )
         self.assertIn(

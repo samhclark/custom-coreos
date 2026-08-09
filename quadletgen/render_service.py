@@ -12,6 +12,8 @@ from .model import (
     KrunPasst,
     KrunTap,
     MarkerReadiness,
+    PathAccess,
+    RequiredOwner,
     Protocol,
     SUBID_COUNT,
     Service,
@@ -125,14 +127,26 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     ]
     readiness = service.startup.readiness
     if isinstance(readiness, MarkerReadiness):
-        mounts = "".join(
-            f" {mount.path}={mount.source}"
-            for mount in readiness.mounts
-        )
+        required_paths = ""
+        for required_path in readiness.paths:
+            required_paths += f" --path {required_path.path}"
+            if required_path.mount_source is not None:
+                required_paths += f" --source {required_path.mount_source}"
+            if required_path.owner is RequiredOwner.SERVICE:
+                required_paths += f" --owner {service.host.uid}:{service.host.uid}"
+            if required_path.access:
+                access_flags = {
+                    PathAccess.READ: "r",
+                    PathAccess.WRITE: "w",
+                    PathAccess.EXECUTE: "x",
+                }
+                required_paths += " --access " + "".join(
+                    access_flags[access] for access in required_path.access
+                )
         lines.append(
             "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh "
             f"marker {readiness.marker} {readiness.timeout_sec} "
-            f"{readiness.interval_sec}{mounts}"
+            f"{readiness.interval_sec}{required_paths}"
         )
     elif isinstance(readiness, HttpReadiness):
         lines.append(

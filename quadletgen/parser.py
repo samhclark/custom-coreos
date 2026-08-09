@@ -24,10 +24,12 @@ from .model import (
     KrunTap,
     KrunTsi,
     MarkerReadiness,
+    PathAccess,
     Protocol,
     PublishedPort,
     ReadinessSpec,
-    RequiredMount,
+    RequiredOwner,
+    RequiredPath,
     SecretMount,
     Service,
     ServiceInfo,
@@ -673,8 +675,8 @@ def _parse_unit(raw: object, name: str) -> UnitSpec:
     )
 
 
-def _parse_required_mounts(raw: object, name: str) -> tuple[RequiredMount, ...]:
-    path = f"{name}: [[startup.readiness.mounts]]"
+def _parse_required_paths(raw: object, name: str) -> tuple[RequiredPath, ...]:
+    path = f"{name}: [[startup.readiness.paths]]"
     if raw is None:
         return ()
     if not isinstance(raw, list):
@@ -683,25 +685,69 @@ def _parse_required_mounts(raw: object, name: str) -> tuple[RequiredMount, ...]:
     seen = set()
     for index, item in enumerate(raw, start=1):
         item_path = f"{path}[{index}]"
-        table = _table(item, item_path, {"path", "source"})
-        mount_path = _absolute_path(
+        table = _table(
+            item,
+            item_path,
+            {"path", "mount-source", "owner", "access"},
+        )
+        required_path = _absolute_path(
             _required(table, "path", item_path),
             f"{item_path}.path",
         )
-        source = _string(
-            _required(table, "source", item_path),
-            f"{item_path}.source",
-        )
-        if not ZFS_SOURCE_RE.fullmatch(source):
-            _fail(
-                f"{item_path}.source",
-                "must be a portable filesystem source name",
+        if required_path in seen:
+            _fail(item_path, "duplicates an earlier path requirement")
+        seen.add(required_path)
+
+        mount_source = None
+        if "mount-source" in table:
+            mount_source = _string(
+                table["mount-source"],
+                f"{item_path}.mount-source",
             )
-        key = (mount_path, source)
-        if key in seen:
-            _fail(item_path, "duplicates an earlier mount requirement")
-        seen.add(key)
-        result.append(RequiredMount(mount_path, source))
+            if not ZFS_SOURCE_RE.fullmatch(mount_source):
+                _fail(
+                    f"{item_path}.mount-source",
+                    "must be a portable filesystem source name",
+                )
+
+        owner = None
+        if "owner" in table:
+            owner_text = _string(table["owner"], f"{item_path}.owner")
+            try:
+                owner = RequiredOwner(owner_text)
+            except ValueError:
+                _fail(
+                    f"{item_path}.owner",
+                    f"must be {RequiredOwner.SERVICE.value!r}",
+                )
+
+        access = []
+        for index, access_name in enumerate(
+            _string_array(table.get("access", []), f"{item_path}.access"),
+            start=1,
+        ):
+            try:
+                path_access = PathAccess(access_name)
+            except ValueError:
+                _fail(
+                    f"{item_path}.access[{index}]",
+                    "must be one of read, write, execute",
+                )
+            if path_access in access:
+                _fail(
+                    f"{item_path}.access[{index}]",
+                    "duplicates an earlier access requirement",
+                )
+            access.append(path_access)
+
+        result.append(
+            RequiredPath(
+                required_path,
+                mount_source,
+                owner,
+                tuple(access),
+            )
+        )
     return tuple(result)
 
 
@@ -737,7 +783,7 @@ def _parse_startup(
     readiness = _table(
         readiness_raw,
         readiness_path,
-        {"marker", "url", "timeout-sec", "interval-sec", "mounts"},
+        {"marker", "url", "timeout-sec", "interval-sec", "paths"},
     )
     marker_present = "marker" in readiness
     url_present = "url" in readiness
@@ -772,12 +818,12 @@ def _parse_startup(
             marker,
             timeout_sec,
             interval_sec,
-            _parse_required_mounts(readiness.get("mounts"), name),
+            _parse_required_paths(readiness.get("paths"), name),
         )
     else:
-        if "mounts" in readiness:
+        if "paths" in readiness:
             _fail(
-                f"{readiness_path}.mounts",
+                f"{readiness_path}.paths",
                 "is supported only with marker readiness",
             )
         url = _http_url(readiness["url"], f"{readiness_path}.url")

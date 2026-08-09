@@ -80,14 +80,26 @@ marker = "/run/jellyfin-storage/ready"
 timeout-sec = 3600
 interval-sec = 2
 
-[[startup.readiness.mounts]]
+[[startup.readiness.paths]]
 path = "/var/lib/jellyfin/config"
-source = "tank/jellyfin/config"
+mount-source = "tank/jellyfin/config"
+owner = "service"
+access = ["write"]
 
-[[startup.readiness.mounts]]
+[[startup.readiness.paths]]
 path = "/var/lib/jellyfin/cache"
-source = "tank/jellyfin/cache"
+mount-source = "tank/jellyfin/cache"
+owner = "service"
+access = ["write"]
 
-[[startup.readiness.mounts]]
+[[startup.readiness.paths]]
 path = "/var/zfs/tank/videos"
-source = "tank/videos"
+mount-source = "tank/videos"
+
+[[startup.readiness.paths]]
+path = "/var/zfs/tank/videos/movies"
+access = ["read", "execute"]
+
+[[startup.readiness.paths]]
+path = "/var/zfs/tank/videos/tv-shows"
+access = ["read", "execute"]

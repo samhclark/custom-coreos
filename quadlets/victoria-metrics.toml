@@ -69,6 +69,8 @@ marker = "/run/victoria-metrics-dataset/ready"
 timeout-sec = 300
 interval-sec = 2
 
-[[startup.readiness.mounts]]
+[[startup.readiness.paths]]
 path = "/var/lib/victoria-metrics"
-source = "tank/victoria-metrics/data"
+mount-source = "tank/victoria-metrics/data"
+owner = "service"
+access = ["write"]
