@@ -535,18 +535,22 @@ def _parse_startup(
     if raw is None:
         return StartupSpec()
     path = f"{name}: [startup]"
-    table = _table(raw, path, {"readiness", "reject-published-tcp-ports"})
-    reject_conflicts = (
+    table = _table(
+        raw,
+        path,
+        {"readiness", "require-published-tcp-ports-free"},
+    )
+    require_free_ports = (
         _boolean(
-            table["reject-published-tcp-ports"],
-            f"{path}.reject-published-tcp-ports",
+            table["require-published-tcp-ports-free"],
+            f"{path}.require-published-tcp-ports-free",
         )
-        if "reject-published-tcp-ports" in table
+        if "require-published-tcp-ports-free" in table
         else False
     )
     readiness_raw = table.get("readiness")
     if readiness_raw is None:
-        return StartupSpec(reject_published_tcp_ports=reject_conflicts)
+        return StartupSpec(require_published_tcp_ports_free=require_free_ports)
 
     readiness_path = f"{name}: [startup.readiness]"
     readiness = _table(
@@ -585,7 +589,10 @@ def _parse_startup(
             )
         url = _string(readiness["url"], f"{readiness_path}.url")
         readiness_spec = HttpReadiness(url, timeout_sec, interval_sec)
-    return StartupSpec(readiness_spec, reject_conflicts)
+    return StartupSpec(
+        readiness=readiness_spec,
+        require_published_tcp_ports_free=require_free_ports,
+    )
 
 
 def load_service(toml_path: Path) -> Service:

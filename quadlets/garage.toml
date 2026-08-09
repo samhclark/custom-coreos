@@ -81,7 +81,7 @@ path = "/usr/share/custom-coreos/garage"
 timeout-start-sec = 4200
 
 [startup]
-reject-published-tcp-ports = true
+require-published-tcp-ports-free = true
 
 [startup.readiness]
 marker = "/run/garage-datasets/ready"

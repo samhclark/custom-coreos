@@ -163,9 +163,13 @@ path = "/var/lib/example"
 source = "tank/example"
 ```
 
-Use `[startup].reject-published-tcp-ports = true` when migration or stale host
-processes could already own the service's declared TCP ports. The generated
-unit invokes fixed host helpers; raw `[unit.extra]` directives are rejected.
+`[startup].require-published-tcp-ports-free = true` is an intentionally
+service-specific migration diagnostic. Use it only when a retired or stale
+host process could still listen on that service's declared TCP ports, as
+retained for the Garage, Jellyfin, and Jellyfin exporter deployments. It is not
+a universal TAP requirement or a security boundary: it checks immediately
+before startup but cannot prevent a later listener race. The generated unit
+invokes fixed host helpers; raw `[unit.extra]` directives are rejected.
 
 ### 7. Generate and validate
 
