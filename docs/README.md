@@ -11,6 +11,8 @@ here rather than reading rollout plans or evidence logs.
   routed TAP data plane and fail-closed lifecycle
 - [`architecture/release-and-testing.md`](architecture/release-and-testing.md) —
   development gates, publishing policy, and deliberately deferred tests
+- [`architecture/storage.md`](architecture/storage.md) — typed service storage,
+  generated host preparation, and non-destructive repair policy
 
 ## Development and operations
 

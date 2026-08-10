@@ -49,10 +49,7 @@ These are considered active and in use on the real machine unless explicitly sta
 
 Important non-container units:
 - `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and writes per-service runtime secret files at boot
-- `prepare-caddy-state.service` - creates and verifies Caddy's two persistent state trees and publishes current-boot readiness
-- `zfs-create-garage-datasets.service` - creates/tunes Garage datasets and applies persistent SELinux labeling
-- `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
-- `zfs-prepare-jellyfin-storage.service` - creates Jellyfin config/cache datasets and verifies read-only access plus persistent SELinux labeling for `tank/videos`
+- `nas-prepare-<service>-storage.service` - generated preparation and current-boot readiness for Caddy, Alertmanager, Grafana, Garage, VictoriaMetrics, and Jellyfin storage
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
 - `zfs-snapshots-*@.timer` - rolling snapshot retention for selected datasets
 
@@ -69,6 +66,7 @@ Important non-container units:
 - VictoriaMetrics data lives under `tank/victoria-metrics/data`
 - Jellyfin state lives under `tank/jellyfin/{config,cache}`; `tank/videos` is mounted at `/var/zfs/tank/videos`, with `movies` and `tv-shows` exposed read-only to Jellyfin
 - Large ZFS-backed container data paths are labeled persistently with `semanage fcontext` + `restorecon -F -R`; do not casually switch them to Podman `:Z` / `:z`
+- `quadlets/*.toml` `[[storage]]` declarations are the source of truth for host creation/verification, SELinux policy, container mounts, and readiness; raw `/var` container volumes are rejected
 
 ### Secrets Model
 
@@ -290,7 +288,7 @@ Images include labels for future deduplication:
 Current state:
 - Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, Garage, Jellyfin, and Jellyfin exporter are deployed as rootless admin-managed user Quadlets; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work
 - All nine image-defined rootless services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
-- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` for declared secrets.
+- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `python3 generate-quadlets.py`, and commit both. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, storage-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` for declared secrets.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
@@ -304,9 +302,9 @@ Useful reference points for future rootless work:
 - Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
 - vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
 - Alertmanager's static config lives under `/usr/share/custom-coreos/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
-- VictoriaMetrics' scrape config lives under `/usr/share/custom-coreos/victoria-metrics/`; `zfs-create-victoria-metrics-dataset.service` creates, tunes, and verifies its large ZFS data path
-- Garage's config lives under `/usr/share/custom-coreos/garage/`; `zfs-create-garage-datasets.service` creates and tunes both ZFS datasets, checks only roots and bounded samples during normal boots, and reserves recursive work for explicit repair or an interrupted repair. To request a full ownership and SELinux repair, stop the rootless Garage service, create `/var/lib/nas-repairs/garage/repair-required`, and restart the preparation service.
-- Caddy's two small persistent state trees are created, labeled, and fully verified by `prepare-caddy-state.service`; its user Quadlet waits for that service's current-boot readiness marker
+- Stateful service storage is declared under `[[storage]]`. Generated preparation units create only missing managed resources, verify exact mounts/properties, maintain persistent SELinux policy, and publish `/run/nas-storage/<service>/ready`; see `docs/architecture/storage.md`.
+- Caddy, Alertmanager, and Grafana use small directory storage with guarded automatic repair. Garage, VictoriaMetrics, and Jellyfin use explicit-repair ZFS storage; create `/var/lib/nas-repairs/<service>/repair-required` and restart `nas-prepare-<service>-storage.service` only after reviewing why the bounded check failed.
+- Jellyfin's `tank/videos` declaration is required-existing, preserve-owner, and read-only. The generic runtime may repair labels after an explicit request but never creates that dataset or changes its ownership/modes.
 - The image carries a narrowly scoped crun 1.28 patch adding `krun.tap_name`; it calls libkrun's upstream `krun_add_net_tap()` with the embedded DHCP client enabled. TAP-backed Quadlets must include `AddDevice=/dev/net/tun` because libkrun opens that device after entering the container mount namespace.
 - `systemd-networkd` owns only the generated `krun-*` TAPs; NetworkManager explicitly ignores that pattern. Each service has a dedicated /30, a one-address DHCP pool with Rapid Commit, and a TAP owned by that service's host account. Generated nftables rules provide anti-spoofing, declared inter-service edges, host publication, and outbound NAT. Do not hand-edit generated `.netdev`, `.network`, or `nas-krun-*.nft` files.
 - The generated `nas-krun-network-policy.service` is the fail-closed readiness boundary for TAP guests. It publishes a current-boot marker only after networkd configures every active TAP and nftables exposes the required chains; TAP Quadlets wait for that marker and verify a guest TCP listener after startup so a missed one-shot DHCP exchange forces a VM restart. Stopping networkd or nftables removes readiness and stops the dedicated service user managers before the ruleset is flushed. Do not weaken this lifecycle ordering or start TAP guests based only on TAP existence.
