@@ -17,6 +17,10 @@ PODMAN       ?= podman
 GH           ?= gh
 SKOPEO       ?= skopeo
 JQ           ?= jq
+QEMU         ?= qemu-system-x86_64
+QEMU_IMG     ?= qemu-img
+TIMEOUT      ?= timeout
+OVMF_CODE    ?= /usr/share/edk2/ovmf/OVMF_CODE.fd
 BUTANE_IMAGE ?= quay.io/coreos/butane:release@sha256:13fec166cb47a8e053dcc23256c0ca41aaa1c61cab39793832aaf8894ca78c8f
 SHELLCHECK_IMAGE ?= docker.io/koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
 PYTHON       ?= python3
@@ -77,7 +81,7 @@ versions: ## Show all relevant versions and verify ZFS kmod availability
 ##@ Development
 
 .PHONY: check
-check: typecheck check-generated check-shell check-ignition ## Run static, non-mutating repository checks
+check: typecheck check-generated check-shell check-ignition check-vm-ignition ## Run static, non-mutating repository checks
 
 .PHONY: check-generated
 check-generated: ## Verify generated artifacts are current without changing them
@@ -92,10 +96,15 @@ check-shell: ## Check all maintained shell programs
 
 .PHONY: check-ignition
 check-ignition: ## Validate Butane strictly without writing ignition.json
-	@$(PODMAN) run --rm --interactive \
-		--security-opt label=disable \
-		--volume "$(PWD)":/pwd --workdir /pwd \
+	@$(PODMAN) run --rm --interactive --network=none \
+		--read-only --cap-drop=all --security-opt=no-new-privileges \
 		$(BUTANE_IMAGE) --strict < butane.yaml >/dev/null
+
+.PHONY: check-vm-ignition
+check-vm-ignition: ## Validate the storage-free VM smoke Ignition fixture
+	@$(PODMAN) run --rm --interactive --network=none \
+		--read-only --cap-drop=all --security-opt=no-new-privileges \
+		$(BUTANE_IMAGE) --strict < tests/vm-smoke.bu >/dev/null
 
 .PHONY: check-zfs-available
 check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
@@ -137,12 +146,20 @@ verify-image: ## Verify the exact locally built image without network or host mo
 	@CONTAINER_CLI="$(PODMAN)" \
 		./scripts/verify-built-image.sh "$(IMAGE_NAME):$(TAG)"
 
+.PHONY: test-vm
+test-vm: deps-vm ## Boot a fresh QCOW in an isolated VM; set QCOW=/absolute/path
+	@test -n "$(QCOW)" || \
+		(printf "$(COLOR_RED)Set QCOW to an absolute fresh QCOW2 image path.$(COLOR_RESET)\n" && false)
+	@CONTAINER_CLI="$(PODMAN)" BUTANE_IMAGE="$(BUTANE_IMAGE)" \
+		QEMU_BIN="$(QEMU)" QEMU_IMG_BIN="$(QEMU_IMG)" JQ_BIN="$(JQ)" \
+		TIMEOUT_BIN="$(TIMEOUT)" OVMF_CODE="$(OVMF_CODE)" \
+		./scripts/run-vm-smoke.sh "$(QCOW)"
+
 .PHONY: generate-ignition
 generate-ignition: ## Generate ignition.json from butane.yaml
 	@printf "$(COLOR_BLUE)Generating ignition.json from butane.yaml...$(COLOR_RESET)\n"
-	@$(PODMAN) run --rm --interactive \
-		--security-opt label=disable \
-		--volume "$(PWD)":/pwd --workdir /pwd \
+	@$(PODMAN) run --rm --interactive --network=none \
+		--read-only --cap-drop=all --security-opt=no-new-privileges \
 		$(BUTANE_IMAGE) --strict < butane.yaml > ignition.json
 	@printf "$(COLOR_GREEN)Generated ignition.json$(COLOR_RESET)\n"
 
@@ -205,6 +222,22 @@ cleanup-dry-run: ## Plan cleanup locally; set RETENTION_DAYS=N to configure (def
 .PHONY: deps
 deps: deps-check-podman deps-check-gh deps-check-skopeo deps-check-jq deps-check-python deps-check-ty ## Check that required tools are available
 	@printf "$(COLOR_GREEN)All deps present!$(COLOR_RESET)\n"
+
+.PHONY: deps-vm
+deps-vm: deps-check-podman deps-check-jq ## Check optional VM smoke dependencies without installing them
+	@$(PODMAN) image exists "$(BUTANE_IMAGE)" || \
+		(printf "$(COLOR_RED)Pinned Butane image is not local; run make check first.$(COLOR_RESET)\n" && false)
+	@command -v $(QEMU) >/dev/null || \
+		(printf "$(COLOR_RED)$(QEMU) not found.$(COLOR_RESET)\n" && false)
+	@command -v $(QEMU_IMG) >/dev/null || \
+		(printf "$(COLOR_RED)$(QEMU_IMG) not found.$(COLOR_RESET)\n" && false)
+	@command -v $(TIMEOUT) >/dev/null || \
+		(printf "$(COLOR_RED)$(TIMEOUT) not found.$(COLOR_RESET)\n" && false)
+	@test -r "$(OVMF_CODE)" || \
+		(printf "$(COLOR_RED)OVMF firmware not readable: $(OVMF_CODE)$(COLOR_RESET)\n" && false)
+	@test -r /dev/kvm && test -w /dev/kvm || \
+		(printf "$(COLOR_RED)/dev/kvm is not accessible.$(COLOR_RESET)\n" && false)
+	@printf "$(COLOR_GREEN)VM smoke deps present!$(COLOR_RESET)\n"
 
 .PHONY: deps-check-podman
 deps-check-podman: ## Check that podman is available
