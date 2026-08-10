@@ -38,13 +38,17 @@ while IFS= read -r unit; do
     [[ "$(systemctl is-enabled "${unit}")" == "enabled" ]]
 done < /usr/share/custom-coreos/fleet/account-units.list
 
+while IFS= read -r unit; do
+    [[ -z "${unit}" || "${unit}" == \#* ]] && continue
+    [[ "$(systemctl is-enabled "${unit}")" == "enabled" ]]
+done < /usr/share/custom-coreos/fleet/storage-units.list
+
 for unit in \
     bootc-fetch-apply-updates.timer \
     disk-health-metrics.timer \
     nas-krun-network-policy.service \
     nftables.service \
     node_exporter.service \
-    prepare-caddy-state.service \
     sops-distribute-secrets.service \
     systemd-networkd.service \
     tailscaled.service \

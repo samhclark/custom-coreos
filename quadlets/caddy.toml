@@ -1,5 +1,5 @@
-# ABOUTME: Declarative config for the rootless Caddy Quadlet; persistent state
-# is verified each boot by prepare-caddy-state.service.
+# ABOUTME: Declarative config for the rootless Caddy Quadlet, including its
+# persistent state lifecycle and container exports.
 
 [service]
 name = "caddy"
@@ -56,34 +56,33 @@ source = "/usr/share/custom-coreos/caddy/Caddyfile"
 target = "/etc/caddy/Caddyfile"
 options = "ro"
 
-[[container.volumes]]
-comment = "Persistent certificate and ACME state; ownership and SELinux labels are prepared by the host unit"
-source = "/var/lib/caddy"
-target = "/data"
-
-[[container.volumes]]
-comment = "Persistent Caddy runtime configuration state; ownership and SELinux labels are prepared by the host unit"
-source = "/var/lib/caddy-config"
-target = "/config"
-
 [[container.secrets]]
 name = "cf-api-token"
 
 [assets]
 path = "/usr/share/custom-coreos/caddy"
 
+[[storage]]
+name = "data"
+kind = "directory"
+host-path = "/var/lib/caddy"
+mode = "0750"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/data"
+access = "read-write"
+
+[[storage]]
+name = "config"
+kind = "directory"
+host-path = "/var/lib/caddy-config"
+mode = "0750"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/config"
+access = "read-write"
+
 [unit]
 timeout-start-sec = 330
-
-[startup.readiness]
-marker = "/run/caddy-state/ready"
-timeout-sec = 300
-interval-sec = 2
-
-[[startup.readiness.paths]]
-path = "/var/lib/caddy"
-access = ["write"]
-
-[[startup.readiness.paths]]
-path = "/var/lib/caddy-config"
-access = ["write"]

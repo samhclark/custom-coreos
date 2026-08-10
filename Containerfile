@@ -109,12 +109,15 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     mapfile -t account_units < <( \
         awk "!/^#/" /usr/share/custom-coreos/fleet/account-units.list \
     ); \
+    mapfile -t storage_units < <( \
+        awk "!/^#/" /usr/share/custom-coreos/fleet/storage-units.list \
+    ); \
     systemctl enable \
         "${account_units[@]}" \
+        "${storage_units[@]}" \
         bootc-fetch-apply-updates.timer \
         nftables.service \
         nas-krun-network-policy.service \
-        prepare-caddy-state.service \
         systemd-networkd.service \
         tailscaled.service \
         sops-distribute-secrets.service \
