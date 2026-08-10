@@ -62,17 +62,19 @@ source = "/usr/share/custom-coreos/grafana/dashboards"
 target = "/etc/grafana/dashboards"
 options = "ro"
 
-[[container.volumes]]
-comment = "Persistent storage for Grafana SQLite DB and plugins"
-source = "/var/lib/grafana"
-target = "/var/lib/grafana"
-
-[data]
-path = "/var/lib/grafana"
-mode = "0750"
-
 [assets]
 path = "/usr/share/custom-coreos/grafana"
+
+[[storage]]
+name = "state"
+kind = "directory"
+host-path = "/var/lib/grafana"
+mode = "0750"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/var/lib/grafana"
+access = "read-write"
 
 [unit]
 timeout-start-sec = 900
