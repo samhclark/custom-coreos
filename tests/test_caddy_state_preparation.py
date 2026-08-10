@@ -1,16 +1,15 @@
-# ABOUTME: Regression tests for Caddy's steady-state rootless storage
-# preparation and boot-scoped readiness contract.
+# ABOUTME: Regression tests for Caddy's declarative storage and rootless shape.
 
 import unittest
 from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-SCRIPT = (
-    REPO / "overlay-root/usr/local/bin/prepare-caddy-state.sh"
-).read_text()
 SERVICE = (
-    REPO / "overlay-root/etc/systemd/system/prepare-caddy-state.service"
+    REPO / "overlay-root/etc/systemd/system/nas-prepare-caddy-storage.service"
+).read_text()
+MANIFEST = (
+    REPO / "overlay-root/usr/share/custom-coreos/storage/caddy.storage-manifest"
 ).read_text()
 QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51310/caddy.container"
@@ -21,52 +20,26 @@ CADDYFILE = (
 
 
 class CaddyStatePreparationTests(unittest.TestCase):
-    def test_missing_state_roots_are_created_for_service_identity(self):
-        self.assertIn('if [[ ! -e "${path}" ]]', SCRIPT)
-        self.assertIn(
-            'install -d -m 0750 -o "${SERVICE_UID}" -g "${SERVICE_GID}"',
-            SCRIPT,
-        )
-        self.assertIn('elif [[ ! -d "${path}" ]]', SCRIPT)
+    def test_manifest_owns_both_persistent_state_trees(self):
+        self.assertIn("service|caddy|_nas_caddy|51310|51310|80,443,2019", MANIFEST)
+        self.assertIn("directory|/var/lib/caddy|0750", MANIFEST)
+        self.assertIn("directory|/var/lib/caddy-config|0750", MANIFEST)
+        self.assertNotIn("managed-zfs", MANIFEST)
 
-    def test_existing_descendant_ownership_is_verified_not_rewritten(self):
-        verification = SCRIPT.split("verify_state() {", 1)[1].split(
-            "\n}\n", 1
-        )[0]
-
-        self.assertIn("find ", verification)
-        self.assertIn('! -uid "${SERVICE_UID}"', verification)
-        self.assertIn('! -gid "${SERVICE_GID}"', verification)
-        self.assertNotIn("chown", SCRIPT)
-
-    def test_persistent_selinux_policy_is_restored_and_verified(self):
+    def test_generated_service_uses_the_common_storage_runtime(self):
+        self.assertIn("Requires=ensure-nas-caddy-account.service", SERVICE)
+        self.assertNotIn("zfs.target", SERVICE)
         self.assertIn(
-            'ensure_fcontext_rule "/var/lib/caddy(/.*)?"',
-            SCRIPT,
-        )
-        self.assertIn(
-            'ensure_fcontext_rule "/var/lib/caddy-config(/.*)?"',
-            SCRIPT,
-        )
-        self.assertIn('restorecon -F -R "${STATE_PATHS[@]}"', SCRIPT)
-        self.assertIn('! -context "${EXPECTED_LABEL}"', SCRIPT)
-
-    def test_service_publishes_only_current_boot_readiness(self):
-        self.assertIn("RuntimeDirectory=caddy-state", SERVICE)
-        self.assertIn(
-            "ExecStartPre=/usr/bin/rm -f /run/caddy-state/ready",
+            "ExecStart=/usr/local/bin/nas-prepare-storage.sh "
+            "/usr/share/custom-coreos/storage/caddy.storage-manifest",
             SERVICE,
         )
-        self.assertIn(
-            "ExecStartPost=/usr/bin/touch /run/caddy-state/ready",
-            SERVICE,
-        )
-        self.assertIn("TimeoutStartSec=300", SERVICE)
-        self.assertNotIn("nas-migrations", SERVICE)
+        self.assertIn("TimeoutStartSec=infinity", SERVICE)
 
     def test_quadlet_waits_for_readiness_and_keeps_large_state_unlabeled(self):
         self.assertIn(
-            "nas-wait-for-readiness.sh marker /run/caddy-state/ready 300 2",
+            "nas-wait-for-readiness.sh marker "
+            "/run/nas-storage/caddy/ready 90 1",
             QUADLET,
         )
         self.assertNotIn("/usr/bin/test -w /var/lib/caddy", QUADLET)
@@ -77,6 +50,7 @@ class CaddyStatePreparationTests(unittest.TestCase):
         self.assertNotIn("Volume=/var/lib/caddy-config:/config:Z", QUADLET)
         self.assertNotIn("nas-migrations", QUADLET)
         self.assertNotIn("/etc/containers/systemd/caddy.container", QUADLET)
+        self.assertNotIn("prepare-caddy-state", QUADLET)
 
     def test_runtime_secret_mount_is_unchanged(self):
         self.assertIn(
