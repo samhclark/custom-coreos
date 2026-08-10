@@ -104,24 +104,28 @@ Use `[assets]` for an image-controlled tree under
 `/usr/share/custom-coreos/<service>`. The generated asset manifest drives
 Containerfile SELinux labeling.
 
-Use `[data]` for a simple mutable directory that tmpfiles can own and label:
+Use `[[storage]]` for mutable application state. A small directory example is:
 
 ```toml
-[data]
-path = "/var/lib/example"
+[[storage]]
+name = "state"
+kind = "directory"
+host-path = "/var/lib/example"
 mode = "0750"
 subdirectories = ["cache", "state"]
+
+[[storage.exports]]
+subpath = "state"
+container-path = "/var/lib/example"
+access = "read-write"
 ```
 
-The path must be a normalized portable path below `/var`; the mode is exactly
-four octal digits. Runtime account preparation owns these mutable-data SELinux
-rules. Image asset labeling is build-time-only and is driven by the asset
-manifest, so the two storage classes do not relabel each other's trees.
-
-Large or multi-dataset ZFS state needs a dedicated host preparation unit. It
-must verify the exact mount, ownership, mode, access, and persistent SELinux
-policy without recursively scanning healthy trees on every boot. Large ZFS
-mounts do not use Podman `:Z` or `:z`.
+Managed and required-existing ZFS use the same declaration language. The
+compiler derives the container mount, host manifest and unit, SELinux policy,
+and readiness checks. Do not add a handwritten preparation unit or a raw
+`[[container.volumes]]` source below `/var`. See
+[`../architecture/storage.md`](../architecture/storage.md) for the complete
+kind and repair contracts. Large storage mounts do not use Podman `:Z` or `:z`.
 
 Small root-owned config and per-service runtime-secret files may use `:Z`.
 Shared files use `:z`; do not use private relabeling for a host file mounted by
@@ -149,19 +153,10 @@ timeout-sec = 300
 interval-sec = 2
 ```
 
-Host preparation units publish current-boot markers under `/run`. ZFS-backed
-services can additionally require exact mount sources:
-
-```toml
-[startup.readiness]
-marker = "/run/example-storage/ready"
-timeout-sec = 300
-interval-sec = 2
-
-[[startup.readiness.paths]]
-path = "/var/lib/example"
-mount-source = "tank/example"
-```
+Storage declarations own their generated `/run/nas-storage/<service>/ready`
+marker and path checks. Do not also declare `[startup.readiness]` for a
+stateful service. Typed HTTP readiness remains available for stateless local
+dependencies.
 
 `[startup].require-published-tcp-ports-free = true` is an intentionally
 service-specific migration diagnostic. Use it only when a retired or stale
