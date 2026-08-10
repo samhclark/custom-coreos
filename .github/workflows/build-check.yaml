@@ -39,3 +39,6 @@ jobs:
           build-args: |
             ZFS_VERSION=${{ needs.preflight.outputs.zfs-version }}
             KERNEL_VERSION=${{ needs.preflight.outputs.kernel-version }}
+
+      - name: Verify exact built image contract
+        run: make verify-image IMAGE_NAME="${IMAGE_NAME}" TAG=ci-check

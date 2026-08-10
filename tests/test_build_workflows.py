@@ -36,6 +36,14 @@ class BuildWorkflowTests(unittest.TestCase):
                 self.assertNotIn("make test", workflow)
                 self.assertNotIn("Verify SOPS image signature", workflow)
                 self.assertNotIn("Resolve and verify build inputs", workflow)
+                self.assertEqual(workflow.count("make verify-image"), 1)
+
+    def test_production_image_is_verified_before_registry_login_and_push(self):
+        workflow = (WORKFLOWS / "build.yaml").read_text()
+
+        verification = workflow.index("make verify-image")
+        self.assertLess(verification, workflow.index("Log in to Container Registry"))
+        self.assertLess(verification, workflow.index("Push to registry"))
 
     def test_signature_policy_exists_only_in_shared_preflight(self):
         identity = "--certificate-identity-regexp=https://github.com/getsops"
