@@ -122,7 +122,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         tailscaled.service \
         sops-distribute-secrets.service \
         zfs-create-garage-datasets.service \
-        zfs-create-victoria-metrics-dataset.service \
         zfs-prepare-jellyfin-storage.service \
         zfs-scrub-monthly@tank.timer \
         zfs-snapshots-frequently@videos.timer \
