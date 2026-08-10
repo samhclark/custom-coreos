@@ -121,7 +121,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         systemd-networkd.service \
         tailscaled.service \
         sops-distribute-secrets.service \
-        zfs-prepare-jellyfin-storage.service \
         zfs-scrub-monthly@tank.timer \
         zfs-snapshots-frequently@videos.timer \
         zfs-snapshots-hourly@videos.timer \

@@ -22,12 +22,8 @@ semodule -l | grep -Eq '^gssproxy-local[[:space:]]'
 semodule -l | grep -Eq '^nas-krun-tun[[:space:]]'
 
 systemd-analyze verify \
-    /usr/lib/systemd/system/ensure-nas-*.service \
-    /usr/lib/systemd/system/nas-*.service \
-    /usr/lib/systemd/system/prepare-caddy-state.service \
-    /usr/lib/systemd/system/sops-distribute-secrets.service \
-    /usr/lib/systemd/system/zfs-*.service \
-    /usr/lib/systemd/system/disk-health-metrics.service
+    /etc/systemd/system/*.service \
+    /etc/systemd/system/*.timer
 systemd-sysusers --dry-run --root=/
 systemd-tmpfiles --create --dry-run --root=/
 /usr/lib/systemd/system-generators/podman-system-generator --user --dryrun \
@@ -51,8 +47,7 @@ for unit in \
     node_exporter.service \
     sops-distribute-secrets.service \
     systemd-networkd.service \
-    tailscaled.service \
-    zfs-prepare-jellyfin-storage.service; do
+    tailscaled.service; do
     [[ "$(systemctl is-enabled "${unit}")" == "enabled" ]]
 done
 
