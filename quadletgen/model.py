@@ -12,6 +12,8 @@ from types import MappingProxyType
 from typing import Literal, Mapping, NoReturn, TypeAlias
 from urllib.parse import urlsplit
 
+from .errors import ConfigError
+
 
 SUBID_COUNT = 65536
 TAP_NAME_RE = re.compile(r"^krun-[0-9]{5}$")
@@ -34,10 +36,6 @@ EXEC_RE = re.compile(
     r"^[A-Za-z0-9_./:=,@+-]+(?: [A-Za-z0-9_./:=,@+-]+)*$"
 )
 MAX_SUBID_START = 2**32 - SUBID_COUNT
-
-
-class ConfigError(ValueError):
-    """Raised when a service or fleet configuration violates its contract."""
 
 
 class Protocol(str, Enum):
