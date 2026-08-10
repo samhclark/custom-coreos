@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import posixpath
 
-from .model import Service
+from .headers import generated_header
+from .model import Protocol, Service
 from .storage_model import (
     DirectoryStorage,
     ExistingZfsStorage,
@@ -71,6 +72,121 @@ def storage_readiness_line(service: Service) -> str | None:
             *requirements,
         ]
     )
+
+
+def storage_manifest(service: Service) -> str:
+    """Render the closed data language consumed by the storage runtime."""
+
+    if not service.storage:
+        raise ValueError(f"{service.info.name} has no storage to render")
+    tcp_ports = ",".join(
+        str(port.host_port)
+        for port in service.container.ports
+        if port.protocol is Protocol.TCP
+    ) or "-"
+    lines = [
+        "nas-storage-manifest-v1",
+        generated_header(service.source.name),
+        "|".join(
+            (
+                "service",
+                service.info.name,
+                service.host.username,
+                str(service.host.uid),
+                str(service.host.uid),
+                tcp_ports,
+            )
+        ),
+    ]
+    emitted_datasets: set[str] = set()
+    declared_datasets = {
+        item.dataset
+        for item in service.storage
+        if isinstance(item, ManagedZfsStorage)
+    }
+    for storage in service.storage:
+        if isinstance(storage, DirectoryStorage):
+            lines.append(
+                f"directory|{storage.host_path}|{storage.mode}"
+            )
+            for subdirectory in sorted(
+                storage.subdirectories,
+                key=lambda value: (value.count("/"), value),
+            ):
+                lines.append(
+                    "directory|"
+                    f"{posixpath.join(storage.host_path, subdirectory)}|"
+                    f"{storage.mode}"
+                )
+        elif isinstance(storage, ManagedZfsStorage):
+            parts = storage.dataset.split("/")
+            for depth in range(2, len(parts)):
+                parent = "/".join(parts[:depth])
+                if parent not in emitted_datasets and parent not in declared_datasets:
+                    lines.append(f"managed-zfs|{parent}|none|-|-")
+                    emitted_datasets.add(parent)
+            properties = ",".join(
+                (
+                    f"recordsize={storage.record_size.value}",
+                    f"compression={storage.compression.value}",
+                    f"atime={'on' if storage.atime else 'off'}",
+                    f"primarycache={storage.primary_cache.value}",
+                )
+            )
+            lines.append(
+                f"managed-zfs|{storage.dataset}|{storage.host_path}|"
+                f"{storage.mode}|{properties}"
+            )
+            emitted_datasets.add(storage.dataset)
+        else:
+            lines.append(
+                f"existing-zfs|{storage.dataset}|{storage.host_path}"
+            )
+    return "\n".join(lines) + "\n"
+
+
+def storage_unit(service: Service) -> str:
+    """Render the root one-shot that prepares a service's storage."""
+
+    if not service.storage:
+        raise ValueError(f"{service.info.name} has no storage to render")
+    account_unit = f"ensure-nas-{service.host.slug}-account.service"
+    has_zfs = any(
+        isinstance(item, (ManagedZfsStorage, ExistingZfsStorage))
+        for item in service.storage
+    )
+    requires = [account_unit]
+    after = ["local-fs.target", account_unit]
+    conditions: list[str] = []
+    if has_zfs:
+        requires.insert(0, "zfs.target")
+        after.insert(0, "zfs.target")
+        conditions.append("ConditionPathIsDirectory=/sys/module/zfs")
+
+    lines = [
+        generated_header(service.source.name),
+        "[Unit]",
+        f"Description=Prepare declarative storage for {service.info.name}",
+        f"Requires={' '.join(requires)}",
+        f"After={' '.join(after)}",
+        *conditions,
+        "",
+        "[Service]",
+        "Type=oneshot",
+        "User=root",
+        "ExecStart=/usr/local/bin/nas-prepare-storage.sh "
+        f"/usr/share/custom-coreos/storage/{service.info.name}.storage-manifest",
+        "TimeoutStartSec=infinity",
+        "Restart=on-failure",
+        "RestartSec=30",
+        "StandardOutput=journal",
+        "StandardError=journal",
+        "RemainAfterExit=yes",
+        "",
+        "[Install]",
+        "WantedBy=multi-user.target",
+    ]
+    return "\n".join(lines) + "\n"
 
 
 def _export_path(storage: StorageSpec, subpath: str) -> str:

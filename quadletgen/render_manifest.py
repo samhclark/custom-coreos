@@ -70,6 +70,19 @@ def assets_manifest(fleet: Fleet) -> str:
     return "\n".join(lines) + "\n"
 
 
+def storage_units_manifest(fleet: Fleet) -> str:
+    lines = [
+        generated_header("fleet storage units"),
+        "# systemd unit",
+    ]
+    lines.extend(
+        f"nas-prepare-{service.info.name}-storage.service"
+        for service in sorted(fleet.services, key=lambda item: item.info.name)
+        if service.storage
+    )
+    return "\n".join(lines) + "\n"
+
+
 def _row(*fields: str) -> str:
     for field in fields:
         if "\t" in field or "\n" in field:
