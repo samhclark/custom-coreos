@@ -22,6 +22,7 @@ from .render_manifest import (
     active_taps_manifest,
     assets_manifest,
     secrets_manifest,
+    storage_units_manifest,
 )
 from .render_service import (
     container_unit,
@@ -30,6 +31,7 @@ from .render_service import (
     sysusers_conf,
     tmpfiles_conf,
 )
+from .render_storage import storage_manifest, storage_unit
 
 
 ARTIFACT_PATH_RE = re.compile(
@@ -102,6 +104,23 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
                     networkd_network(service),
                 ),
             ]
+        if service.storage:
+            artifacts += [
+                Artifact(
+                    Path(
+                        "usr/share/custom-coreos/storage/"
+                        f"{service.info.name}.storage-manifest"
+                    ),
+                    storage_manifest(service),
+                ),
+                Artifact(
+                    Path(
+                        "etc/systemd/system/"
+                        f"nas-prepare-{service.info.name}-storage.service"
+                    ),
+                    storage_unit(service),
+                ),
+            ]
 
     subids = _subid_file(fleet)
     artifacts += [
@@ -144,6 +163,10 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
         Artifact(
             Path("usr/share/custom-coreos/fleet/assets.list"),
             assets_manifest(fleet),
+        ),
+        Artifact(
+            Path("usr/share/custom-coreos/fleet/storage-units.list"),
+            storage_units_manifest(fleet),
         ),
     ]
     paths = [artifact.path for artifact in artifacts]
