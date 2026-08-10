@@ -21,7 +21,11 @@ BUTANE_IMAGE ?= quay.io/coreos/butane:release@sha256:13fec166cb47a8e053dcc23256c
 SHELLCHECK_IMAGE ?= docker.io/koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
 PYTHON       ?= python3
 
-SHELL_SOURCES := $(shell git ls-files '*.sh' 'overlay-root/usr/local/bin/garage' ':!:docs/history/**')
+SHELL_SOURCES := $(shell \
+	git ls-files '*.sh' 'overlay-root/usr/local/bin/garage' ':!:docs/history/**' | \
+	while IFS= read -r source; do \
+		test ! -f "$$source" || printf '%s\n' "$$source"; \
+	done)
 
 ## Colors
 COLOR_BLUE  = \033[34m
