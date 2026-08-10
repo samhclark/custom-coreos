@@ -18,6 +18,7 @@ from .model import (
     SUBID_COUNT,
     Service,
 )
+from .render_storage import storage_readiness_line, storage_volume_lines
 
 
 def header(service: Service) -> str:
@@ -86,6 +87,8 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         options = f":{volume.options}" if volume.options else ""
         lines.append(f"Volume={volume.source}:{volume.target}{options}")
 
+    lines += storage_volume_lines(service)
+
     for secret in container.secrets:
         target = secret.target or f"/run/secrets/{secret.name}"
         lines.append("")
@@ -126,6 +129,9 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         for secret in container.secrets
     ]
     readiness = service.startup.readiness
+    storage_readiness = storage_readiness_line(service)
+    if storage_readiness is not None:
+        lines.append(storage_readiness)
     if isinstance(readiness, MarkerReadiness):
         required_paths = ""
         for required_path in readiness.paths:
