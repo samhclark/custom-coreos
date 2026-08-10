@@ -47,21 +47,23 @@ source = "/usr/share/custom-coreos/alertmanager/alertmanager.yml"
 target = "/etc/alertmanager/alertmanager.yml"
 options = "ro"
 
-[[container.volumes]]
-comment = "Persistent storage for silences and the notification log"
-source = "/var/lib/alertmanager/data"
-target = "/alertmanager"
-
 [[container.secrets]]
 name = "pushover-user-key"
 
 [[container.secrets]]
 name = "pushover-api-token"
 
-[data]
-path = "/var/lib/alertmanager"
+[assets]
+path = "/usr/share/custom-coreos/alertmanager"
+
+[[storage]]
+name = "state"
+kind = "directory"
+host-path = "/var/lib/alertmanager"
 mode = "0750"
 subdirectories = ["data"]
 
-[assets]
-path = "/usr/share/custom-coreos/alertmanager"
+[[storage.exports]]
+subpath = "data"
+container-path = "/alertmanager"
+access = "read-write"
