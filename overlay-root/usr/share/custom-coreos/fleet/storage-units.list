@@ -3,3 +3,4 @@
 nas-prepare-alertmanager-storage.service
 nas-prepare-caddy-storage.service
 nas-prepare-grafana-storage.service
+nas-prepare-victoria-metrics-storage.service
