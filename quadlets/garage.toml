@@ -43,16 +43,6 @@ source = "/usr/share/custom-coreos/garage/garage.toml"
 target = "/etc/garage.toml"
 options = "ro"
 
-[[container.volumes]]
-comment = "Persistent metadata ZFS dataset; ownership and SELinux labels are prepared by the host unit"
-source = "/var/lib/garage/meta"
-target = "/var/lib/garage/meta"
-
-[[container.volumes]]
-comment = "Persistent block ZFS dataset; ownership and SELinux labels are prepared by the host unit"
-source = "/var/lib/garage/data"
-target = "/var/lib/garage/data"
-
 [[container.secrets]]
 name = "garage-rpc-secret"
 
@@ -77,25 +67,40 @@ container = 3903
 [assets]
 path = "/usr/share/custom-coreos/garage"
 
+[[storage]]
+name = "meta"
+kind = "managed-zfs"
+dataset = "tank/garage/meta"
+host-path = "/var/lib/garage/meta"
+mode = "0750"
+record-size = "4K"
+compression = "lz4"
+atime = false
+primary-cache = "metadata"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/var/lib/garage/meta"
+access = "read-write"
+
+[[storage]]
+name = "data"
+kind = "managed-zfs"
+dataset = "tank/garage/data"
+host-path = "/var/lib/garage/data"
+mode = "0750"
+record-size = "1M"
+compression = "off"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/var/lib/garage/data"
+access = "read-write"
+
 [unit]
 timeout-start-sec = 4200
 
 [startup]
 require-published-tcp-ports-free = true
-
-[startup.readiness]
-marker = "/run/garage-datasets/ready"
-timeout-sec = 3600
-interval-sec = 2
-
-[[startup.readiness.paths]]
-path = "/var/lib/garage/meta"
-mount-source = "tank/garage/meta"
-owner = "service"
-access = ["write"]
-
-[[startup.readiness.paths]]
-path = "/var/lib/garage/data"
-mount-source = "tank/garage/data"
-owner = "service"
-access = ["write"]

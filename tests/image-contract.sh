@@ -52,7 +52,6 @@ for unit in \
     sops-distribute-secrets.service \
     systemd-networkd.service \
     tailscaled.service \
-    zfs-create-garage-datasets.service \
     zfs-prepare-jellyfin-storage.service; do
     [[ "$(systemctl is-enabled "${unit}")" == "enabled" ]]
 done

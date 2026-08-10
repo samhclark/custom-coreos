@@ -179,7 +179,11 @@ class FleetManifestTests(unittest.TestCase):
                 self.assertIn("restorecon", script)
 
     def test_runtime_data_path_is_escaped_for_selinux_regex(self):
-        changed = self.fleet.services[0]
+        changed = next(
+            service
+            for service in self.fleet.services
+            if service.data is None and not service.storage
+        )
         changed = replace(
             changed,
             data=DataSpec("/var/lib/service.v2"),
@@ -226,10 +230,12 @@ class StartupPolicyTests(unittest.TestCase):
             Path("etc/containers/systemd/users/51220/vmalert.container")
         ]
         self.assertIn(
-            "nas-wait-for-readiness.sh marker /run/garage-datasets/ready "
-            "3600 2 --path /var/lib/garage/meta --source tank/garage/meta "
-            "--owner 51110:51110 --access w --path /var/lib/garage/data "
-            "--source tank/garage/data --owner 51110:51110 --access w",
+            "nas-wait-for-readiness.sh marker "
+            "/run/nas-storage/garage/ready 300 2 "
+            "--path /var/lib/garage/meta --source tank/garage/meta "
+            "--owner 51110:51110 --access rwx "
+            "--path /var/lib/garage/data --source tank/garage/data "
+            "--owner 51110:51110 --access rwx",
             garage,
         )
         self.assertIn(
