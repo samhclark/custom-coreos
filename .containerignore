@@ -1,0 +1,7 @@
+# The bootc image has an intentionally tiny, auditable build context.
+*
+!Containerfile
+!overlay-root/
+!overlay-root/**
+!patches/
+!patches/**
