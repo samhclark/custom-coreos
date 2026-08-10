@@ -124,7 +124,14 @@ build: ## Build the container image
 		--build-arg KERNEL_VERSION="$$KERNEL_VERSION" \
 		-t "$(IMAGE_NAME):$(TAG)" \
 		.; \
+	CONTAINER_CLI="$(PODMAN)" \
+		./scripts/verify-built-image.sh "$(IMAGE_NAME):$(TAG)"; \
 	printf "$(COLOR_GREEN)build succeeded: $(IMAGE_NAME):$(TAG)$(COLOR_RESET)\n"
+
+.PHONY: verify-image
+verify-image: ## Verify the exact locally built image without network or host mounts
+	@CONTAINER_CLI="$(PODMAN)" \
+		./scripts/verify-built-image.sh "$(IMAGE_NAME):$(TAG)"
 
 .PHONY: generate-ignition
 generate-ignition: ## Generate ignition.json from butane.yaml

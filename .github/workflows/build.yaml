@@ -45,6 +45,9 @@ jobs:
             ZFS_VERSION=${{ needs.preflight.outputs.zfs-version }}
             KERNEL_VERSION=${{ needs.preflight.outputs.kernel-version }}
 
+      - name: Verify exact built image contract
+        run: make verify-image IMAGE_NAME="${IMAGE_NAME}" TAG=stable
+
       - name: Log in to Container Registry
         uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0
         with:
