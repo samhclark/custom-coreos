@@ -258,24 +258,27 @@ class StartupPolicyTests(unittest.TestCase):
         for artifact in self.artifacts.values():
             self.assertNotIn("ExecStartPre=/usr/bin/bash -lc", artifact)
 
-    def test_data_subdirectories_are_owned_by_tmpfiles(self):
+    def test_alertmanager_storage_is_not_duplicated_in_account_provisioning(self):
         tmpfiles = self.artifacts[
             Path("usr/lib/tmpfiles.d/nas-alertmanager-rootless.conf")
         ]
-        child = (
-            "d /var/lib/alertmanager/data 0750 "
-            "_nas_alertmanager _nas_alertmanager -"
-        )
-        recursive_label = (
-            "Z /var/lib/alertmanager 0750 "
-            "_nas_alertmanager _nas_alertmanager -"
-        )
-        self.assertIn(child, tmpfiles)
-        self.assertLess(tmpfiles.index(child), tmpfiles.index(recursive_label))
+        self.assertNotIn("/var/lib/alertmanager", tmpfiles)
+        manifest = self.artifacts[
+            Path(
+                "usr/share/custom-coreos/storage/"
+                "alertmanager.storage-manifest"
+            )
+        ]
+        self.assertIn("directory|/var/lib/alertmanager|0750", manifest)
+        self.assertIn("directory|/var/lib/alertmanager/data|0750", manifest)
         alertmanager = self.artifacts[
             Path("etc/containers/systemd/users/51240/alertmanager.container")
         ]
-        self.assertNotIn("install -d", alertmanager)
+        self.assertIn(
+            "Volume=/var/lib/alertmanager/data:/alertmanager",
+            alertmanager,
+        )
+        self.assertIn("/run/nas-storage/alertmanager/ready", alertmanager)
 
 
 if __name__ == "__main__":
