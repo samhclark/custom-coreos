@@ -1,0 +1,442 @@
+# ABOUTME: Behavioral tests for the generated-manifest storage runtime.
+
+import json
+import os
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+
+
+REPO = Path(__file__).resolve().parents[1]
+RUNTIME = REPO / "overlay-root/usr/local/bin/nas-prepare-storage.sh"
+FAKE_COMMAND = REPO / "tests/fixtures/storage/fake-command.py"
+EXPECTED_LABEL = "system_u:object_r:container_file_t:s0"
+COMMANDS = (
+    "chmod",
+    "chown",
+    "find",
+    "findmnt",
+    "getent",
+    "id",
+    "install",
+    "matchpathcon",
+    "podman",
+    "restorecon",
+    "runuser",
+    "semanage",
+    "ss",
+    "stat",
+    "zfs",
+    "zpool",
+)
+MUTATING_COMMANDS = {"chmod", "chown", "install", "restorecon", "semanage"}
+
+
+class StorageRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(dir="/var/tmp")
+        self.root = Path(self.temporary.name)
+        self.fake_bin = self.root / "bin"
+        self.fake_bin.mkdir()
+        for command in COMMANDS:
+            (self.fake_bin / command).symlink_to(FAKE_COMMAND)
+
+        self.state_path = self.root / "state.json"
+        self.log_path = self.root / "commands.jsonl"
+        self.log_path.touch()
+        self.state = {
+            "container_exists": False,
+            "container_running": False,
+            "datasets": {},
+            "fcontexts": [],
+            "listeners": [],
+            "paths": {},
+            "pools": ["tank"],
+            "samples": {},
+            "users": {"_nas_sample": {"gid": 51110, "uid": 51110}},
+        }
+        self.write_state()
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def write_state(self):
+        self.state_path.write_text(json.dumps(self.state, sort_keys=True))
+
+    def read_state(self):
+        return json.loads(self.state_path.read_text())
+
+    def commands(self):
+        return [json.loads(line) for line in self.log_path.read_text().splitlines()]
+
+    def mutations(self):
+        mutations = []
+        for command in self.commands():
+            if command[0] == "install" and command[-1].startswith(str(self.root / "run")):
+                continue
+            if command[0] in MUTATING_COMMANDS:
+                mutations.append(command)
+            elif command[0] == "zfs" and command[1:2] == ["create"]:
+                mutations.append(command)
+            elif command[0] == "find" and "-exec" in command:
+                mutations.append(command)
+        return mutations
+
+    def manifest(self, *records):
+        repair_marker = self.root / "repairs" / "sample" / "repair-required"
+        manifest = self.root / "sample.storage-manifest"
+        lines = [
+            "nas-storage-manifest-v1",
+            (
+                "service|sample|_nas_sample|51110|51110|8123"
+            ),
+            *records,
+        ]
+        manifest.write_text("\n".join(lines) + "\n")
+        return manifest, repair_marker
+
+    def run_runtime(self, manifest):
+        environment = os.environ.copy()
+        environment.update(
+            {
+                "FAKE_STORAGE_LOG": str(self.log_path),
+                "FAKE_STORAGE_STATE": str(self.state_path),
+                "NAS_STORAGE_RUNTIME_ROOT": str(self.root / "run"),
+                "NAS_STORAGE_REPAIR_ROOT": str(self.root / "repairs"),
+                "PATH": f"{self.fake_bin}:{environment['PATH']}",
+            }
+        )
+        return subprocess.run(
+            ["bash", str(RUNTIME), str(manifest)],
+            capture_output=True,
+            check=False,
+            env=environment,
+            text=True,
+        )
+
+    def add_healthy_path(self, path, *, owner="51110:51110", mode="750"):
+        path.mkdir(parents=True)
+        self.state["paths"][str(path)] = {
+            "label": EXPECTED_LABEL,
+            "mode": mode,
+            "owner": owner,
+        }
+        self.state["samples"][str(path)] = []
+        self.state["fcontexts"].append(str(path))
+
+    def add_dataset(self, name, mountpoint, **properties):
+        self.state["datasets"][name] = {
+            "properties": {"mountpoint": mountpoint, **properties}
+        }
+
+    def test_missing_pool_fails_before_any_mutation(self):
+        data_path = self.root / "data"
+        manifest, _ = self.manifest(
+            f"managed-zfs|tank/sample|{data_path}|0750|recordsize=16K"
+        )
+        self.state["pools"] = []
+        self.write_state()
+
+        result = self.run_runtime(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("required pool 'tank' does not exist", result.stderr)
+        self.assertEqual(self.mutations(), [])
+
+    def test_existing_dataset_is_verified_but_never_created_or_chowned(self):
+        shared_path = self.root / "shared"
+        shared_path.mkdir()
+        child = shared_path / "child"
+        child.touch()
+        manifest, _ = self.manifest(f"existing-zfs|tank/videos|{shared_path}")
+        self.add_dataset("tank/videos", str(shared_path))
+        self.state["paths"][str(shared_path)] = {
+            "label": EXPECTED_LABEL,
+            "mode": "755",
+            "owner": "0:0",
+        }
+        self.state["paths"][str(child)] = {
+            "label": EXPECTED_LABEL,
+            "mode": "644",
+            "owner": "1234:1234",
+        }
+        self.state["samples"][str(shared_path)] = [str(child)]
+        self.state["fcontexts"].append(str(shared_path))
+        self.write_state()
+
+        result = self.run_runtime(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        commands = self.commands()
+        self.assertFalse(
+            any(command[0] == "zfs" and command[1:2] == ["create"] for command in commands)
+        )
+        self.assertFalse(any(command[0] == "chown" for command in commands))
+        self.assertFalse(any(command[0] == "find" and "-exec" in command for command in commands))
+        self.assertFalse(any(command[0] == "restorecon" for command in commands))
+
+    def test_managed_datasets_are_created_with_exact_declared_options(self):
+        data_path = self.root / "data"
+        manifest, _ = self.manifest(
+            "managed-zfs|tank/sample|none|-|-",
+            (
+                f"managed-zfs|tank/sample/data|{data_path}|0750|"
+                "recordsize=16K,compression=lz4,atime=off"
+            ),
+        )
+
+        result = self.run_runtime(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        creates = [
+            command
+            for command in self.commands()
+            if command[0] == "zfs" and command[1:2] == ["create"]
+        ]
+        self.assertEqual(
+            creates,
+            [
+                ["zfs", "create", "-o", "mountpoint=none", "tank/sample"],
+                [
+                    "zfs",
+                    "create",
+                    "-o",
+                    f"mountpoint={data_path}",
+                    "-o",
+                    "recordsize=16K",
+                    "-o",
+                    "compression=lz4",
+                    "-o",
+                    "atime=off",
+                    "tank/sample/data",
+                ],
+            ],
+        )
+
+    def test_healthy_rerun_performs_no_mutations(self):
+        directory = self.root / "directory"
+        data_path = self.root / "data"
+        manifest, _ = self.manifest(
+            f"directory|{directory}|0750",
+            "managed-zfs|tank/sample|none|-|-",
+            f"managed-zfs|tank/sample/data|{data_path}|0750|compression=lz4",
+        )
+        first = self.run_runtime(manifest)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.log_path.write_text("")
+
+        second = self.run_runtime(manifest)
+
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(self.mutations(), [])
+
+    def test_running_container_guard_fails_closed_before_creation(self):
+        data_path = self.root / "data"
+        manifest, _ = self.manifest(
+            f"managed-zfs|tank/sample|{data_path}|0750|compression=lz4"
+        )
+        self.state["container_exists"] = True
+        self.state["container_running"] = True
+        self.write_state()
+
+        result = self.run_runtime(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing storage mutation while sample is running", result.stderr)
+        self.assertEqual(self.mutations(), [])
+
+    def test_directory_only_service_repairs_automatically_without_zfs_tools(self):
+        directory = self.root / "directory"
+        child = directory / "child"
+        directory.mkdir()
+        child.touch()
+        manifest, _ = self.manifest(f"directory|{directory}|0750")
+        self.state["paths"][str(directory)] = {
+            "label": "system_u:object_r:var_lib_t:s0",
+            "mode": "755",
+            "owner": "1234:1234",
+        }
+        self.state["paths"][str(child)] = {
+            "label": "system_u:object_r:var_lib_t:s0",
+            "mode": "644",
+            "owner": "1234:1234",
+        }
+        self.state["samples"][str(directory)] = [str(child)]
+        self.state["fcontexts"].append(str(directory))
+        self.write_state()
+
+        result = self.run_runtime(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(any(command[0] in {"zfs", "zpool", "findmnt"} for command in self.commands()))
+        repaired = self.read_state()
+        self.assertEqual(repaired["paths"][str(directory)]["owner"], "51110:51110")
+        self.assertEqual(repaired["paths"][str(child)]["owner"], "51110:51110")
+
+    def test_zfs_state_drift_requires_explicit_repair_marker(self):
+        data_path = self.root / "data"
+        self.add_healthy_path(data_path, owner="1234:1234")
+        self.add_dataset("tank/sample", str(data_path), compression="lz4")
+        manifest, repair_marker = self.manifest(
+            f"managed-zfs|tank/sample|{data_path}|0750|compression=lz4"
+        )
+        self.write_state()
+
+        result = self.run_runtime(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"explicit repair request at {repair_marker}", result.stderr)
+        self.assertEqual(self.mutations(), [])
+
+    def test_explicit_zfs_repair_is_guarded_and_consumes_derived_marker(self):
+        data_path = self.root / "data"
+        child = data_path / "child"
+        self.add_healthy_path(data_path, owner="1234:1234")
+        child.touch()
+        self.state["paths"][str(child)] = {
+            "label": "system_u:object_r:var_lib_t:s0",
+            "mode": "644",
+            "owner": "1234:1234",
+        }
+        self.state["samples"][str(data_path)] = [str(child)]
+        self.add_dataset("tank/sample", str(data_path), compression="lz4")
+        manifest, repair_marker = self.manifest(
+            f"managed-zfs|tank/sample|{data_path}|0750|compression=lz4"
+        )
+        repair_marker.parent.mkdir(parents=True)
+        repair_marker.touch()
+        self.write_state()
+
+        result = self.run_runtime(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        repaired = self.read_state()
+        self.assertEqual(repaired["paths"][str(data_path)]["owner"], "51110:51110")
+        self.assertEqual(repaired["paths"][str(child)]["owner"], "51110:51110")
+        self.assertFalse(repair_marker.exists())
+
+    def test_manifest_cannot_escape_service_dataset_policy(self):
+        records = (
+            f"managed-zfs|tank/other|{self.root / 'managed'}|0750|-",
+            f"existing-zfs|tank/private|{self.root / 'existing'}",
+        )
+        expected_errors = (
+            "managed datasets must be within tank/sample",
+            "only tank/videos may be declared existing-zfs",
+        )
+
+        for record, expected_error in zip(records, expected_errors, strict=True):
+            with self.subTest(record=record):
+                self.log_path.write_text("")
+                manifest, _ = self.manifest(record)
+                result = self.run_runtime(manifest)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected_error, result.stderr)
+                self.assertEqual(self.commands(), [])
+
+    def test_failed_rerun_clears_stale_readiness(self):
+        ready = self.root / "run" / "sample" / "ready"
+        ready.parent.mkdir(parents=True)
+        ready.write_text("stale\n")
+        manifest, _ = self.manifest(
+            f"managed-zfs|tank/sample|{self.root / 'data'}|0750|compression=lz4"
+        )
+        self.state["pools"] = []
+        self.write_state()
+
+        result = self.run_runtime(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(ready.exists())
+
+    def test_success_publishes_current_boot_readiness(self):
+        directory = self.root / "directory"
+        manifest, _ = self.manifest(f"directory|{directory}|0750")
+
+        result = self.run_runtime(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        ready = self.root / "run" / "sample" / "ready"
+        self.assertEqual(
+            ready.read_text().strip(),
+            Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+        )
+
+    def test_invalid_late_record_is_rejected_before_host_inspection(self):
+        manifest, _ = self.manifest(
+            f"directory|{self.root / 'valid'}|0750",
+            "managed-zfs|tank/sample/bad|none|-|mountpoint=/surprise",
+        )
+
+        result = self.run_runtime(manifest)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("invalid or unsupported ZFS properties", result.stderr)
+        self.assertEqual(self.commands(), [])
+
+    def test_runtime_schema_matches_the_compiler_path_and_property_vocabulary(self):
+        invalid_records = (
+            (
+                f"directory|{self.root / 'state'}|0750".replace(
+                    "/var/tmp/", "/srv/"
+                ),
+                "below /var",
+            ),
+            (
+                f"managed-zfs|tank/sample/data|{self.root / 'data'}|0750|recordsize=8K",
+                "unsupported ZFS properties",
+            ),
+            (
+                "existing-zfs|tank/videos|/srv/videos",
+                "below /var",
+            ),
+        )
+        for record, message in invalid_records:
+            with self.subTest(record=record):
+                self.log_path.write_text("")
+                manifest, _ = self.manifest(record)
+                result = self.run_runtime(manifest)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertEqual(self.commands(), [])
+
+    def test_selinux_regex_escapes_literal_dots_in_storage_paths(self):
+        directory = self.root / "directory.v1"
+        manifest, _ = self.manifest(f"directory|{directory}|0750")
+
+        result = self.run_runtime(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        semanage = next(
+            command for command in self.commands() if command[0] == "semanage"
+        )
+        self.assertIn(r"directory\.v1(/.*)?", semanage[-1])
+
+    def test_runtime_contains_no_destructive_or_property_mutating_zfs_verbs(self):
+        source = RUNTIME.read_text()
+        prohibited = (
+            "zfs destroy",
+            "zfs inherit",
+            "zfs promote",
+            "zfs rename",
+            "zfs rollback",
+            "zfs set",
+            "zpool add",
+            "zpool attach",
+            "zpool clear",
+            "zpool create",
+            "zpool destroy",
+            "zpool detach",
+            "zpool export",
+            "zpool import",
+            "zpool remove",
+            "zpool replace",
+        )
+        for invocation in prohibited:
+            with self.subTest(invocation=invocation):
+                self.assertNotIn(invocation, source)
+
+
+if __name__ == "__main__":
+    unittest.main()
