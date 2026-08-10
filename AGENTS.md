@@ -54,7 +54,6 @@ Important non-container units:
 - `zfs-create-victoria-metrics-dataset.service` - same idea for VictoriaMetrics
 - `zfs-prepare-jellyfin-storage.service` - creates Jellyfin config/cache datasets and verifies read-only access plus persistent SELinux labeling for `tank/videos`
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
-- `zfs-health-check.timer` - periodic pool health checks
 - `zfs-snapshots-*@.timer` - rolling snapshot retention for selected datasets
 
 ### Monitoring Notes
