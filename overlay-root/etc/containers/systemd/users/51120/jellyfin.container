@@ -28,22 +28,22 @@ HealthCmd=none
 
 Environment=JELLYFIN_PublishedServerUrl=https://jellyfin.i.samhclark.com
 
-# Persistent configuration ZFS dataset; ownership and SELinux labels are prepared by the host unit
+# Declarative config storage
 Volume=/var/lib/jellyfin/config:/config
 
-# Persistent cache and transcoding ZFS dataset; ownership and SELinux labels are prepared by the host unit
+# Declarative cache storage
 Volume=/var/lib/jellyfin/cache:/cache
 
-# Existing movies library; read-only access and SELinux labels are verified by the host unit
+# Declarative media storage
 Volume=/var/zfs/tank/videos/movies:/media/movies:ro
 
-# Existing TV library; read-only access and SELinux labels are verified by the host unit
+# Declarative media storage
 Volume=/var/zfs/tank/videos/tv-shows:/media/tv-shows:ro
 
 [Service]
 ExecStartPre=/usr/bin/test -c /dev/net/tun
 ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/nas-krun-network/policy-ready && /usr/bin/test -e /sys/class/net/krun-51120; then exit 0; fi; sleep 1; done; echo "krun network policy was not ready within 90 seconds" >&2; exit 1'
-ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh marker /run/jellyfin-storage/ready 3600 2 --path /var/lib/jellyfin/config --source tank/jellyfin/config --owner 51120:51120 --access w --path /var/lib/jellyfin/cache --source tank/jellyfin/cache --owner 51120:51120 --access w --path /var/zfs/tank/videos --source tank/videos --path /var/zfs/tank/videos/movies --access rx --path /var/zfs/tank/videos/tv-shows --access rx
+ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh marker /run/nas-storage/jellyfin/ready 300 2 --path /var/lib/jellyfin/config --source tank/jellyfin/config --owner 51120:51120 --access rwx --path /var/lib/jellyfin/cache --source tank/jellyfin/cache --owner 51120:51120 --access rwx --path /var/zfs/tank/videos/movies --source tank/videos --access rx --path /var/zfs/tank/videos/tv-shows --source tank/videos --access rx
 ExecStartPre=/usr/local/bin/nas-assert-tcp-ports-free.sh 8096
 ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.2.2/8096" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.2.2:8096 was not reachable" >&2; exit 1'
 Restart=always

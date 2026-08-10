@@ -1,5 +1,5 @@
-# ABOUTME: Declarative config for the rootless Jellyfin Quadlet; persistent
-# state and read-only media access are prepared by the host ZFS unit.
+# ABOUTME: Declarative config for Jellyfin's rootless runtime, owned datasets,
+# and preserve-owner read-only media exports.
 
 [service]
 name = "jellyfin"
@@ -43,63 +43,60 @@ ports = [8096]
 from = "jellyfin-exporter"
 ports = [8096]
 
-[[container.volumes]]
-comment = "Persistent configuration ZFS dataset; ownership and SELinux labels are prepared by the host unit"
-source = "/var/lib/jellyfin/config"
-target = "/config"
-
-[[container.volumes]]
-comment = "Persistent cache and transcoding ZFS dataset; ownership and SELinux labels are prepared by the host unit"
-source = "/var/lib/jellyfin/cache"
-target = "/cache"
-
-[[container.volumes]]
-comment = "Existing movies library; read-only access and SELinux labels are verified by the host unit"
-source = "/var/zfs/tank/videos/movies"
-target = "/media/movies"
-options = "ro"
-
-[[container.volumes]]
-comment = "Existing TV library; read-only access and SELinux labels are verified by the host unit"
-source = "/var/zfs/tank/videos/tv-shows"
-target = "/media/tv-shows"
-options = "ro"
-
 [[container.ports]]
 host = "127.0.0.1:8096"
 container = 8096
+
+[[storage]]
+name = "config"
+kind = "managed-zfs"
+dataset = "tank/jellyfin/config"
+host-path = "/var/lib/jellyfin/config"
+mode = "0750"
+record-size = "16K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/config"
+access = "read-write"
+
+[[storage]]
+name = "cache"
+kind = "managed-zfs"
+dataset = "tank/jellyfin/cache"
+host-path = "/var/lib/jellyfin/cache"
+mode = "0750"
+record-size = "128K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/cache"
+access = "read-write"
+
+[[storage]]
+name = "media"
+kind = "existing-zfs"
+dataset = "tank/videos"
+host-path = "/var/zfs/tank/videos"
+
+[[storage.exports]]
+subpath = "movies"
+container-path = "/media/movies"
+access = "read-only"
+
+[[storage.exports]]
+subpath = "tv-shows"
+container-path = "/media/tv-shows"
+access = "read-only"
 
 [unit]
 timeout-start-sec = 3900
 
 [startup]
 require-published-tcp-ports-free = true
-
-[startup.readiness]
-marker = "/run/jellyfin-storage/ready"
-timeout-sec = 3600
-interval-sec = 2
-
-[[startup.readiness.paths]]
-path = "/var/lib/jellyfin/config"
-mount-source = "tank/jellyfin/config"
-owner = "service"
-access = ["write"]
-
-[[startup.readiness.paths]]
-path = "/var/lib/jellyfin/cache"
-mount-source = "tank/jellyfin/cache"
-owner = "service"
-access = ["write"]
-
-[[startup.readiness.paths]]
-path = "/var/zfs/tank/videos"
-mount-source = "tank/videos"
-
-[[startup.readiness.paths]]
-path = "/var/zfs/tank/videos/movies"
-access = ["read", "execute"]
-
-[[startup.readiness.paths]]
-path = "/var/zfs/tank/videos/tv-shows"
-access = ["read", "execute"]

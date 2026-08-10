@@ -8,7 +8,13 @@ from dataclasses import replace
 from pathlib import Path
 
 from quadletgen.compiler import compile_fleet
-from quadletgen.model import ConfigError, Fleet, MarkerReadiness
+from quadletgen.model import (
+    ConfigError,
+    Fleet,
+    MarkerReadiness,
+    RequiredPath,
+    StartupSpec,
+)
 from quadletgen.parser import load_service
 from tests.quadlet_test_support import REPO, current_fleet, service_toml
 
@@ -20,7 +26,20 @@ class FleetValidationTests(unittest.TestCase):
         return load_service(path)
 
     def test_direct_model_construction_cannot_bypass_local_invariants(self):
-        service = current_fleet().services[0]
+        service = next(
+            item for item in current_fleet().services if not item.storage
+        )
+        service = replace(
+            service,
+            startup=StartupSpec(
+                readiness=MarkerReadiness(
+                    marker="/run/example/ready",
+                    timeout_sec=30,
+                    interval_sec=1,
+                    paths=(RequiredPath(path="/var/lib/example"),),
+                )
+            ),
+        )
         readiness = service.startup.readiness
         self.assertIsInstance(readiness, MarkerReadiness)
         assert isinstance(readiness, MarkerReadiness)

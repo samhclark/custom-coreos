@@ -244,16 +244,22 @@ class StartupPolicyTests(unittest.TestCase):
         )
         self.assertIn(
             "--path /var/lib/jellyfin/config --source tank/jellyfin/config "
-            "--owner 51120:51120 --access w",
+            "--owner 51120:51120 --access rwx",
             jellyfin,
         )
         self.assertIn(
-            "--path /var/zfs/tank/videos --source tank/videos",
+            "--path /var/lib/jellyfin/cache --source tank/jellyfin/cache "
+            "--owner 51120:51120 --access rwx",
             jellyfin,
         )
         self.assertIn(
-            "--path /var/zfs/tank/videos/movies --access rx "
-            "--path /var/zfs/tank/videos/tv-shows --access rx",
+            "--path /var/zfs/tank/videos/movies --source tank/videos "
+            "--access rx",
+            jellyfin,
+        )
+        self.assertIn(
+            "--path /var/zfs/tank/videos/tv-shows --source tank/videos "
+            "--access rx",
             jellyfin,
         )
         self.assertIn(
