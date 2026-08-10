@@ -1,0 +1,140 @@
+variant: fcos
+version: 1.6.0
+
+storage:
+  files:
+    - path: /etc/custom-coreos-vm-smoke
+      mode: 0755
+      overwrite: true
+      contents:
+        inline: |
+          #!/bin/bash
+          set -Eeuo pipefail
+          exec >/dev/ttyS0 2>&1
+
+          fail() {
+              local status="$?"
+              trap - ERR TERM
+              printf 'CUSTOM_COREOS_VM_SMOKE_FAIL status=%s\n' "${status}"
+              systemctl poweroff --no-block || true
+              exit "${status}"
+          }
+          terminate() {
+              trap - ERR TERM
+              printf 'CUSTOM_COREOS_VM_SMOKE_FAIL signal=TERM\n'
+              systemctl poweroff --no-block || true
+              exit 124
+          }
+          trap fail ERR
+          trap terminate TERM
+
+          printf 'CUSTOM_COREOS_VM_SMOKE_BEGIN\n'
+          bootc status
+          [[ "$(getenforce)" == "Enforcing" ]]
+          modprobe zfs
+          [[ -d /sys/module/zfs ]]
+          modinfo -F vermagic zfs | grep -Fq "$(uname -r)"
+          semodule -l | grep -Eq '^nas-krun-tun[[:space:]]'
+
+          while IFS=: read -r user _ _; do
+              getent passwd "${user}" >/dev/null
+          done < /etc/subuid
+
+          while IFS= read -r unit; do
+              [[ -z "${unit}" || "${unit}" == \#* ]] && continue
+              [[ "$(systemctl is-active "${unit}")" == "active" ]]
+          done < /usr/share/custom-coreos/fleet/account-units.list
+
+          while IFS= read -r unit; do
+              [[ -z "${unit}" || "${unit}" == \#* ]] && continue
+              [[ "$(systemctl is-enabled "${unit}")" == "masked" ]]
+          done < /usr/share/custom-coreos/fleet/storage-units.list
+
+          while IFS=$'\t' read -r tap user_unit _; do
+              [[ -z "${tap}" || "${tap}" == \#* ]] && continue
+              uid="${user_unit#user@}"
+              uid="${uid%.service}"
+              [[ "${uid}" =~ ^[0-9]+$ ]]
+              quadlet_dir="/etc/containers/systemd/users/${uid}"
+              quadlet_output="$(
+                  QUADLET_UNIT_DIRS="${quadlet_dir}" \
+                      /usr/lib/systemd/system-generators/podman-system-generator \
+                      --user --dryrun 2>&1
+              )"
+              grep -Fq "Loading source unit file ${quadlet_dir}/" \
+                  <<< "${quadlet_output}"
+              grep -Eq '^---[a-z0-9-]+\.service---$' \
+                  <<< "${quadlet_output}"
+          done < /usr/share/custom-coreos/fleet/active-taps.tsv
+
+          deadline=$((SECONDS + 30))
+          while true; do
+              missing=()
+              while IFS=$'\t' read -r tap _; do
+                  [[ -z "${tap}" || "${tap}" == \#* ]] && continue
+                  [[ -e "/sys/class/net/${tap}" ]] || missing+=("${tap}")
+              done < /usr/share/custom-coreos/fleet/active-taps.tsv
+              ((${#missing[@]} == 0)) && break
+              ((SECONDS < deadline))
+              sleep 1
+          done
+          nft list table ip nas_krun_nat >/dev/null
+          [[ -z "$(systemctl --failed --no-legend --plain)" ]]
+
+          printf 'CUSTOM_COREOS_VM_SMOKE_PASS\n'
+          systemctl poweroff --no-block
+
+systemd:
+  units:
+    - name: custom-coreos-vm-smoke.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=Run isolated custom CoreOS VM assertions
+        After=systemd-networkd.service nftables.service
+
+        [Service]
+        Type=oneshot
+        ExecStart=/etc/custom-coreos-vm-smoke
+        TimeoutStartSec=120
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: user@.service
+      mask: true
+    - name: bootc-fetch-apply-updates.timer
+      mask: true
+    - name: nas-krun-network-policy.service
+      mask: true
+    - name: sops-distribute-secrets.service
+      mask: true
+    - name: tailscaled.service
+      mask: true
+    - name: disk-health-metrics.timer
+      mask: true
+    - name: nas-prepare-alertmanager-storage.service
+      mask: true
+    - name: nas-prepare-caddy-storage.service
+      mask: true
+    - name: nas-prepare-garage-storage.service
+      mask: true
+    - name: nas-prepare-grafana-storage.service
+      mask: true
+    - name: nas-prepare-jellyfin-storage.service
+      mask: true
+    - name: nas-prepare-victoria-metrics-storage.service
+      mask: true
+    - name: zfs-scrub-monthly@tank.timer
+      mask: true
+    - name: zfs-snapshots-frequently@videos.timer
+      mask: true
+    - name: zfs-snapshots-hourly@videos.timer
+      mask: true
+    - name: zfs-snapshots-daily@videos.timer
+      mask: true
+    - name: zfs-snapshots-weekly@videos.timer
+      mask: true
+    - name: zfs-snapshots-monthly@videos.timer
+      mask: true
+    - name: zfs-snapshots-yearly@videos.timer
+      mask: true
