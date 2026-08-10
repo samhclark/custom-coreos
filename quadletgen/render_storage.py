@@ -67,8 +67,8 @@ def storage_readiness_line(service: Service) -> str | None:
             "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh",
             "marker",
             marker,
-            "90",
-            "1",
+            "300",
+            "2",
             *requirements,
         ]
     )
