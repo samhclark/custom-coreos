@@ -28,10 +28,10 @@ User=0
 # Image-controlled configuration (read-only)
 Volume=/usr/share/custom-coreos/garage/garage.toml:/etc/garage.toml:ro
 
-# Persistent metadata ZFS dataset; ownership and SELinux labels are prepared by the host unit
+# Declarative meta storage
 Volume=/var/lib/garage/meta:/var/lib/garage/meta
 
-# Persistent block ZFS dataset; ownership and SELinux labels are prepared by the host unit
+# Declarative data storage
 Volume=/var/lib/garage/data:/var/lib/garage/data
 
 # Runtime secret written at boot by sops-distribute-secrets.service
@@ -49,7 +49,7 @@ ExecStartPre=/usr/bin/bash -ceu 'for i in {1..90}; do if /usr/bin/test -r /run/n
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/garage/garage-rpc-secret
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/garage/garage-admin-token
 ExecStartPre=/usr/bin/test -r /run/nas-secrets/garage/garage-metrics-token
-ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh marker /run/garage-datasets/ready 3600 2 --path /var/lib/garage/meta --source tank/garage/meta --owner 51110:51110 --access w --path /var/lib/garage/data --source tank/garage/data --owner 51110:51110 --access w
+ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh marker /run/nas-storage/garage/ready 300 2 --path /var/lib/garage/meta --source tank/garage/meta --owner 51110:51110 --access rwx --path /var/lib/garage/data --source tank/garage/data --owner 51110:51110 --access rwx
 ExecStartPre=/usr/local/bin/nas-assert-tcp-ports-free.sh 3900 3902 3903
 ExecStartPost=/usr/bin/bash -ceu 'for i in {1..30}; do if /usr/bin/timeout 1 /usr/bin/bash -c "</dev/tcp/10.253.1.2/3900" >/dev/null 2>&1; then exit 0; fi; sleep 1; done; echo "libkrun guest 10.253.1.2:3900 was not reachable" >&2; exit 1'
 Restart=always
