@@ -9,6 +9,7 @@ from pathlib import Path
 from quadletgen.compiler import compile_fleet
 from quadletgen.model import ConfigError, Fleet, Protocol
 from quadletgen.parser import load_service
+from quadletgen.storage_model import ManagedZfsStorage, StorageAccess
 from tests.quadlet_test_support import REPO, service_toml
 
 
@@ -54,6 +55,68 @@ class StrictParserTests(unittest.TestCase):
                 "example.invalid/service:1",
             ),
             "immutable name:tag@sha256 digest",
+        )
+
+    def test_top_level_parser_integrates_typed_storage(self):
+        service = self.load(
+            service_toml(
+                extra="""
+[[storage]]
+name = "state"
+kind = "managed-zfs"
+dataset = "tank/service/state"
+host-path = "/var/lib/service"
+mode = "0750"
+record-size = "128K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/state"
+access = "read-write"
+"""
+            )
+        )
+
+        self.assertEqual(len(service.storage), 1)
+        storage = service.storage[0]
+        self.assertIsInstance(storage, ManagedZfsStorage)
+        self.assertEqual(storage.exports[0].access, StorageAccess.READ_WRITE)
+
+    def test_storage_policy_is_bound_to_the_service(self):
+        managed = """
+[[storage]]
+name = "state"
+kind = "managed-zfs"
+dataset = "tank/other/state"
+host-path = "/var/lib/service"
+mode = "0750"
+record-size = "128K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/state"
+access = "read-write"
+"""
+        self.assert_invalid(
+            service_toml(extra=managed),
+            "managed datasets must be below tank/service/",
+        )
+        self.assert_invalid(
+            service_toml(
+                container='''
+[[container.volumes]]
+source = "/var/lib/legacy"
+target = "/state"
+''',
+                extra=managed.replace("tank/other/state", "tank/service/state"),
+            ),
+            "also a raw volume",
         )
 
     def test_service_identity_matches_dns_and_source_filename_contracts(self):

@@ -35,6 +35,7 @@ from .model import (
     UnitSpec,
     VolumeMount,
 )
+from .storage_parser import parse_storage
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -607,6 +608,7 @@ def load_service(toml_path: Path) -> Service:
             "host",
             "container",
             "krun",
+            "storage",
             "data",
             "assets",
             "startup",
@@ -626,6 +628,7 @@ def load_service(toml_path: Path) -> Service:
         host=host,
         container=container,
         krun=krun,
+        storage=parse_storage(top.get("storage"), name),
         data=_parse_data(top.get("data"), name),
         assets=_parse_assets(top.get("assets"), name),
         startup=_parse_startup(top.get("startup"), name),
