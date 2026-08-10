@@ -13,6 +13,12 @@ from typing import Literal, Mapping, NoReturn, TypeAlias
 from urllib.parse import urlsplit
 
 from .errors import ConfigError
+from .storage_model import (
+    DirectoryStorage,
+    ExistingZfsStorage,
+    ManagedZfsStorage,
+    StorageSpec,
+)
 
 
 SUBID_COUNT = 65536
@@ -223,6 +229,7 @@ class Service:
     host: HostIdentity
     container: ContainerSpec
     krun: KrunSpec | None = None
+    storage: tuple[StorageSpec, ...] = ()
     data: DataSpec | None = None
     assets: AssetsSpec | None = None
     startup: StartupSpec = field(default_factory=StartupSpec)
@@ -721,6 +728,16 @@ def _validate_service(service: Service) -> None:
             _fail(f"service.{field_name}", f"must be {expected_type.__name__}")
     if service.data is not None and not isinstance(service.data, DataSpec):
         _fail("service.data", "must be DataSpec")
+    if not isinstance(service.storage, tuple) or any(
+        not isinstance(
+            storage,
+            (DirectoryStorage, ManagedZfsStorage, ExistingZfsStorage),
+        )
+        for storage in service.storage
+    ):
+        _fail("service.storage", "must contain only supported storage contracts")
+    if service.data is not None and service.storage:
+        _fail(service.source.name, "cannot declare both [data] and [[storage]]")
     if service.assets is not None and not isinstance(service.assets, AssetsSpec):
         _fail("service.assets", "must be AssetsSpec")
     if service.krun is not None and not isinstance(
@@ -729,6 +746,29 @@ def _validate_service(service: Service) -> None:
     ):
         _fail("service.krun", "must be a supported krun specification")
     _validate_service_info(service)
+    for storage in service.storage:
+        if isinstance(storage, ManagedZfsStorage):
+            expected_prefix = f"tank/{service.info.name}/"
+            if not storage.dataset.startswith(expected_prefix):
+                _fail(
+                    f"{service.source.name}: storage[{storage.name}].dataset",
+                    f"managed datasets must be below {expected_prefix}",
+                )
+        elif isinstance(storage, ExistingZfsStorage):
+            if storage.dataset != "tank/videos":
+                _fail(
+                    f"{service.source.name}: storage[{storage.name}].dataset",
+                    "the only allowed shared existing dataset is tank/videos",
+                )
+        for export in storage.exports:
+            if any(
+                volume.target == export.container_path
+                for volume in service.container.volumes
+            ):
+                _fail(
+                    f"{service.source.name}: storage[{storage.name}].exports",
+                    f"container path {export.container_path!r} is also a raw volume",
+                )
     _validate_host(service)
     _validate_container(service)
     _validate_krun(service)
@@ -770,6 +810,29 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
         ranges.append(
             (service.host.subid_start, service.host.subid_start + SUBID_COUNT, name)
         )
+        for storage in service.storage:
+            for resource_kind, resource_value in (
+                ("storage host path", storage.host_path),
+                (
+                    "ZFS dataset",
+                    storage.dataset
+                    if isinstance(
+                        storage,
+                        (ManagedZfsStorage, ExistingZfsStorage),
+                    )
+                    else None,
+                ),
+            ):
+                if resource_value is None:
+                    continue
+                resource = (resource_kind, resource_value)
+                if resource in seen:
+                    _fail(
+                        name,
+                        f"duplicate {resource_kind} {resource_value!r} "
+                        f"(also in {seen[resource]})",
+                    )
+                seen[resource] = name
         if service.container.enabled:
             for port in service.container.ports:
                 publication_key = (port.host_port, port.protocol)
