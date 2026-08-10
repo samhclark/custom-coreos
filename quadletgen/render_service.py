@@ -183,8 +183,11 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         )
     lines.append("Restart=always")
     lines.append(f"RestartSec={service.unit.restart_sec}")
-    if service.unit.timeout_start_sec is not None:
-        lines.append(f"TimeoutStartSec={service.unit.timeout_start_sec}")
+    timeout_start_sec = service.unit.timeout_start_sec
+    if timeout_start_sec is None and service.storage:
+        timeout_start_sec = 330
+    if timeout_start_sec is not None:
+        lines.append(f"TimeoutStartSec={timeout_start_sec}")
 
     lines += ["", "[Install]", "WantedBy=default.target"]
     return "\n".join(lines) + "\n"

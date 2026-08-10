@@ -56,9 +56,10 @@ class StorageRenderingTests(unittest.TestCase):
             unit,
         )
         self.assertIn(
-            "marker /run/nas-storage/service/ready 90 1",
+            "marker /run/nas-storage/service/ready 300 2",
             unit,
         )
+        self.assertIn("TimeoutStartSec=330", unit)
         self.assertIn(
             "--path /var/lib/service/data --owner 51999:51999 "
             "--access rwx",

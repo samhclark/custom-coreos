@@ -39,7 +39,7 @@ class CaddyStatePreparationTests(unittest.TestCase):
     def test_quadlet_waits_for_readiness_and_keeps_large_state_unlabeled(self):
         self.assertIn(
             "nas-wait-for-readiness.sh marker "
-            "/run/nas-storage/caddy/ready 90 1",
+            "/run/nas-storage/caddy/ready 300 2",
             QUADLET,
         )
         self.assertNotIn("/usr/bin/test -w /var/lib/caddy", QUADLET)
