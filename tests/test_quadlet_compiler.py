@@ -8,7 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from quadletgen.compiler import Artifact, compile_fleet
-from quadletgen.model import ConfigError, DataSpec, Fleet, KrunNetwork
+from quadletgen.model import ConfigError, Fleet, KrunNetwork
 from tests.quadlet_test_support import (
     GENERATED_PREFIX,
     OVERLAY,
@@ -170,43 +170,8 @@ class FleetManifestTests(unittest.TestCase):
             ]
             if service.assets is not None:
                 self.assertNotIn(service.assets.path, script)
-            if service.data is None:
-                self.assertNotIn("semanage fcontext", script)
-                self.assertNotIn("restorecon", script)
-            else:
-                self.assertIn(service.data.path, script)
-                self.assertIn("semanage fcontext", script)
-                self.assertIn("restorecon", script)
-
-    def test_runtime_data_path_is_escaped_for_selinux_regex(self):
-        changed = next(
-            service
-            for service in self.fleet.services
-            if service.data is None and not service.storage
-        )
-        changed = replace(
-            changed,
-            data=DataSpec("/var/lib/service.v2"),
-        )
-        fleet = Fleet.build(
-            [
-                changed if service.info.name == changed.info.name else service
-                for service in self.fleet.services
-            ]
-        )
-        artifacts = {
-            artifact.path: artifact.content
-            for artifact in compile_fleet(fleet)
-        }
-        script = artifacts[
-            Path(
-                f"usr/local/bin/ensure-nas-{changed.host.slug}-account.sh"
-            )
-        ]
-        self.assertIn(
-            'DATA_FCONTEXT="/var/lib/service\\.v2(/.*)?"',
-            script,
-        )
+            self.assertNotIn("semanage fcontext", script)
+            self.assertNotIn("restorecon", script)
 
 
 class StartupPolicyTests(unittest.TestCase):

@@ -27,10 +27,8 @@ NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 USERNAME_RE = re.compile(r"^_nas_[a-z0-9]{1,26}$")
 PINNED_IMAGE_RE = re.compile(r"^[^@\s]+:[^@:\s]+@sha256:[0-9a-f]{64}$")
 SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
-SUBDIRECTORY_RE = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 DISPLAY_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")
 ENVIRONMENT_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
-FILE_MODE_RE = re.compile(r"^0[0-7]{3}$")
 PORTABLE_ABSOLUTE_PATH_RE = re.compile(
     r"^/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+$"
 )
@@ -173,13 +171,6 @@ KrunSpec: TypeAlias = KrunTsi | KrunPasst | KrunTap
 
 
 @dataclass(frozen=True, slots=True)
-class DataSpec:
-    path: str
-    mode: str = "0750"
-    subdirectories: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
 class AssetsSpec:
     path: str
 
@@ -230,7 +221,6 @@ class Service:
     container: ContainerSpec
     krun: KrunSpec | None = None
     storage: tuple[StorageSpec, ...] = ()
-    data: DataSpec | None = None
     assets: AssetsSpec | None = None
     startup: StartupSpec = field(default_factory=StartupSpec)
     unit: UnitSpec = field(default_factory=UnitSpec)
@@ -489,6 +479,11 @@ def _validate_container(service: Service) -> None:
         item_path = f"{path}.volumes[{index}]"
         _validate_absolute_path(volume.source, f"{item_path}.source")
         _validate_absolute_path(volume.target, f"{item_path}.target")
+        if volume.source.startswith("/var/"):
+            _fail(
+                f"{item_path}.source",
+                "mutable /var volumes must use [[storage]]",
+            )
         if volume.options is not None:
             _validate_string(volume.options, f"{item_path}.options")
             if not VOLUME_OPTIONS_RE.fullmatch(volume.options):
@@ -606,28 +601,7 @@ def _validate_krun(service: Service) -> None:
         _fail(f"{path}.host-access", "contains duplicates")
 
 
-def _validate_data_and_assets(service: Service) -> None:
-    if service.data is not None:
-        data = service.data
-        path = f"{service.source.name}: [data]"
-        _validate_absolute_path(data.path, f"{path}.path")
-        if not data.path.startswith("/var/"):
-            _fail(f"{path}.path", "must be below /var")
-        _validate_string(data.mode, f"{path}.mode")
-        if not FILE_MODE_RE.fullmatch(data.mode):
-            _fail(f"{path}.mode", "must be a four-digit octal mode")
-        for subdirectory in data.subdirectories:
-            _validate_string(subdirectory, f"{path}.subdirectories")
-            if (
-                not SUBDIRECTORY_RE.fullmatch(subdirectory)
-                or any(part in {".", ".."} for part in subdirectory.split("/"))
-            ):
-                _fail(
-                    f"{path}.subdirectories",
-                    f"contains unsafe relative path {subdirectory!r}",
-                )
-        if len(set(data.subdirectories)) != len(data.subdirectories):
-            _fail(f"{path}.subdirectories", "contains duplicates")
+def _validate_assets(service: Service) -> None:
     if service.assets is not None:
         path = f"{service.source.name}: [assets].path"
         _validate_absolute_path(service.assets.path, path)
@@ -726,8 +700,6 @@ def _validate_service(service: Service) -> None:
     ):
         if not isinstance(value, expected_type):
             _fail(f"service.{field_name}", f"must be {expected_type.__name__}")
-    if service.data is not None and not isinstance(service.data, DataSpec):
-        _fail("service.data", "must be DataSpec")
     if not isinstance(service.storage, tuple) or any(
         not isinstance(
             storage,
@@ -736,8 +708,6 @@ def _validate_service(service: Service) -> None:
         for storage in service.storage
     ):
         _fail("service.storage", "must contain only supported storage contracts")
-    if service.data is not None and service.storage:
-        _fail(service.source.name, "cannot declare both [data] and [[storage]]")
     if service.storage and service.startup.readiness is not None:
         _fail(
             service.source.name,
@@ -786,7 +756,7 @@ def _validate_service(service: Service) -> None:
             service.source.name,
             '[container].ports cannot be used with network = "host"',
         )
-    _validate_data_and_assets(service)
+    _validate_assets(service)
     _validate_startup(service)
     _validate_unit(service)
 
