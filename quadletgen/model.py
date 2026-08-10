@@ -738,6 +738,11 @@ def _validate_service(service: Service) -> None:
         _fail("service.storage", "must contain only supported storage contracts")
     if service.data is not None and service.storage:
         _fail(service.source.name, "cannot declare both [data] and [[storage]]")
+    if service.storage and service.startup.readiness is not None:
+        _fail(
+            service.source.name,
+            "[[storage]] owns startup readiness; remove [startup.readiness]",
+        )
     if service.assets is not None and not isinstance(service.assets, AssetsSpec):
         _fail("service.assets", "must be AssetsSpec")
     if service.krun is not None and not isinstance(
