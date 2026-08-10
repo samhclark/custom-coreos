@@ -467,7 +467,7 @@ name = "token"
             "[container].volumes[1].options": service_toml(
                 container=(
                     "[[container.volumes]]\n"
-                    'source = "/var/lib/service"\n'
+                    'source = "/usr/share/service"\n'
                     'target = "/data"\n'
                     'options = "ro;rw"'
                 )
@@ -477,16 +477,6 @@ name = "token"
                     "[[container.secrets]]\n"
                     'name = "token"\n'
                     'target = "relative/path"'
-                )
-            ),
-            "[data].path": service_toml(
-                extra='[data]\npath = "/tmp/service"'
-            ),
-            "[data].mode": service_toml(
-                extra=(
-                    "[data]\n"
-                    'path = "/var/lib/service"\n'
-                    'mode = "0888"'
                 )
             ),
             "[assets].path": service_toml(
@@ -592,7 +582,7 @@ name = "token"
             with self.subTest(label=label):
                 self.assert_invalid(service_toml(extra=startup), "startup.readiness")
 
-    def test_startup_port_guard_and_subdirectories_are_validated(self):
+    def test_startup_port_guard_is_validated(self):
         self.assert_invalid(
             service_toml(
                 extra=(
@@ -602,15 +592,21 @@ name = "token"
             ),
             "requires at least one published TCP port",
         )
+
+    def test_mutable_var_mounts_require_typed_storage(self):
         self.assert_invalid(
             service_toml(
-                extra=(
-                    "[data]\n"
-                    'path = "/var/lib/service"\n'
-                    'subdirectories = ["../escape"]'
+                container=(
+                    "[[container.volumes]]\n"
+                    'source = "/var/lib/service"\n'
+                    'target = "/data"'
                 )
             ),
-            "unsafe relative path",
+            r"must use \[\[storage\]\]",
+        )
+        self.assert_invalid(
+            service_toml(extra='[data]\npath = "/var/lib/service"'),
+            "unknown keys: data",
         )
 
 

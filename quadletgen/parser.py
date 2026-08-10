@@ -12,7 +12,6 @@ from .model import (
     AssetsSpec,
     ConfigError,
     ContainerSpec,
-    DataSpec,
     HostIdentity,
     HttpReadiness,
     IngressRule,
@@ -419,27 +418,6 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
     return KrunTsi(cpus, ram_mib)
 
 
-def _parse_data(raw: object, name: str) -> DataSpec | None:
-    if raw is None:
-        return None
-    path = f"{name}: [data]"
-    table = _table(raw, path, {"path", "mode", "subdirectories"})
-    subdirectories = _string_array(
-        table.get("subdirectories", []),
-        f"{path}.subdirectories",
-    )
-    data_path = _string(
-        _required(table, "path", path),
-        f"{path}.path",
-    )
-    mode = _string(table.get("mode", "0750"), f"{path}.mode")
-    return DataSpec(
-        data_path,
-        mode,
-        subdirectories,
-    )
-
-
 def _parse_assets(
     raw: object,
     name: str,
@@ -609,7 +587,6 @@ def load_service(toml_path: Path) -> Service:
             "container",
             "krun",
             "storage",
-            "data",
             "assets",
             "startup",
             "unit",
@@ -629,7 +606,6 @@ def load_service(toml_path: Path) -> Service:
         container=container,
         krun=krun,
         storage=parse_storage(top.get("storage"), name),
-        data=_parse_data(top.get("data"), name),
         assets=_parse_assets(top.get("assets"), name),
         startup=_parse_startup(top.get("startup"), name),
         unit=_parse_unit(top.get("unit"), name),

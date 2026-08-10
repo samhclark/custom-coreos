@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import textwrap
 
 from .headers import generated_header
@@ -221,20 +220,6 @@ def tmpfiles_conf(service: Service) -> str:
             "the service identity does not collide with upstream image defaults."
         ),
     ]
-    if service.data is not None:
-        lines.append(
-            f"d {service.data.path} {service.data.mode} "
-            f"{host.username} {host.username} -"
-        )
-        for subdirectory in service.data.subdirectories:
-            lines.append(
-                f"d {service.data.path}/{subdirectory} {service.data.mode} "
-                f"{host.username} {host.username} -"
-            )
-        lines.append(
-            f"Z {service.data.path} {service.data.mode} "
-            f"{host.username} {host.username} -"
-        )
     home = f"/var/home/{host.username}"
     for subdir in (
         "",
@@ -254,33 +239,6 @@ def tmpfiles_conf(service: Service) -> str:
 def ensure_account_script(service: Service) -> str:
     host = service.host
 
-    data_fcontext_var = ""
-    fcontext_function = ""
-    data_block = ""
-    if service.data is not None:
-        data_fcontext = re.escape(service.data.path) + r"(/.*)?"
-        data_fcontext_var = f'\nDATA_FCONTEXT="{data_fcontext}"'
-        fcontext_function = """
-
-ensure_fcontext_rule() {
-    local target="$1"
-
-    if semanage fcontext -a -t container_file_t -r s0 "${target}" 2>/dev/null; then
-        log "Added SELinux fcontext for ${target}"
-        return
-    fi
-
-    semanage fcontext -m -t container_file_t -r s0 "${target}"
-}"""
-        data_block = f"""
-
-ensure_fcontext_rule "${{DATA_FCONTEXT}}"
-
-if [[ -e "{service.data.path}" ]]; then
-    log "Restoring SELinux labels for {service.data.path}"
-    restorecon -F -R -- "{service.data.path}"
-fi"""
-
     return f"""#!/bin/bash
 {header(service)}
 # ABOUTME: Ensures the {host.username} rootless service account has the state
@@ -293,7 +251,7 @@ USER_UID="{host.uid}"
 USER_HOME="/var/home/{host.username}"
 USER_SHELL="/sbin/nologin"
 USER_SUBID_START="{host.subid_start}"
-USER_SUBID_COUNT="{SUBID_COUNT}"{data_fcontext_var}
+USER_SUBID_COUNT="{SUBID_COUNT}"
 
 log() {{
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -319,7 +277,7 @@ ensure_subid_entry() {{
     if [[ "${{current}}" != "${{expected}}" ]]; then
         log "Leaving existing ${{file}} entry for ${{USER_NAME}}: ${{current}}"
     fi
-}}{fcontext_function}
+}}
 
 if ! getent passwd "${{USER_NAME}}" >/dev/null; then
     log "User ${{USER_NAME}} does not exist yet, skipping"
@@ -351,7 +309,7 @@ if [[ "${{current_shell}}" != "${{USER_SHELL}}" ]]; then
 fi
 
 ensure_subid_entry /etc/subuid
-ensure_subid_entry /etc/subgid{data_block}
+ensure_subid_entry /etc/subgid
 
 if systemctl is-failed --quiet "user@${{USER_UID}}.service"; then
     log "Retrying user@${{USER_UID}}.service after account setup"
