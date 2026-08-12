@@ -38,6 +38,10 @@ These are considered active and in use on the real machine unless explicitly sta
 - `blackbox-exporter.container` - local HTTP/TCP probe exporter for service-availability checks; rootless under `etc/containers/systemd/users/51230/`
 - `caddy.container` - reverse proxy / TLS termination for the user-facing services; rootless under `etc/containers/systemd/users/51310/`, connected to the root-managed routed libkrun TAP network
 - `garage.container` - S3-compatible object storage on ZFS; rootless under `etc/containers/systemd/users/51110/`, deployed and validated on the NAS
+- `immich-server.container` - Immich API/web and photo-library service; rootless under `etc/containers/systemd/users/51130/`, production configuration pending first NAS validation
+- `immich-database.container` - dedicated Immich PostgreSQL/VectorChord database; rootless under `etc/containers/systemd/users/51140/`, production configuration pending first NAS validation
+- `immich-valkey.container` - dedicated Immich queue/cache service; rootless under `etc/containers/systemd/users/51150/`, production configuration pending first NAS validation
+- `immich-machine-learning.container` - CPU-only Immich machine-learning service; rootless under `etc/containers/systemd/users/51160/`, production configuration pending first NAS validation
 - `jellyfin.container` - media library and streaming server; rootless under `etc/containers/systemd/users/51120/`, deployed under libkrun with software media processing while VM-isolated hardware transcoding remains under investigation
 - `jellyfin-exporter.container` - privacy-bounded Sessions API exporter for playback/transcode dashboards; rootless under `etc/containers/systemd/users/51260/`
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
@@ -49,7 +53,7 @@ These are considered active and in use on the real machine unless explicitly sta
 
 Important non-container units:
 - `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and writes per-service runtime secret files at boot
-- `nas-prepare-<service>-storage.service` - generated preparation and current-boot readiness for Caddy, Alertmanager, Grafana, Garage, VictoriaMetrics, and Jellyfin storage
+- `nas-prepare-<service>-storage.service` - generated preparation and current-boot readiness for every stateful service, including all four Immich components
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
 - `zfs-snapshots-*@.timer` - rolling snapshot retention for selected datasets
 
@@ -65,6 +69,7 @@ Important non-container units:
 - Garage datasets live under `tank/garage/{meta,data}`
 - VictoriaMetrics data lives under `tank/victoria-metrics/data`
 - Jellyfin state lives under `tank/jellyfin/{config,cache}`; `tank/videos` is mounted at `/var/zfs/tank/videos`, with `movies` and `tv-shows` exposed read-only to Jellyfin
+- Immich authoritative state lives under `tank/immich-server/library` and `tank/immich-database/data`; generated thumbnails and encoded video have separate datasets so a future backup policy can exclude them
 - Large ZFS-backed container data paths are labeled persistently with `semanage fcontext` + `restorecon -F -R`; do not casually switch them to Podman `:Z` / `:z`
 - `quadlets/*.toml` `[[storage]]` declarations are the source of truth for host creation/verification, SELinux policy, container mounts, and readiness; raw `/var` container volumes are rejected
 
@@ -72,7 +77,7 @@ Important non-container units:
 
 - Secret material is encrypted in the repo with SOPS at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`
 - The SOPS age private key is expected on the NAS as a `systemd-creds` file at `/var/lib/nas-secrets/age-key.cred`
-- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, Alertmanager, and Jellyfin exporter secrets
+- `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, Alertmanager, Jellyfin exporter, and Immich database secrets
 - The root-owned distributor writes per-service runtime files under `/run/nas-secrets/<service>/`; consuming rootless services mount those files read-only instead of using Podman `Secret=`
 - Rootless Podman secrets are not a validated production path. NAS testing showed that the former shell secret driver could not use meaningful `systemd-creds` key modes from rootless Podman's user-namespace context; see `docs/architecture/secrets.md` before changing the runtime-file design.
 
@@ -279,15 +284,16 @@ Images include labels for future deduplication:
 - Rootless service accounts should use namespaced host usernames such as `_nas_grafana` rather than upstream/vendor defaults like `grafana`
 - Reserve `51000-51999` for image-managed service accounts in this repo
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
-- Current allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_jellyfin` uses `51120`; `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_jellyfinmetrics` uses `51260`; `_nas_caddy` uses `51310`
+- Current storage/application allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_jellyfin` uses `51120`; `_nas_immichserver` uses `51130`; `_nas_immichdatabase` uses `51140`; `_nas_immichvalkey` uses `51150`; `_nas_immichmachinelearning` uses `51160`
+- Current observability/edge allocation: `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_jellyfinmetrics` uses `51260`; `_nas_caddy` uses `51310`
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
 - UIDs are allocate-only: never reuse a UID from a retired service. File ownership is numeric and outlives the user — ZFS snapshots in particular can hand a retired UID's files to whatever service reuses it. `quadlets/*.toml` is the registry of active allocations; when the first service is actually retired, record its UID here as retired and add a `retired-uids` check to `generate-quadlets.py`.
 
 ## Rootless Quadlet Note
 
 Current state:
-- Caddy, Grafana, vmalert, blackbox exporter, Alertmanager, VictoriaMetrics, Garage, Jellyfin, and Jellyfin exporter are deployed as rootless admin-managed user Quadlets; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work
-- All nine image-defined rootless services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
+- Thirteen image-defined services are deployed as rootless admin-managed user Quadlets: the existing ingress, observability, Garage, and Jellyfin services plus the four-component Immich application. Immich is production-configured but remains pending first NAS validation; Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work.
+- All thirteen services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `make generate-quadlets`, and commit both. Each service declares an application, a unique role within that application, named endpoints with allowed consumers, and any bounded startup dependencies. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, storage-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` for declared secrets.
 
 Useful reference points for future rootless work:
@@ -303,7 +309,7 @@ Useful reference points for future rootless work:
 - vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
 - Alertmanager's static config lives under `/usr/share/custom-coreos/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
 - Stateful service storage is declared under `[[storage]]`. Generated preparation units create only missing managed resources, verify exact mounts/properties, maintain persistent SELinux policy, and publish `/run/nas-storage/<service>/ready`; see `docs/architecture/storage.md`.
-- Caddy, Alertmanager, and Grafana use small directory storage with guarded automatic repair. Garage, VictoriaMetrics, and Jellyfin use explicit-repair ZFS storage; create `/var/lib/nas-repairs/<service>/repair-required` and restart `nas-prepare-<service>-storage.service` only after reviewing why the bounded check failed.
+- Caddy, Alertmanager, Grafana, Immich Valkey, and Immich machine learning use small directory storage with guarded automatic repair. Garage, VictoriaMetrics, Jellyfin, the Immich server, and the Immich database use explicit-repair ZFS storage; create `/var/lib/nas-repairs/<service>/repair-required` and restart `nas-prepare-<service>-storage.service` only after reviewing why the bounded check failed.
 - Jellyfin's `tank/videos` declaration is required-existing, preserve-owner, and read-only. The generic runtime may repair labels after an explicit request but never creates that dataset or changes its ownership/modes.
 - The image carries a narrowly scoped crun 1.28 patch adding `krun.tap_name`; it calls libkrun's upstream `krun_add_net_tap()` with the embedded DHCP client enabled. TAP-backed Quadlets must include `AddDevice=/dev/net/tun` because libkrun opens that device after entering the container mount namespace.
 - `systemd-networkd` owns only the generated `krun-*` TAPs; NetworkManager explicitly ignores that pattern. Each service has a dedicated /30, a one-address DHCP pool with Rapid Commit, and a TAP owned by that service's host account. Generated nftables rules provide anti-spoofing, declared inter-service edges, host publication, and outbound NAT. Do not hand-edit generated `.netdev`, `.network`, or `nas-krun-*.nft` files.
@@ -311,6 +317,7 @@ Useful reference points for future rootless work:
 - Disabled TOML services are excluded from TAPs, peer host entries, and nftables. TAP host publications deliberately accept only `127.0.0.1` (loopback-only) and `0.0.0.0` (all host addresses); add explicit policy semantics and namespace coverage before expanding that schema.
 - Caddy uses 2 vCPUs and 512 MiB under libkrun. Root nftables publishes TCP 80/443, UDP 443, and loopback-only TCP 2019 to its guest; Caddy reaches backends by generated `*.krun` host entries and explicit inter-TAP allow rules. No Podman publisher, pasta, passt, or low-port host sysctl is involved. The krun handler still lacks `podman exec`, so configuration changes use service restarts.
 - Jellyfin uses a 4-vCPU, 4-GiB libkrun guest on its dedicated TAP, with loopback-only host TCP 8096 DNAT behind Caddy. Its image healthcheck is disabled because it requires unsupported `podman exec`; blackbox probing is authoritative. The deployment deliberately omits `/dev/dri` hardware acceleration and UDP discovery; `/var/zfs/tank/videos/{movies,tv-shows}` is mounted read-only without Podman `:z`/`:Z` relabeling.
+- Immich uses four dedicated libkrun guests. The server alone is loopback-published on TCP 2283 behind Caddy; PostgreSQL, Valkey, and machine learning are reachable only over generated consumer edges. The server waits boundedly for PostgreSQL and Valkey, while machine learning remains independently restartable. See `docs/operations/immich.md` for first-use and recovery boundaries.
 - The Jellyfin exporter polls the authenticated local `/Sessions` API and exposes only loopback Prometheus metrics on TCP 9594. It intentionally omits usernames and remote addresses; current titles remain metric labels because immediate playback diagnosis is the feature's purpose.
 - Ordinary rootless crun with direct `/dev/dri/renderD128` proved that the host, Jellyfin image, permissions, and Intel media stack can expose VA-API codecs, but it is not an acceptable production fallback for this deployment because it removes the required VM boundary around Jellyfin and its plugins.
 - For rootless Grafana, SELinux access is intended to come from persistent `semanage fcontext` rules plus `restorecon`, not from `SecurityLabelDisable=true`

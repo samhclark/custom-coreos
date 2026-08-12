@@ -65,7 +65,11 @@ shell syntax in TOML.
 
 Rootless refers to the host account running Podman. `container-user = 0` is
 still unprivileged on the host through the rootless user namespace and is valid
-when the image expects container root.
+when the image expects container root. A positive `container-user` generates a
+matching `keep-id` user namespace, so the service host UID appears as that UID
+inside the container and remains the owner of declared storage. This supports
+images designed for a fixed non-root UID without handing their data to a
+subordinate-ID-only owner.
 
 ### 3. Allocate the TAP and exposure policy
 
@@ -84,7 +88,9 @@ probe-endpoint = "http"
 Allocate a unique `/30`; the guest uses the second usable address and the host
 gateway uses the first. Declare every listener in `[[container.endpoints]]`,
 give it a stable name, and set `probe-endpoint` to one declared TCP endpoint;
-that listener is the post-start guest readiness boundary. For example:
+that listener is the post-start guest readiness boundary. The default bounded
+wait is 30 seconds; set `probe-timeout-sec` only for components whose reviewed
+initialization or migration path genuinely takes longer. For example:
 
 ```toml
 [[container.endpoints]]

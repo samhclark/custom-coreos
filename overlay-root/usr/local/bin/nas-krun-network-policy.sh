@@ -5,9 +5,9 @@ set -euo pipefail
 
 READY_DIR=/run/nas-krun-network
 READY_FILE="${READY_DIR}/policy-ready"
-TAPS=("krun-51110" "krun-51120" "krun-51210" "krun-51220" "krun-51230" "krun-51240" "krun-51250" "krun-51260" "krun-51310")
-GATEWAYS=("10.253.1.1/30" "10.253.2.1/30" "10.253.3.1/30" "10.253.4.1/30" "10.253.5.1/30" "10.253.6.1/30" "10.253.7.1/30" "10.253.8.1/30" "10.253.9.1/30")
-USER_UNITS=("user@51110.service" "user@51120.service" "user@51210.service" "user@51220.service" "user@51230.service" "user@51240.service" "user@51250.service" "user@51260.service" "user@51310.service")
+TAPS=("krun-51110" "krun-51120" "krun-51130" "krun-51140" "krun-51150" "krun-51160" "krun-51210" "krun-51220" "krun-51230" "krun-51240" "krun-51250" "krun-51260" "krun-51310")
+GATEWAYS=("10.253.1.1/30" "10.253.2.1/30" "10.253.10.1/30" "10.253.11.1/30" "10.253.12.1/30" "10.253.13.1/30" "10.253.3.1/30" "10.253.4.1/30" "10.253.5.1/30" "10.253.6.1/30" "10.253.7.1/30" "10.253.8.1/30" "10.253.9.1/30")
+USER_UNITS=("user@51110.service" "user@51120.service" "user@51130.service" "user@51140.service" "user@51150.service" "user@51160.service" "user@51210.service" "user@51220.service" "user@51230.service" "user@51240.service" "user@51250.service" "user@51260.service" "user@51310.service")
 
 clear_readiness() {
     rm -f "${READY_FILE}" "${READY_FILE}.tmp"
@@ -31,7 +31,7 @@ publish_readiness() {
     clear_readiness
 
     /usr/lib/systemd/systemd-networkd-wait-online --quiet --timeout=60 \
-        --ipv4 --interface="krun-51110:off" --interface="krun-51120:off" --interface="krun-51210:off" --interface="krun-51220:off" --interface="krun-51230:off" --interface="krun-51240:off" --interface="krun-51250:off" --interface="krun-51260:off" --interface="krun-51310:off"
+        --ipv4 --interface="krun-51110:off" --interface="krun-51120:off" --interface="krun-51130:off" --interface="krun-51140:off" --interface="krun-51150:off" --interface="krun-51160:off" --interface="krun-51210:off" --interface="krun-51220:off" --interface="krun-51230:off" --interface="krun-51240:off" --interface="krun-51250:off" --interface="krun-51260:off" --interface="krun-51310:off"
 
     for index in "${!TAPS[@]}"; do
         ip -4 -o address show dev "${TAPS[$index]}" \

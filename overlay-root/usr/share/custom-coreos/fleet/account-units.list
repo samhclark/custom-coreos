@@ -5,6 +5,10 @@ ensure-nas-blackbox-account.service
 ensure-nas-caddy-account.service
 ensure-nas-garage-account.service
 ensure-nas-grafana-account.service
+ensure-nas-immichdatabase-account.service
+ensure-nas-immichmachinelearning-account.service
+ensure-nas-immichserver-account.service
+ensure-nas-immichvalkey-account.service
 ensure-nas-jellyfin-account.service
 ensure-nas-jellyfinmetrics-account.service
 ensure-nas-victoriametrics-account.service

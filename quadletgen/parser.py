@@ -308,7 +308,8 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
         path,
         {
             "image", "enabled", "network", "container-user", "health-cmd",
-            "dns", "sysctls", "environment", "volumes", "secrets", "endpoints", "exec",
+            "no-new-privileges", "drop-capabilities", "shm-size-mib", "dns",
+            "sysctls", "environment", "volumes", "secrets", "endpoints", "exec",
         },
     )
     image = _string(_required(table, "image", path), f"{path}.image")
@@ -332,6 +333,19 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
         container_user=_integer(table["container-user"], f"{path}.container-user")
         if "container-user" in table else None,
         health_cmd=health_cmd,
+        no_new_privileges=_boolean(
+            table.get("no-new-privileges", False),
+            f"{path}.no-new-privileges",
+        ),
+        drop_capabilities=_string_array(
+            table.get("drop-capabilities", []),
+            f"{path}.drop-capabilities",
+        ),
+        shm_size_mib=(
+            _integer(table["shm-size-mib"], f"{path}.shm-size-mib")
+            if "shm-size-mib" in table
+            else None
+        ),
         dns=_parse_dns(table.get("dns"), name),
         sysctls=_parse_sysctls(table.get("sysctls"), name),
         environment=_parse_environment(table.get("environment"), name),
@@ -369,6 +383,7 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
             "network",
             "ipv4",
             "probe-endpoint",
+            "probe-timeout-sec",
             "host-access",
         },
     )
@@ -388,7 +403,13 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
         _fail(f"{path}.network", 'must be "tsi", "passt", or "tap"')
     network = KrunNetwork(network_text)
     tap_only_present = any(
-        key in table for key in ("ipv4", "probe-endpoint", "host-access")
+        key in table
+        for key in (
+            "ipv4",
+            "probe-endpoint",
+            "probe-timeout-sec",
+            "host-access",
+        )
     )
     if network is KrunNetwork.TAP:
         try:
@@ -408,6 +429,10 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
             ram_mib=ram_mib,
             ipv4=ipv4,
             probe_endpoint=probe_endpoint,
+            probe_timeout_sec=_integer(
+                table.get("probe-timeout-sec", 30),
+                f"{path}.probe-timeout-sec",
+            ),
             host_access=_parse_host_access(table.get("host-access"), name),
         )
     if tap_only_present:

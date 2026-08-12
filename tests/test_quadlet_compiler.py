@@ -42,8 +42,8 @@ class CompilerCharacterizationTests(unittest.TestCase):
     def test_current_fleet_is_typed_and_uid_ordered(self):
         fleet = current_fleet()
 
-        self.assertEqual(len(fleet.services), 9)
-        self.assertEqual(len(fleet.active_taps), 9)
+        self.assertEqual(len(fleet.services), 13)
+        self.assertEqual(len(fleet.active_taps), 13)
         self.assertEqual(
             [service.host.uid for service in fleet.services],
             sorted(service.host.uid for service in fleet.services),

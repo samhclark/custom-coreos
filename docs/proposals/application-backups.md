@@ -53,6 +53,14 @@ and at least one additional application such as the *arr stack. This proposal
 does not add backup fields to today's service TOML and does not authorize a
 generic hook or arbitrary-shell mechanism.
 
+The initial Immich deployment provides useful classification boundaries without
+implementing backup automation. `tank/immich-server/library` contains the
+authoritative photo library, profiles, and Immich's database-backup output;
+`tank/immich-database/data` contains the live database. The separate `thumbs`
+and `encoded-video` datasets plus the machine-learning caches are generated
+data and should not enter an off-site policy by default. A recovery design must
+still pair a database recovery point with the library it describes.
+
 ## Questions to resolve before implementation
 
 - Which data receives local snapshots only, rsync.net replication, B2 object

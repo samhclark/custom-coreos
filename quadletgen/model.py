@@ -29,6 +29,7 @@ PINNED_IMAGE_RE = re.compile(r"^[^@\s]+:[^@:\s]+@sha256:[0-9a-f]{64}$")
 SECRET_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 DISPLAY_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")
 ENVIRONMENT_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+CAPABILITY_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
 PORTABLE_ABSOLUTE_PATH_RE = re.compile(
     r"^/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+$"
 )
@@ -113,6 +114,9 @@ class ContainerSpec:
     network: Literal["host"] | None = None
     container_user: int | None = None
     health_cmd: Literal["none"] | None = None
+    no_new_privileges: bool = False
+    drop_capabilities: tuple[str, ...] = ()
+    shm_size_mib: int | None = None
     dns: tuple[ipaddress.IPv4Address | ipaddress.IPv6Address, ...] = ()
     sysctls: tuple[str, ...] = ()
     environment: tuple[tuple[str, str], ...] = ()
@@ -163,6 +167,7 @@ class KrunTap:
     ram_mib: int
     ipv4: ipaddress.IPv4Interface
     probe_endpoint: str
+    probe_timeout_sec: int = 30
     host_access: tuple[int, ...] = ()
     network: Literal[KrunNetwork.TAP] = field(
         default=KrunNetwork.TAP,
@@ -463,9 +468,30 @@ def _validate_container(service: Service) -> None:
             container.container_user,
             f"{path}.container-user",
             minimum=0,
+            maximum=SUBID_COUNT - 1,
         )
     if container.health_cmd not in {None, "none"}:
         _fail(f"{path}.health-cmd", 'currently supports only "none"')
+    if type(container.no_new_privileges) is not bool:
+        _fail(f"{path}.no-new-privileges", "must be a boolean")
+    if len(set(container.drop_capabilities)) != len(
+        container.drop_capabilities
+    ):
+        _fail(f"{path}.drop-capabilities", "contains duplicates")
+    for capability in container.drop_capabilities:
+        if not isinstance(capability, str) or not CAPABILITY_RE.fullmatch(
+            capability
+        ):
+            _fail(
+                f"{path}.drop-capabilities",
+                f"invalid Linux capability {capability!r}",
+            )
+    if container.shm_size_mib is not None:
+        _validate_integer(
+            container.shm_size_mib,
+            f"{path}.shm-size-mib",
+            minimum=1,
+        )
 
     if len(set(container.dns)) != len(container.dns):
         _fail(f"{path}.dns", "contains duplicate DNS servers")
@@ -585,6 +611,12 @@ def _validate_krun(service: Service) -> None:
             f"{path}.probe-endpoint",
             "must reference a declared TCP endpoint",
         )
+    _validate_integer(
+        krun.probe_timeout_sec,
+        f"{path}.probe-timeout-sec",
+        minimum=1,
+        maximum=900,
+    )
     for endpoint in service.container.endpoints:
         if endpoint.host_address is not None and str(endpoint.host_address) not in {
             "127.0.0.1",

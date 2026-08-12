@@ -5,7 +5,7 @@ groups:
   - name: service-health
     rules:
       - alert: ServiceDown
-        expr: up{job!~"garage|garage-health|jellyfin-health"} == 0
+        expr: up{job!~"garage|garage-health|jellyfin-health|immich-health"} == 0
         for: 1h
         labels:
           severity: critical
@@ -57,6 +57,24 @@ groups:
         annotations:
           summary: "jellyfin playback telemetry is unavailable"
           description: "The Jellyfin Sessions API exporter has been unreachable or unable to authenticate for 15 minutes. Jellyfin health is monitored separately."
+
+      - alert: ImmichHealthDown
+        expr: probe_success{job="immich-health",service="immich"} == 0
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "immich health endpoint is unreachable"
+          description: "Immich ping endpoint {{ $labels.instance }} is failing local HTTP probes. This alert fires after 1 hour of continuous failure."
+
+      - alert: ImmichHealthProbeBroken
+        expr: up{job="immich-health"} == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "immich health probe is broken"
+          description: "VictoriaMetrics cannot scrape the blackbox exporter probe for Immich. This is a monitoring failure, not proof that Immich itself is down."
 
   - name: filesystem-health
     rules:
