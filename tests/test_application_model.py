@@ -76,6 +76,7 @@ class ImmichDeploymentTests(unittest.TestCase):
             Path("usr/share/custom-coreos/storage/immich-database.storage-manifest")
         ]
         self.assertIn("tank/immich-database/data", database_manifest)
+        self.assertIn("recordsize=32K", database_manifest)
 
     def test_endpoint_consumers_generate_only_required_immich_edges(self):
         policy = self.artifacts[Path("etc/nftables/nas-krun-filter.nft")]
@@ -112,7 +113,7 @@ class ImmichDeploymentTests(unittest.TestCase):
 
     def test_ingress_monitoring_and_encrypted_secret_are_wired(self):
         caddyfile = (OVERLAY / "usr/share/custom-coreos/caddy/Caddyfile").read_text()
-        self.assertIn("immich.i.samhclark.com", caddyfile)
+        self.assertIn("photos.i.samhclark.com", caddyfile)
         self.assertIn("reverse_proxy immich-server.krun:2283", caddyfile)
 
         scrape = (
