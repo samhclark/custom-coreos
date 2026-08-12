@@ -4,6 +4,8 @@
 
 [service]
 name = "blackbox-exporter"
+application = "observability"
+role = "blackbox-exporter"
 description = "Prometheus Blackbox Exporter"
 documentation = "https://github.com/prometheus/blackbox_exporter"
 
@@ -24,15 +26,13 @@ cpus = 1
 ram-mib = 128
 network = "tap"
 ipv4 = "10.253.5.2/30"
-probe-port = 9115
+probe-endpoint = "http"
 
-[[krun.ingress]]
-from = "victoria-metrics"
-ports = [9115]
-
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
+port = 9115
 host = "127.0.0.1:9115"
-container = 9115
+consumers = ["victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled local probe configuration (read-only)"

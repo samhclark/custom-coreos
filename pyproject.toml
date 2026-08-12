@@ -1,3 +1,18 @@
+[project]
+name = "custom-coreos-dev"
+version = "0.0.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "ty==0.0.69",
+]
+
+[tool.uv]
+package = false
+required-version = "==0.12.3"
+
 [tool.ty.environment]
 python-version = "3.11"
 

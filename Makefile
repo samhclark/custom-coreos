@@ -23,7 +23,8 @@ TIMEOUT      ?= timeout
 OVMF_CODE    ?= /usr/share/edk2/ovmf/OVMF_CODE.fd
 BUTANE_IMAGE ?= quay.io/coreos/butane:release@sha256:13fec166cb47a8e053dcc23256c0ca41aaa1c61cab39793832aaf8894ca78c8f
 SHELLCHECK_IMAGE ?= docker.io/koalaman/shellcheck:v0.11.0@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d
-PYTHON       ?= python3
+UV           ?= uv
+UV_RUN       := $(UV) run --locked
 
 SHELL_SOURCES := $(shell \
 	git ls-files '*.sh' 'overlay-root/usr/local/bin/garage' ':!:docs/history/**' | \
@@ -85,7 +86,7 @@ check: typecheck check-generated check-shell check-ignition check-vm-ignition ##
 
 .PHONY: check-generated
 check-generated: ## Verify generated artifacts are current without changing them
-	@$(PYTHON) generate-quadlets.py --check
+	@$(UV_RUN) python generate-quadlets.py --check
 
 .PHONY: check-shell
 check-shell: ## Check all maintained shell programs
@@ -115,11 +116,11 @@ check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
 
 .PHONY: test
 test: ## Run unit tests
-	@$(PYTHON) -m unittest discover -s tests -v
+	@$(UV_RUN) python -m unittest discover -s tests -v
 
 .PHONY: typecheck
 typecheck: ## Run strict static Python type checks
-	@$(PYTHON) -m ty check
+	@$(UV_RUN) ty check
 
 ##@ Building
 
@@ -166,7 +167,7 @@ generate-ignition: ## Generate ignition.json from butane.yaml
 .PHONY: generate-quadlets
 generate-quadlets: ## Generate quadlet files using the custom generator
 	@printf "$(COLOR_BLUE)Generating quadlet files from config...$(COLOR_RESET)\n"
-	@$(PYTHON) generate-quadlets.py
+	@$(UV_RUN) python generate-quadlets.py
 	@printf "$(COLOR_GREEN)Generated quadlet files$(COLOR_RESET)\n"
 
 ##@ GitHub Workflows
@@ -215,12 +216,12 @@ all-workflows: ## Show recent runs for all workflows
 RETENTION_DAYS ?= 90
 .PHONY: cleanup-dry-run
 cleanup-dry-run: ## Plan cleanup locally; set RETENTION_DAYS=N to configure (default: 90)
-	@./scripts/select-expired-images.sh $(RETENTION_DAYS)
+	@$(UV_RUN) ./scripts/select-expired-images.sh $(RETENTION_DAYS)
 
 ##@ Dependencies
 
 .PHONY: deps
-deps: deps-check-podman deps-check-gh deps-check-skopeo deps-check-jq deps-check-python deps-check-ty ## Check that required tools are available
+deps: deps-check-podman deps-check-gh deps-check-skopeo deps-check-jq deps-check-uv ## Check tools and sync the Python environment
 	@printf "$(COLOR_GREEN)All deps present!$(COLOR_RESET)\n"
 
 .PHONY: deps-vm
@@ -263,16 +264,11 @@ deps-check-jq: ## Check that jq is available
 		(printf "$(COLOR_RED)$(JQ) not found. Install via your system package manager.$(COLOR_RESET)\n" && false)
 	@printf "$(COLOR_BLUE)jq: $$($(JQ) --version)$(COLOR_RESET)\n"
 
-.PHONY: deps-check-python
-deps-check-python: ## Check that Python is available
-	@command -v $(PYTHON) > /dev/null || \
-		(printf "$(COLOR_RED)$(PYTHON) not found. Install Python 3.11 or newer.$(COLOR_RESET)\n" && false)
-	@$(PYTHON) -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' || \
-		(printf "$(COLOR_RED)Python 3.11 or newer is required.$(COLOR_RESET)\n" && false)
-	@printf "$(COLOR_BLUE)python: $$($(PYTHON) --version)$(COLOR_RESET)\n"
-
-.PHONY: deps-check-ty
-deps-check-ty: deps-check-python ## Check that pinned Python development tools are installed
-	@$(PYTHON) -c 'import ty' 2>/dev/null || \
-		(printf "$(COLOR_RED)ty not found. Run $(PYTHON) -m pip install --requirement requirements-dev.txt.$(COLOR_RESET)\n" && false)
-	@printf "$(COLOR_BLUE)ty: $$($(PYTHON) -m ty --version)$(COLOR_RESET)\n"
+.PHONY: deps-check-uv
+deps-check-uv: ## Check uv and synchronize the locked Python environment
+	@command -v $(UV) > /dev/null || \
+		(printf "$(COLOR_RED)uv not found. Install it from https://docs.astral.sh/uv/.$(COLOR_RESET)\n" && false)
+	@$(UV) sync --locked
+	@printf "$(COLOR_BLUE)uv: $$($(UV) --version)$(COLOR_RESET)\n"
+	@printf "$(COLOR_BLUE)python: $$($(UV_RUN) python --version)$(COLOR_RESET)\n"
+	@printf "$(COLOR_BLUE)ty: $$($(UV_RUN) ty --version)$(COLOR_RESET)\n"

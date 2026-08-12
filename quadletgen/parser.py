@@ -12,21 +12,16 @@ from .model import (
     AssetsSpec,
     ConfigError,
     ContainerSpec,
+    Dependency,
+    DependencyCondition,
+    Endpoint,
     HostIdentity,
-    HttpReadiness,
-    IngressRule,
     KrunNetwork,
     KrunPasst,
     KrunSpec,
     KrunTap,
     KrunTsi,
-    MarkerReadiness,
-    PathAccess,
     Protocol,
-    PublishedPort,
-    ReadinessSpec,
-    RequiredOwner,
-    RequiredPath,
     SecretMount,
     Service,
     ServiceInfo,
@@ -104,7 +99,11 @@ def _string_array(value: object, path: str) -> tuple[str, ...]:
 
 def _parse_service_info(raw: object, name: str) -> ServiceInfo:
     path = f"{name}: [service]"
-    table = _table(raw, path, {"name", "description", "documentation"})
+    table = _table(
+        raw,
+        path,
+        {"name", "application", "role", "description", "documentation"},
+    )
     service_name = _string(_required(table, "name", path), f"{path}.name")
     documentation = (
         _string(table["documentation"], f"{path}.documentation")
@@ -113,6 +112,10 @@ def _parse_service_info(raw: object, name: str) -> ServiceInfo:
     )
     return ServiceInfo(
         name=service_name,
+        application=_string(
+            _required(table, "application", path), f"{path}.application"
+        ),
+        role=_string(_required(table, "role", path), f"{path}.role"),
         description=_string(
             _required(table, "description", path), f"{path}.description"
         ),
@@ -143,8 +146,8 @@ def _parse_host(raw: object, name: str) -> HostIdentity:
     )
 
 
-def _parse_ports(raw: object, name: str) -> tuple[PublishedPort, ...]:
-    path = f"{name}: [container].ports"
+def _parse_endpoints(raw: object, name: str) -> tuple[Endpoint, ...]:
+    path = f"{name}: [container].endpoints"
     if raw is None:
         return ()
     if not isinstance(raw, list):
@@ -152,26 +155,33 @@ def _parse_ports(raw: object, name: str) -> tuple[PublishedPort, ...]:
     result = []
     for index, item in enumerate(raw, start=1):
         item_path = f"{path}[{index}]"
-        table = _table(item, item_path, {"host", "container", "protocol"})
-        host = _string(_required(table, "host", item_path), f"{item_path}.host")
-        if host.startswith("["):
-            match = re.fullmatch(r"\[([^]]+)]:(\d+)", host)
-            expected_version = 6
-        else:
-            match = re.fullmatch(r"([^:]+):(\d+)", host)
-            expected_version = 4
-        if match is None:
-            _fail(f"{item_path}.host", "must be an IPv4:port or [IPv6]:port endpoint")
-        try:
-            address = ipaddress.ip_address(match.group(1))
-        except ValueError:
-            _fail(f"{item_path}.host", "contains an invalid IP address")
-        if address.version != expected_version:
-            _fail(f"{item_path}.host", "must bracket IPv6 addresses")
-        host_port = int(match.group(2))
-        container_port = _integer(
-            _required(table, "container", item_path), f"{item_path}.container"
+        table = _table(
+            item,
+            item_path,
+            {"name", "port", "protocol", "host", "consumers"},
         )
+        address = None
+        host_port = None
+        if "host" in table:
+            host = _string(table["host"], f"{item_path}.host")
+            if host.startswith("["):
+                match = re.fullmatch(r"\[([^]]+)]:(\d+)", host)
+                expected_version = 6
+            else:
+                match = re.fullmatch(r"([^:]+):(\d+)", host)
+                expected_version = 4
+            if match is None:
+                _fail(
+                    f"{item_path}.host",
+                    "must be an IPv4:port or [IPv6]:port endpoint",
+                )
+            try:
+                address = ipaddress.ip_address(match.group(1))
+            except ValueError:
+                _fail(f"{item_path}.host", "contains an invalid IP address")
+            if address.version != expected_version:
+                _fail(f"{item_path}.host", "must bracket IPv6 addresses")
+            host_port = int(match.group(2))
         protocol_text = _string(
             table.get("protocol", Protocol.TCP.value),
             f"{item_path}.protocol",
@@ -180,7 +190,20 @@ def _parse_ports(raw: object, name: str) -> tuple[PublishedPort, ...]:
             _fail(f"{item_path}.protocol", 'must be "tcp" or "udp"')
         protocol = Protocol(protocol_text)
         result.append(
-            PublishedPort(address, host_port, container_port, protocol)
+            Endpoint(
+                name=_string(
+                    _required(table, "name", item_path), f"{item_path}.name"
+                ),
+                port=_integer(
+                    _required(table, "port", item_path), f"{item_path}.port"
+                ),
+                protocol=protocol,
+                host_address=address,
+                host_port=host_port,
+                consumers=_string_array(
+                    table.get("consumers", []), f"{item_path}.consumers"
+                ),
+            )
         )
     return tuple(result)
 
@@ -285,7 +308,7 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
         path,
         {
             "image", "enabled", "network", "container-user", "health-cmd",
-            "dns", "sysctls", "environment", "volumes", "secrets", "ports", "exec",
+            "dns", "sysctls", "environment", "volumes", "secrets", "endpoints", "exec",
         },
     )
     image = _string(_required(table, "image", path), f"{path}.image")
@@ -314,31 +337,9 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
         environment=_parse_environment(table.get("environment"), name),
         volumes=_parse_volumes(table.get("volumes"), name),
         secrets=_parse_secrets(table.get("secrets"), name),
-        ports=_parse_ports(table.get("ports"), name),
+        endpoints=_parse_endpoints(table.get("endpoints"), name),
         exec=exec_text,
     )
-
-
-def _parse_ingress(raw: object, name: str) -> tuple[IngressRule, ...]:
-    path = f"{name}: [[krun.ingress]]"
-    if raw is None:
-        return ()
-    if not isinstance(raw, list):
-        _fail(path, "must be an array of tables")
-    result = []
-    for index, item in enumerate(raw, start=1):
-        item_path = f"{path}[{index}]"
-        table = _table(item, item_path, {"from", "ports"})
-        source = _string(_required(table, "from", item_path), f"{item_path}.from")
-        ports_raw = _required(table, "ports", item_path)
-        if not isinstance(ports_raw, list):
-            _fail(f"{item_path}.ports", "must be an array of TCP ports")
-        ports = tuple(
-            _integer(port, f"{item_path}.ports[{index}]")
-            for index, port in enumerate(ports_raw, start=1)
-        )
-        result.append(IngressRule(source, ports))
-    return tuple(result)
 
 
 def _parse_host_access(raw: object, name: str) -> tuple[int, ...]:
@@ -367,8 +368,7 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
             "ram-mib",
             "network",
             "ipv4",
-            "probe-port",
-            "ingress",
+            "probe-endpoint",
             "host-access",
         },
     )
@@ -388,7 +388,7 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
         _fail(f"{path}.network", 'must be "tsi", "passt", or "tap"')
     network = KrunNetwork(network_text)
     tap_only_present = any(
-        key in table for key in ("ipv4", "probe-port", "ingress", "host-access")
+        key in table for key in ("ipv4", "probe-endpoint", "host-access")
     )
     if network is KrunNetwork.TAP:
         try:
@@ -399,16 +399,15 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
         if not isinstance(parsed, ipaddress.IPv4Interface):
             _fail(f"{path}.ipv4", "must be an IPv4 interface address")
         ipv4 = parsed
-        probe_port = _integer(
-            _required(table, "probe-port", path),
-            f"{path}.probe-port",
+        probe_endpoint = _string(
+            _required(table, "probe-endpoint", path),
+            f"{path}.probe-endpoint",
         )
         return KrunTap(
             cpus=cpus,
             ram_mib=ram_mib,
             ipv4=ipv4,
-            probe_port=probe_port,
-            ingress=_parse_ingress(table.get("ingress"), name),
+            probe_endpoint=probe_endpoint,
             host_access=_parse_host_access(table.get("host-access"), name),
         )
     if tap_only_present:
@@ -445,8 +444,8 @@ def _parse_unit(raw: object, name: str) -> UnitSpec:
     )
 
 
-def _parse_required_paths(raw: object, name: str) -> tuple[RequiredPath, ...]:
-    path = f"{name}: [[startup.readiness.paths]]"
+def _parse_dependencies(raw: object, name: str) -> tuple[Dependency, ...]:
+    path = f"{name}: [[startup.dependencies]]"
     if raw is None:
         return ()
     if not isinstance(raw, list):
@@ -457,51 +456,43 @@ def _parse_required_paths(raw: object, name: str) -> tuple[RequiredPath, ...]:
         table = _table(
             item,
             item_path,
-            {"path", "mount-source", "owner", "access"},
+            {
+                "service",
+                "endpoint",
+                "condition",
+                "path",
+                "timeout-sec",
+                "interval-sec",
+            },
         )
-        required_path = _string(
-            _required(table, "path", item_path),
-            f"{item_path}.path",
+        condition_text = _string(
+            _required(table, "condition", item_path),
+            f"{item_path}.condition",
         )
-
-        mount_source = None
-        if "mount-source" in table:
-            mount_source = _string(
-                table["mount-source"],
-                f"{item_path}.mount-source",
-            )
-
-        owner = None
-        if "owner" in table:
-            owner_text = _string(table["owner"], f"{item_path}.owner")
-            try:
-                owner = RequiredOwner(owner_text)
-            except ValueError:
-                _fail(
-                    f"{item_path}.owner",
-                    f"must be {RequiredOwner.SERVICE.value!r}",
-                )
-
-        access = []
-        for index, access_name in enumerate(
-            _string_array(table.get("access", []), f"{item_path}.access"),
-            start=1,
-        ):
-            try:
-                path_access = PathAccess(access_name)
-            except ValueError:
-                _fail(
-                    f"{item_path}.access[{index}]",
-                    "must be one of read, write, execute",
-                )
-            access.append(path_access)
-
+        try:
+            condition = DependencyCondition(condition_text)
+        except ValueError:
+            _fail(f"{item_path}.condition", 'must be "tcp" or "http"')
         result.append(
-            RequiredPath(
-                required_path,
-                mount_source,
-                owner,
-                tuple(access),
+            Dependency(
+                service=_string(
+                    _required(table, "service", item_path),
+                    f"{item_path}.service",
+                ),
+                endpoint=_string(
+                    _required(table, "endpoint", item_path),
+                    f"{item_path}.endpoint",
+                ),
+                condition=condition,
+                timeout_sec=_integer(
+                    _required(table, "timeout-sec", item_path),
+                    f"{item_path}.timeout-sec",
+                ),
+                interval_sec=_integer(
+                    _required(table, "interval-sec", item_path),
+                    f"{item_path}.interval-sec",
+                ),
+                path=_optional_string(table, "path", item_path),
             )
         )
     return tuple(result)
@@ -517,7 +508,7 @@ def _parse_startup(
     table = _table(
         raw,
         path,
-        {"readiness", "require-published-tcp-ports-free"},
+        {"dependencies", "require-published-tcp-ports-free"},
     )
     require_free_ports = (
         _boolean(
@@ -527,49 +518,8 @@ def _parse_startup(
         if "require-published-tcp-ports-free" in table
         else False
     )
-    readiness_raw = table.get("readiness")
-    if readiness_raw is None:
-        return StartupSpec(require_published_tcp_ports_free=require_free_ports)
-
-    readiness_path = f"{name}: [startup.readiness]"
-    readiness = _table(
-        readiness_raw,
-        readiness_path,
-        {"marker", "url", "timeout-sec", "interval-sec", "paths"},
-    )
-    marker_present = "marker" in readiness
-    url_present = "url" in readiness
-    if marker_present == url_present:
-        _fail(readiness_path, "requires exactly one of marker or url")
-    timeout_sec = _integer(
-        _required(readiness, "timeout-sec", readiness_path),
-        f"{readiness_path}.timeout-sec",
-    )
-    interval_sec = _integer(
-        _required(readiness, "interval-sec", readiness_path),
-        f"{readiness_path}.interval-sec",
-    )
-    if marker_present:
-        marker = _string(
-            readiness["marker"],
-            f"{readiness_path}.marker",
-        )
-        readiness_spec: ReadinessSpec = MarkerReadiness(
-            marker,
-            timeout_sec,
-            interval_sec,
-            _parse_required_paths(readiness.get("paths"), name),
-        )
-    else:
-        if "paths" in readiness:
-            _fail(
-                f"{readiness_path}.paths",
-                "is supported only with marker readiness",
-            )
-        url = _string(readiness["url"], f"{readiness_path}.url")
-        readiness_spec = HttpReadiness(url, timeout_sec, interval_sec)
     return StartupSpec(
-        readiness=readiness_spec,
+        dependencies=_parse_dependencies(table.get("dependencies"), name),
         require_published_tcp_ports_free=require_free_ports,
     )
 

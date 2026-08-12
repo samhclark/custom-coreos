@@ -70,7 +70,7 @@ This is not intended to be a polished appliance for other people. It is my own N
 - `gh` (GitHub CLI)
 - `skopeo`
 - `jq`
-- Python 3.11 or newer with `requirements-dev.txt` installed
+- `uv` (Python and the locked development environment are managed automatically)
 
 ### Common Commands
 

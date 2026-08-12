@@ -229,7 +229,7 @@ class StartupPolicyTests(unittest.TestCase):
         )
         self.assertIn(
             "nas-wait-for-readiness.sh http "
-            "http://127.0.0.1:8428/-/healthy 300 2",
+            "http://10.253.7.2:8428/-/healthy 300 2",
             vmalert,
         )
         for artifact in self.artifacts.values():

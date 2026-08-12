@@ -97,24 +97,28 @@ def nft_filter(fleet: Fleet) -> str:
         )
     lines.append("    ct state established,related accept")
     for destination in taps:
-        for rule in destination.tap_spec.ingress:
-            source = by_name[rule.source]
-            ports = ", ".join(str(port) for port in rule.ports)
+        ports_by_consumer: dict[str, list[int]] = {}
+        for endpoint in destination.container.endpoints:
+            for consumer in endpoint.consumers:
+                ports_by_consumer.setdefault(consumer, []).append(endpoint.port)
+        for consumer, ports in ports_by_consumer.items():
+            source = by_name[consumer]
+            rendered_ports = ", ".join(str(port) for port in ports)
             lines.append(
                 f'    iifname "{source.tap_name}" '
                 f'oifname "{destination.tap_name}" '
                 f"ip saddr {source.tap_guest.ip} "
                 f"ip daddr {destination.tap_guest.ip} "
-                f"tcp dport {{ {ports} }} accept"
+                f"tcp dport {{ {rendered_ports} }} accept"
             )
     for service in taps:
-        for publication in service.container.ports:
-            if str(publication.host_address) != "0.0.0.0":
+        for endpoint in service.container.endpoints:
+            if str(endpoint.host_address) != "0.0.0.0":
                 continue
             lines.append(
                 f"    {tap_exclusions} oifname \"{service.tap_name}\" "
-                f"ip daddr {service.tap_guest.ip} {publication.protocol.value} "
-                f"dport {publication.container_port} accept"
+                f"ip daddr {service.tap_guest.ip} {endpoint.protocol.value} "
+                f"dport {endpoint.port} accept"
             )
     for service in taps:
         lines.append(
@@ -279,27 +283,29 @@ def nft_nat(fleet: Fleet) -> str:
     output = []
     for service in taps:
         guest = service.tap_guest.ip
-        for port in service.container.ports:
-            destination = f"{guest}:{port.container_port}"
-            if str(port.host_address) == "0.0.0.0":
+        for endpoint in service.container.endpoints:
+            if endpoint.host_address is None or endpoint.host_port is None:
+                continue
+            destination = f"{guest}:{endpoint.port}"
+            if str(endpoint.host_address) == "0.0.0.0":
                 prerouting.append(
                     f"        {tap_input_exclusions} fib daddr type local "
-                    f"{port.protocol.value} dport {port.host_port} "
+                    f"{endpoint.protocol.value} dport {endpoint.host_port} "
                     f"dnat to {destination}"
                 )
                 output.append(
-                    f"        fib daddr type local {port.protocol.value} "
-                    f"dport {port.host_port} dnat to {destination}"
+                    f"        fib daddr type local {endpoint.protocol.value} "
+                    f"dport {endpoint.host_port} dnat to {destination}"
                 )
             else:
                 prerouting.append(
-                    f'        iifname "lo" ip daddr {port.host_address} '
-                    f"{port.protocol.value} dport {port.host_port} "
+                    f'        iifname "lo" ip daddr {endpoint.host_address} '
+                    f"{endpoint.protocol.value} dport {endpoint.host_port} "
                     f"dnat to {destination}"
                 )
                 output.append(
-                    f"        ip daddr {port.host_address} "
-                    f"{port.protocol.value} dport {port.host_port} "
+                    f"        ip daddr {endpoint.host_address} "
+                    f"{endpoint.protocol.value} dport {endpoint.host_port} "
                     f"dnat to {destination}"
                 )
     lines = [
@@ -319,7 +325,10 @@ def nft_nat(fleet: Fleet) -> str:
         "        type nat hook postrouting priority srcnat; policy accept;",
     ]
     for service in taps:
-        if service.container.ports:
+        if any(
+            endpoint.publication is not None
+            for endpoint in service.container.endpoints
+        ):
             lines.append(
                 f'        oifname "{service.tap_name}" ip saddr '
                 f"127.0.0.0/8 ip daddr {service.tap_guest.ip} "

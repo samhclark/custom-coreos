@@ -66,7 +66,7 @@ architecture or operating instructions.
 3. Add image-controlled assets or a specialized ZFS preparation unit only
    when the service actually needs them. Add encrypted values to the SOPS file
    for every declared secret.
-4. Run `python3 generate-quadlets.py`. The compiler derives account enablement,
+4. Run `make generate-quadlets`. The compiler derives account enablement,
    subordinate IDs, service files, network policy, secret routing, and asset
    labeling inventories.
 5. Run `make check`, `make test`, and `make build`, then commit the source and

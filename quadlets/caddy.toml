@@ -3,6 +3,8 @@
 
 [service]
 name = "caddy"
+application = "caddy"
+role = "proxy"
 description = "Caddy Reverse Proxy"
 documentation = "https://caddyserver.com/docs/"
 
@@ -27,28 +29,29 @@ cpus = 2
 ram-mib = 512
 network = "tap"
 ipv4 = "10.253.9.2/30"
-probe-port = 80
+probe-endpoint = "http"
 
-[[krun.ingress]]
-from = "victoria-metrics"
-ports = [2019]
-
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
+port = 80
 host = "0.0.0.0:80"
-container = 80
 
-[[container.ports]]
+[[container.endpoints]]
+name = "https"
+port = 443
 host = "0.0.0.0:443"
-container = 443
 
-[[container.ports]]
+[[container.endpoints]]
+name = "https-udp"
+port = 443
 host = "0.0.0.0:443"
-container = 443
 protocol = "udp"
 
-[[container.ports]]
+[[container.endpoints]]
+name = "admin"
+port = 2019
 host = "127.0.0.1:2019"
-container = 2019
+consumers = ["victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"

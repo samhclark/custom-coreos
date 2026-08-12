@@ -19,6 +19,9 @@ class BuildWorkflowTests(unittest.TestCase):
         self.assertIn("query-versions:", preflight)
         self.assertEqual(preflight.count("run: make check"), 1)
         self.assertEqual(preflight.count("run: make test"), 1)
+        self.assertIn("uses: astral-sh/setup-uv@", preflight)
+        self.assertNotIn("actions/setup-python", preflight)
+        self.assertNotIn("pip install", preflight)
 
         for filename in ("build.yaml", "build-check.yaml"):
             with self.subTest(filename=filename):

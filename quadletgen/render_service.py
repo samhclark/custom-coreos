@@ -6,13 +6,10 @@ import textwrap
 
 from .headers import generated_header
 from .model import (
+    DependencyCondition,
     Fleet,
-    HttpReadiness,
     KrunPasst,
     KrunTap,
-    MarkerReadiness,
-    PathAccess,
-    RequiredOwner,
     Protocol,
     SUBID_COUNT,
     Service,
@@ -100,12 +97,21 @@ def container_unit(service: Service, fleet: Fleet) -> str:
             f"{target}:ro,Z"
         )
 
-    if container.ports and not isinstance(krun, KrunTap):
+    published_endpoints = tuple(
+        endpoint
+        for endpoint in container.endpoints
+        if endpoint.publication is not None
+    )
+    if published_endpoints and not isinstance(krun, KrunTap):
         lines.append("")
-        for port in container.ports:
-            suffix = "" if port.protocol is Protocol.TCP else f"/{port.protocol.value}"
+        for endpoint in published_endpoints:
+            suffix = (
+                ""
+                if endpoint.protocol is Protocol.TCP
+                else f"/{endpoint.protocol.value}"
+            )
             lines.append(
-                f"PublishPort={port.host}:{port.container_port}{suffix}"
+                f"PublishPort={endpoint.publication}:{endpoint.port}{suffix}"
             )
 
     if container.exec is not None:
@@ -127,57 +133,44 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         f"{info.name}/{secret.name}"
         for secret in container.secrets
     ]
-    readiness = service.startup.readiness
     storage_readiness = storage_readiness_line(service)
     if storage_readiness is not None:
         lines.append(storage_readiness)
-    if isinstance(readiness, MarkerReadiness):
-        required_paths = ""
-        for required_path in readiness.paths:
-            required_paths += f" --path {required_path.path}"
-            if required_path.mount_source is not None:
-                required_paths += f" --source {required_path.mount_source}"
-            if required_path.owner is RequiredOwner.SERVICE:
-                required_paths += f" --owner {service.host.uid}:{service.host.uid}"
-            if required_path.access:
-                access_flags = {
-                    PathAccess.READ: "r",
-                    PathAccess.WRITE: "w",
-                    PathAccess.EXECUTE: "x",
-                }
-                required_paths += " --access " + "".join(
-                    access_flags[access] for access in required_path.access
-                )
+    for dependency in service.startup.dependencies:
+        target_service = fleet.services_by_name[dependency.service]
+        target_endpoint = target_service.endpoints_by_name[dependency.endpoint]
+        if dependency.condition is DependencyCondition.HTTP:
+            target = (
+                f"http://{target_service.tap_guest.ip}:"
+                f"{target_endpoint.port}{dependency.path}"
+            )
+        else:
+            target = f"{target_service.tap_guest.ip}:{target_endpoint.port}"
         lines.append(
             "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh "
-            f"marker {readiness.marker} {readiness.timeout_sec} "
-            f"{readiness.interval_sec}{required_paths}"
-        )
-    elif isinstance(readiness, HttpReadiness):
-        lines.append(
-            "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh "
-            f"http {readiness.url} {readiness.timeout_sec} "
-            f"{readiness.interval_sec}"
+            f"{dependency.condition.value} {target} {dependency.timeout_sec} "
+            f"{dependency.interval_sec}"
         )
     if service.startup.require_published_tcp_ports_free:
         host_ports = " ".join(
-            str(port.host_port)
-            for port in container.ports
-            if port.protocol is Protocol.TCP
+            str(endpoint.host_port)
+            for endpoint in container.endpoints
+            if endpoint.protocol is Protocol.TCP
+            and endpoint.host_port is not None
         )
         lines.append(
             "ExecStartPre=/usr/local/bin/nas-assert-tcp-ports-free.sh "
             f"{host_ports}"
         )
     if service.active_tap:
-        probe_port = service.tap_spec.probe_port
+        probe = service.endpoints_by_name[service.tap_spec.probe_endpoint]
         lines.append(
             "ExecStartPost=/usr/bin/bash -ceu '"
             "for i in {1..30}; do "
-            f"if /usr/bin/timeout 1 /usr/bin/bash -c \"</dev/tcp/{service.tap_guest.ip}/{probe_port}\" "
+            f"if /usr/bin/timeout 1 /usr/bin/bash -c \"</dev/tcp/{service.tap_guest.ip}/{probe.port}\" "
             ">/dev/null 2>&1; "
             "then exit 0; fi; sleep 1; done; "
-            f"echo \"libkrun guest {service.tap_guest.ip}:{probe_port} was not reachable\" >&2; "
+            f"echo \"libkrun guest {service.tap_guest.ip}:{probe.port} was not reachable\" >&2; "
             "exit 1'"
         )
     lines.append("Restart=always")

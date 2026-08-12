@@ -9,14 +9,14 @@ same service inventory in several files.
 
 The source boundary is `quadlets/<service>.toml`. It describes:
 
-- service metadata and immutable container image;
+- application/role metadata and an immutable service container image;
 - dedicated host identity and subordinate-ID allocation;
-- container volumes, ports, environment, secrets, and command;
+- container volumes, named endpoints, environment, secrets, and command;
 - libkrun resources and routed-TAP policy;
 - simple persistent data and image-controlled assets;
 - typed startup readiness and host-port conflict policy.
 
-`python3 generate-quadlets.py` loads every source into one typed fleet, checks
+`make generate-quadlets` loads every source into one typed fleet, checks
 cross-service invariants, and emits the complete runtime contract. Generated
 files carry a `GENERATED` header and must never be edited directly.
 
@@ -24,7 +24,7 @@ Useful current examples:
 
 - `quadlets/blackbox-exporter.toml`: stateless service with a read-only asset;
 - `quadlets/alertmanager.toml`: simple mutable data plus runtime secrets;
-- `quadlets/vmalert.toml`: bounded HTTP readiness for a local dependency;
+- `quadlets/vmalert.toml`: named HTTP readiness for a local dependency;
 - `quadlets/garage.toml`: multiple ZFS mounts and exact mount readiness;
 - `quadlets/caddy.toml`: public TCP/UDP ingress and inter-service edges.
 
@@ -46,11 +46,15 @@ enablement.
 ### 2. Pin the container contract
 
 The TOML filename and `[service].name` must match exactly. Service names are
-DNS labels because they also become generated peer hostnames.
+DNS labels because they also become generated peer hostnames. Set
+`[service].application` to the user-facing application and `[service].role` to
+the component's unique job within it. Application membership is descriptive;
+it does not merge identities, storage, networking, lifecycle, or backup policy.
+See [`../architecture/applications.md`](../architecture/applications.md).
 
 Use an immutable `name:tag@sha256:<digest>` image. Describe only fields the
 service needs. Keep declaration order intentional for environment variables,
-volumes, secrets, ports, and ingress rules because the renderer preserves it.
+volumes, secrets, and endpoints because the renderer preserves it.
 
 The schema deliberately accepts only values the renderer can emit without
 another quoting language: environment values are single atoms, `exec` is a
@@ -74,23 +78,31 @@ cpus = 1
 ram-mib = 256
 network = "tap"
 ipv4 = "10.253.10.2/30"
-probe-port = 8080
+probe-endpoint = "http"
 ```
 
 Allocate a unique `/30`; the guest uses the second usable address and the host
-gateway uses the first. Declare every listener in `[[container.ports]]` even
-when it is loopback-only. Set `probe-port` to one declared TCP container port;
-that listener is the post-start guest readiness boundary.
+gateway uses the first. Declare every listener in `[[container.endpoints]]`,
+give it a stable name, and set `probe-endpoint` to one declared TCP endpoint;
+that listener is the post-start guest readiness boundary. For example:
+
+```toml
+[[container.endpoints]]
+name = "http"
+port = 8080
+host = "127.0.0.1:8080"
+consumers = ["caddy", "blackbox-exporter"]
+```
 
 Host publication accepts only:
 
 - `127.0.0.1`: host-loopback access, typically for Caddy or monitoring;
 - `0.0.0.0`: all host addresses for intentionally public services.
 
-Use `[[krun.ingress]]` for service-to-service TCP access. `from` names another
-active TOML service; its allowed destination ports must also be declared as TCP
-ports by the destination. Use `[krun].host-access` only for a guest that must
-reach a specific TCP listener on its own host gateway.
+List service-to-service access in the destination endpoint's `consumers`.
+Every consumer must name another active TAP service. Use `[krun].host-access`
+only for a guest that must reach a specific TCP listener on its own host
+gateway.
 
 The compiler generates TAP ownership, DHCP, peer `*.krun` host entries,
 anti-spoofing, explicit ingress, DNAT/SNAT, and outbound NAT. Do not add Podman
@@ -147,16 +159,20 @@ Rootless user units do not depend directly on system units. If startup needs a
 local dependency, use typed readiness:
 
 ```toml
-[startup.readiness]
-url = "http://127.0.0.1:8428/-/healthy"
+[[startup.dependencies]]
+service = "victoria-metrics"
+endpoint = "http"
+condition = "http"
+path = "/-/healthy"
 timeout-sec = 300
 interval-sec = 2
 ```
 
 Storage declarations own their generated `/run/nas-storage/<service>/ready`
-marker and path checks. Do not also declare `[startup.readiness]` for a
-stateful service. Typed HTTP readiness remains available for stateless local
-dependencies.
+marker and path checks. Dependency readiness composes with that storage gate,
+and several TCP or HTTP dependencies may be declared. The target endpoint must
+allow the dependent service in `consumers`; the compiler resolves its TAP
+address and port. These are bounded startup checks, not ongoing health checks.
 
 `[startup].require-published-tcp-ports-free = true` is an intentionally
 service-specific migration diagnostic. Use it only when a retired or stale
@@ -168,11 +184,11 @@ invokes fixed host helpers; raw `[unit.extra]` directives are rejected.
 
 ### 7. Generate and validate
 
-Install the pinned development dependency, then run:
+Install `uv`; the Make targets create and synchronize the locked Python
+environment automatically. Then run:
 
 ```bash
-python3 -m pip install --requirement requirements-dev.txt
-python3 generate-quadlets.py
+make generate-quadlets
 make check
 make test
 make build

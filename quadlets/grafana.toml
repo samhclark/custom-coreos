@@ -3,6 +3,8 @@
 
 [service]
 name = "grafana"
+application = "observability"
+role = "grafana"
 description = "Grafana Dashboard"
 documentation = "https://grafana.com/docs/grafana/latest/"
 
@@ -26,15 +28,7 @@ cpus = 2
 ram-mib = 2048
 network = "tap"
 ipv4 = "10.253.3.2/30"
-probe-port = 3000
-
-[[krun.ingress]]
-from = "caddy"
-ports = [3000]
-
-[[krun.ingress]]
-from = "victoria-metrics"
-ports = [3000]
+probe-endpoint = "http"
 
 [container.environment]
 # GF_PLUGINS_PREINSTALL_SYNC installs the VictoriaMetrics datasource plugin
@@ -46,9 +40,11 @@ GF_AUTH_ANONYMOUS_ENABLED = "true"
 GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin"
 GF_AUTH_DISABLE_LOGIN_FORM = "true"
 
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
+port = 3000
 host = "127.0.0.1:3000"
-container = 3000
+consumers = ["caddy", "victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled provisioning configs (read-only)"

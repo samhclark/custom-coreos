@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if (( $# < 4 )); then
-    echo "usage: $0 marker|http TARGET TIMEOUT_SECONDS INTERVAL_SECONDS [--path PATH [--source SOURCE] [--owner UID:GID] [--access rwx] ...]" >&2
+    echo "usage: $0 marker|http|tcp TARGET TIMEOUT_SECONDS INTERVAL_SECONDS [--path PATH [--source SOURCE] [--owner UID:GID] [--access rwx] ...]" >&2
     exit 2
 fi
 
@@ -14,7 +14,7 @@ timeout_sec="$3"
 interval_sec="$4"
 shift 4
 
-if [[ "${mode}" != "marker" && "${mode}" != "http" ]]; then
+if [[ "${mode}" != "marker" && "${mode}" != "http" && "${mode}" != "tcp" ]]; then
     echo "Unsupported readiness mode: ${mode}" >&2
     exit 2
 fi
@@ -30,9 +30,17 @@ if (( interval_sec > timeout_sec )); then
     echo "Interval cannot exceed timeout" >&2
     exit 2
 fi
-if [[ "${mode}" == "http" && $# -ne 0 ]]; then
-    echo "HTTP readiness does not accept path requirements" >&2
+if [[ "${mode}" != "marker" && $# -ne 0 ]]; then
+    echo "${mode^^} readiness does not accept path requirements" >&2
     exit 2
+fi
+if [[ "${mode}" == "tcp" ]]; then
+    if [[ ! "${target}" =~ ^[0-9.]+:[1-9][0-9]*$ ]]; then
+        echo "TCP readiness target must be an IPv4 address and port: ${target}" >&2
+        exit 2
+    fi
+    tcp_host="${target%:*}"
+    tcp_port="${target##*:}"
 fi
 
 declare -a requirement_paths=()
@@ -135,12 +143,16 @@ while (( SECONDS < deadline )); do
             done
         fi
         (( ready )) && exit 0
-    elif /usr/bin/curl \
+    elif [[ "${mode}" == "http" ]] && /usr/bin/curl \
         --fail \
         --silent \
         --show-error \
         --max-time "${interval_sec}" \
         "${target}" >/dev/null 2>&1; then
+        exit 0
+    elif [[ "${mode}" == "tcp" ]] && /usr/bin/timeout \
+        "${interval_sec}" /usr/bin/bash -c \
+        "</dev/tcp/${tcp_host}/${tcp_port}" >/dev/null 2>&1; then
         exit 0
     fi
     sleep "${interval_sec}"
