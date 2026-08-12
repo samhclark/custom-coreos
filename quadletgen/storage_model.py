@@ -37,6 +37,7 @@ class ZfsRecordSize(str, Enum):
 
     DATABASE = "4K"
     APPLICATION = "16K"
+    POSTGRESQL = "32K"
     BULK = "128K"
     OBJECT = "1M"
 

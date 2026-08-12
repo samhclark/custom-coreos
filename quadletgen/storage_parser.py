@@ -202,7 +202,7 @@ def _parse_exports(raw: object, path: str) -> tuple[StorageExport, ...]:
 def _record_size(value: object, path: str) -> ZfsRecordSize:
     text = _string(value, path)
     if text not in {item.value for item in ZfsRecordSize}:
-        _fail(path, "must be one of 4K, 16K, 128K, or 1M")
+        _fail(path, "must be one of 4K, 16K, 32K, 128K, or 1M")
     return ZfsRecordSize(text)
 
 

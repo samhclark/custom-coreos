@@ -193,6 +193,12 @@ class StorageParserTests(unittest.TestCase):
                     name,
                 )
 
+    def test_postgresql_record_size_is_supported(self):
+        (managed,) = self.parse(
+            MANAGED_ZFS.replace('record-size = "4K"', 'record-size = "32K"')
+        )
+        self.assertEqual(managed.record_size, ZfsRecordSize.POSTGRESQL)
+
     def test_exports_are_explicit_typed_and_unique(self):
         self.assert_invalid(
             DIRECTORY.replace('access = "read-write"', 'access = "write"'),
