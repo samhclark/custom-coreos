@@ -4,6 +4,8 @@
 
 [service]
 name = "victoria-metrics"
+application = "observability"
+role = "metrics"
 description = "VictoriaMetrics Time Series Database"
 documentation = "https://docs.victoriametrics.com/"
 
@@ -25,24 +27,14 @@ cpus = 2
 ram-mib = 1024
 network = "tap"
 ipv4 = "10.253.7.2/30"
-probe-port = 8428
+probe-endpoint = "http"
 host-access = [9100]
 
-[[krun.ingress]]
-from = "caddy"
-ports = [8428]
-
-[[krun.ingress]]
-from = "grafana"
-ports = [8428]
-
-[[krun.ingress]]
-from = "vmalert"
-ports = [8428]
-
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
+port = 8428
 host = "127.0.0.1:8428"
-container = 8428
+consumers = ["caddy", "grafana", "vmalert"]
 
 [[container.volumes]]
 comment = "Image-controlled scrape configuration (read-only)"

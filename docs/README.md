@@ -5,6 +5,8 @@ here rather than reading rollout plans or evidence logs.
 
 ## Architecture
 
+- [`architecture/applications.md`](architecture/applications.md) — application
+  grouping, service roles, named endpoints, and startup dependencies
 - [`architecture/secrets.md`](architecture/secrets.md) — encrypted source,
   boot-time distribution, and the rootless runtime-file boundary
 - [`architecture/libkrun-networking.md`](architecture/libkrun-networking.md) —
@@ -23,6 +25,12 @@ here rather than reading rollout plans or evidence logs.
   playback monitoring setup and interpretation
 - [`investigations/jellyfin-hardware-transcoding.md`](investigations/jellyfin-hardware-transcoding.md)
   — the one active investigation
+
+## Proposals
+
+- [`proposals/application-backups.md`](proposals/application-backups.md) —
+  discussion-only direction for application-aware snapshots, selective
+  off-site replication, and holistic restore design
 
 Completed migration plans and rollout evidence are retained only for
 provenance. They are not current instructions and live under

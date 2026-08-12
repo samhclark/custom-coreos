@@ -3,6 +3,8 @@
 
 [service]
 name = "jellyfin"
+application = "jellyfin"
+role = "server"
 description = "Jellyfin Media Server"
 documentation = "https://jellyfin.org/docs/"
 
@@ -29,23 +31,13 @@ cpus = 4
 ram-mib = 4096
 network = "tap"
 ipv4 = "10.253.2.2/30"
-probe-port = 8096
+probe-endpoint = "http"
 
-[[krun.ingress]]
-from = "caddy"
-ports = [8096]
-
-[[krun.ingress]]
-from = "blackbox-exporter"
-ports = [8096]
-
-[[krun.ingress]]
-from = "jellyfin-exporter"
-ports = [8096]
-
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
+port = 8096
 host = "127.0.0.1:8096"
-container = 8096
+consumers = ["caddy", "blackbox-exporter", "jellyfin-exporter"]
 
 [[storage]]
 name = "config"

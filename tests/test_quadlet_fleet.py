@@ -11,9 +11,6 @@ from quadletgen.compiler import compile_fleet
 from quadletgen.model import (
     ConfigError,
     Fleet,
-    MarkerReadiness,
-    RequiredPath,
-    StartupSpec,
 )
 from quadletgen.parser import load_service
 from tests.quadlet_test_support import REPO, current_fleet, service_toml
@@ -27,23 +24,11 @@ class FleetValidationTests(unittest.TestCase):
 
     def test_direct_model_construction_cannot_bypass_local_invariants(self):
         service = next(
-            item for item in current_fleet().services if not item.storage
+            item
+            for item in current_fleet().services
+            if not item.storage and item.container.endpoints
         )
-        service = replace(
-            service,
-            startup=StartupSpec(
-                readiness=MarkerReadiness(
-                    marker="/run/example/ready",
-                    timeout_sec=30,
-                    interval_sec=1,
-                    paths=(RequiredPath(path="/var/lib/example"),),
-                )
-            ),
-        )
-        readiness = service.startup.readiness
-        self.assertIsInstance(readiness, MarkerReadiness)
-        assert isinstance(readiness, MarkerReadiness)
-        required_path = readiness.paths[0]
+        endpoint = service.container.endpoints[0]
         invalid_changes = {
             "service name": lambda: replace(
                 service,
@@ -60,18 +45,13 @@ class FleetValidationTests(unittest.TestCase):
                 service,
                 host=replace(service.host, uid=1),
             ),
-            "readiness path": lambda: replace(
+            "endpoint name": lambda: replace(
                 service,
-                startup=replace(
-                    service.startup,
-                    readiness=replace(
-                        readiness,
-                        paths=(
-                            replace(
-                                required_path,
-                                path="/var/lib/../outside",
-                            ),
-                        ),
+                container=replace(
+                    service.container,
+                    endpoints=(
+                        replace(endpoint, name="../../outside"),
+                        *service.container.endpoints[1:],
                     ),
                 ),
             ),
@@ -105,6 +85,34 @@ class FleetValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "ranges overlap"):
                 Fleet.build([first, overlapping])
 
+    def test_application_roles_are_unique_within_an_application(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            directory = Path(directory_name)
+            first = self.write(
+                directory,
+                "first.toml",
+                service_toml(
+                    name="first",
+                    uid=51991,
+                    subid_start=600000000,
+                    application="immich",
+                    role="server",
+                ),
+            )
+            second = self.write(
+                directory,
+                "second.toml",
+                service_toml(
+                    name="second",
+                    uid=51992,
+                    subid_start=700000000,
+                    application="immich",
+                    role="server",
+                ),
+            )
+            with self.assertRaisesRegex(ConfigError, "duplicate role 'server'"):
+                Fleet.build([first, second])
+
     def test_rejects_host_port_collisions_for_non_tap_publishers(self):
         with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
             directory = Path(directory_name)
@@ -116,9 +124,10 @@ class FleetValidationTests(unittest.TestCase):
                     uid=51970,
                     subid_start=600000000,
                     container=(
-                        "[[container.ports]]\n"
+                        "[[container.endpoints]]\n"
+                        'name = "http"\n'
                         'host = "127.0.0.1:8080"\n'
-                        "container = 8080"
+                        "port = 8080"
                     ),
                 ),
             )
@@ -130,9 +139,10 @@ class FleetValidationTests(unittest.TestCase):
                     uid=51980,
                     subid_start=700000000,
                     container=(
-                        "[[container.ports]]\n"
+                        "[[container.endpoints]]\n"
+                        'name = "http"\n'
                         'host = "127.0.0.1:8080"\n'
-                        "container = 8080"
+                        "port = 8080"
                     ),
                 ),
             )
@@ -145,15 +155,16 @@ class FleetValidationTests(unittest.TestCase):
                     subid_start=800000000,
                     container=(
                         'network = "host"\n\n'
-                        "[[container.ports]]\n"
+                        "[[container.endpoints]]\n"
+                        'name = "http"\n'
                         'host = "127.0.0.1:9090"\n'
-                        "container = 9090"
+                        "port = 9090"
                     ),
                     krun=(
                         "enabled = true\ncpus = 1\nram-mib = 128\n"
                         'network = "tap"\n'
                         'ipv4 = "10.253.99.2/30"\n'
-                        "probe-port = 9090"
+                        'probe-endpoint = "http"'
                     ),
                 ),
             )
@@ -175,9 +186,10 @@ class FleetValidationTests(unittest.TestCase):
                     container=(
                         "enabled = false\n"
                         'network = "host"\n\n'
-                        "[[container.ports]]\n"
+                        "[[container.endpoints]]\n"
+                        'name = "http"\n'
                         'host = "127.0.0.1:8080"\n'
-                        "container = 8080\n\n"
+                        "port = 8080\n\n"
                         "[[container.secrets]]\n"
                         'name = "disabled-token"'
                     ),
@@ -185,7 +197,7 @@ class FleetValidationTests(unittest.TestCase):
                         "enabled = true\ncpus = 1\nram-mib = 128\n"
                         'network = "tap"\n'
                         'ipv4 = "10.253.99.2/30"\n'
-                        "probe-port = 8080"
+                        'probe-endpoint = "http"'
                     ),
                     extra=(
                         "\n[assets]\n"
@@ -202,15 +214,16 @@ class FleetValidationTests(unittest.TestCase):
                     subid_start=800000000,
                     container=(
                         'network = "host"\n\n'
-                        "[[container.ports]]\n"
+                        "[[container.endpoints]]\n"
+                        'name = "http"\n'
                         'host = "127.0.0.1:8080"\n'
-                        "container = 8080"
+                        "port = 8080"
                     ),
                     krun=(
                         "enabled = true\ncpus = 1\nram-mib = 128\n"
                         'network = "tap"\n'
                         'ipv4 = "10.253.98.2/30"\n'
-                        "probe-port = 8080"
+                        'probe-endpoint = "http"'
                     ),
                 ),
             )
@@ -271,15 +284,16 @@ class FleetValidationTests(unittest.TestCase):
                 service_toml(
                     container=(
                         'network = "host"\n\n'
-                        "[[container.ports]]\n"
+                        "[[container.endpoints]]\n"
+                        'name = "http"\n'
                         'host = "127.0.0.1:8080"\n'
-                        "container = 8080"
+                        "port = 8080"
                     ),
                     krun=(
                         "enabled = true\ncpus = 1\nram-mib = 128\n"
                         'network = "tap"\n'
                         'ipv4 = "10.253.99.2/30"\n'
-                        "probe-port = 8080"
+                        'probe-endpoint = "http"'
                     ),
                 ),
             )

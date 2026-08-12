@@ -6,10 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from quadletgen.model import ConfigError
 from quadletgen.parser import load_service
 from quadletgen.render_service import container_unit
-from quadletgen.render_storage import storage_manifest, storage_unit
+from quadletgen.render_storage import (
+    storage_manifest,
+    storage_readiness_line,
+    storage_unit,
+)
 from tests.quadlet_test_support import REPO, current_fleet, service_toml
 
 
@@ -71,17 +74,21 @@ class StorageRenderingTests(unittest.TestCase):
             unit,
         )
 
-    def test_storage_rejects_a_second_handwritten_readiness_contract(self):
-        with self.assertRaisesRegex(ConfigError, "owns startup readiness"):
-            self.load(
-                STORAGE
-                + """
-[startup.readiness]
-marker = "/run/legacy/ready"
+    def test_storage_and_dependency_readiness_are_composable(self):
+        service = self.load(
+            STORAGE
+            + """
+[[startup.dependencies]]
+service = "database"
+endpoint = "postgres"
+condition = "tcp"
 timeout-sec = 30
 interval-sec = 1
 """
-            )
+        )
+
+        self.assertEqual(len(service.startup.dependencies), 1)
+        self.assertIsNotNone(storage_readiness_line(service))
 
     def test_host_manifest_and_unit_are_generated_from_the_same_contract(self):
         service = self.load(STORAGE)

@@ -24,6 +24,8 @@ def service_toml(
     name: str = "service",
     uid: int = 51999,
     subid_start: int = 519990000,
+    application: str | None = None,
+    role: str = "test",
     container: str = "",
     krun: str | None = None,
     extra: str = "",
@@ -32,6 +34,8 @@ def service_toml(
     return f"""
 [service]
 name = "{name}"
+application = "{application or name}"
+role = "{role}"
 description = "Test service"
 
 [host]

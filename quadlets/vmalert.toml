@@ -3,6 +3,8 @@
 
 [service]
 name = "vmalert"
+application = "observability"
+role = "alert-evaluator"
 description = "VictoriaMetrics vmalert - Alerting Rules Evaluator"
 documentation = "https://docs.victoriametrics.com/vmalert/"
 
@@ -23,15 +25,13 @@ cpus = 1
 ram-mib = 256
 network = "tap"
 ipv4 = "10.253.4.2/30"
-probe-port = 8880
+probe-endpoint = "http"
 
-[[krun.ingress]]
-from = "victoria-metrics"
-ports = [8880]
-
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
+port = 8880
 host = "127.0.0.1:8880"
-container = 8880
+consumers = ["victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled alerting rules (read-only)"
@@ -45,7 +45,10 @@ path = "/usr/share/custom-coreos/vmalert"
 [unit]
 timeout-start-sec = 330
 
-[startup.readiness]
-url = "http://127.0.0.1:8428/-/healthy"
+[[startup.dependencies]]
+service = "victoria-metrics"
+endpoint = "http"
+condition = "http"
+path = "/-/healthy"
 timeout-sec = 300
 interval-sec = 2

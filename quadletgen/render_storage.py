@@ -80,9 +80,10 @@ def storage_manifest(service: Service) -> str:
     if not service.storage:
         raise ValueError(f"{service.info.name} has no storage to render")
     tcp_ports = ",".join(
-        str(port.host_port)
-        for port in service.container.ports
-        if port.protocol is Protocol.TCP
+        str(endpoint.host_port)
+        for endpoint in service.container.endpoints
+        if endpoint.protocol is Protocol.TCP
+        and endpoint.host_port is not None
     ) or "-"
     lines = [
         "nas-storage-manifest-v1",

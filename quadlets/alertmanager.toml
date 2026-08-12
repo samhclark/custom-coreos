@@ -3,6 +3,8 @@
 
 [service]
 name = "alertmanager"
+application = "observability"
+role = "alertmanager"
 description = "Prometheus Alertmanager"
 documentation = "https://prometheus.io/docs/alerting/latest/alertmanager/"
 
@@ -27,19 +29,13 @@ cpus = 1
 ram-mib = 256
 network = "tap"
 ipv4 = "10.253.6.2/30"
-probe-port = 9093
+probe-endpoint = "http"
 
-[[krun.ingress]]
-from = "vmalert"
-ports = [9093]
-
-[[krun.ingress]]
-from = "victoria-metrics"
-ports = [9093]
-
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
+port = 9093
 host = "127.0.0.1:9093"
-container = 9093
+consumers = ["vmalert", "victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"

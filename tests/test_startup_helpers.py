@@ -139,6 +139,23 @@ class StartupHelperTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_tcp_readiness_uses_a_real_bounded_connection(self):
+        listener = socket.socket()
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        try:
+            result = subprocess.run(
+                [WAIT, "tcp", f"127.0.0.1:{port}", "2", "1"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+        finally:
+            listener.close()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_tcp_port_check_detects_and_releases_listener(self):
         listener = socket.socket()
         listener.bind(("127.0.0.1", 0))

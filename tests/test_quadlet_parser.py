@@ -48,6 +48,54 @@ class StrictParserTests(unittest.TestCase):
             "unknown keys: network-mode",
         )
 
+    def test_rejects_superseded_network_and_readiness_shapes(self):
+        endpoint_source = service_toml(
+            container='''[[container.endpoints]]
+name = "http"
+port = 8080'''
+        )
+        self.assert_invalid(
+            endpoint_source.replace("endpoints", "ports", 1),
+            "unknown keys: ports",
+        )
+        self.assert_invalid(
+            service_toml(
+                extra='''
+[startup.readiness]
+url = "http://127.0.0.1:8080/health"'''
+            ),
+            "unknown keys: readiness",
+        )
+        self.assert_invalid(
+            service_toml(
+                container='''network = "host"
+[[container.endpoints]]
+name = "http"
+port = 8080''',
+                krun='''enabled = true
+cpus = 1
+ram-mib = 128
+network = "tap"
+ipv4 = "10.253.99.2/30"
+probe-endpoint = "http"
+[[krun.ingress]]
+from = "peer"
+ports = [8080]''',
+            ),
+            "unknown keys: ingress",
+        )
+
+    def test_application_and_role_are_required_metadata(self):
+        service = self.load(
+            service_toml(application="immich", role="server")
+        )
+        self.assertEqual(service.info.application, "immich")
+        self.assertEqual(service.info.role, "server")
+        self.assert_invalid(
+            service_toml().replace('application = "service"\n', ""),
+            "missing 'application'",
+        )
+
     def test_requires_immutable_image_reference(self):
         self.assert_invalid(
             service_toml().replace(
@@ -158,20 +206,22 @@ target = "/state"
             "[host].display-name",
         )
 
-    def test_parses_typed_ports_dns_sysctls_and_secrets_in_source_order(self):
+    def test_parses_typed_endpoints_dns_sysctls_and_secrets_in_source_order(self):
         service = self.load(
             service_toml(
                 container="""
 dns = ["100.100.100.100", "2001:db8::53"]
 sysctls = ["net.ipv4.ip_forward=1"]
 
-[[container.ports]]
+[[container.endpoints]]
+name = "http"
 host = "127.0.0.1:8080"
-container = 80
+port = 80
 
-[[container.ports]]
+[[container.endpoints]]
+name = "dns"
 host = "[0:0:0:0:0:0:0:1]:5353"
-container = 5353
+port = 5353
 protocol = "udp"
 
 [[container.secrets]]
@@ -181,25 +231,28 @@ name = "token"
         )
 
         self.assertEqual(
-            [port.protocol for port in service.container.ports],
+            [endpoint.protocol for endpoint in service.container.endpoints],
             [Protocol.TCP, Protocol.UDP],
         )
         self.assertEqual(
             [str(server) for server in service.container.dns],
             ["100.100.100.100", "2001:db8::53"],
         )
-        self.assertEqual(service.container.ports[1].host, "[::1]:5353")
+        self.assertEqual(
+            service.container.endpoints[1].publication,
+            "[::1]:5353",
+        )
         self.assertEqual(service.container.sysctls, ("net.ipv4.ip_forward=1",))
         self.assertEqual(service.container.secrets[0].name, "token")
 
     def test_rejects_invalid_port_declarations(self):
         cases = {
-            "hostname": 'host = "localhost:8080"\ncontainer = 80',
-            "unbracketed IPv6": 'host = "::1:8080"\ncontainer = 80',
-            "port zero": 'host = "127.0.0.1:0"\ncontainer = 80',
-            "boolean": 'host = "127.0.0.1:8080"\ncontainer = true',
+            "hostname": 'host = "localhost:8080"\nport = 80',
+            "unbracketed IPv6": 'host = "::1:8080"\nport = 80',
+            "port zero": 'host = "127.0.0.1:0"\nport = 80',
+            "boolean": 'host = "127.0.0.1:8080"\nport = true',
             "protocol": (
-                'host = "127.0.0.1:8080"\ncontainer = 80\n'
+                'host = "127.0.0.1:8080"\nport = 80\n'
                 'protocol = "sctp"'
             ),
         }
@@ -207,7 +260,10 @@ name = "token"
             with self.subTest(label=label):
                 self.assert_invalid(
                     service_toml(
-                        container=f"\n[[container.ports]]\n{declaration}"
+                        container=(
+                            "\n[[container.endpoints]]\n"
+                            f'name = "http"\n{declaration}'
+                        )
                     ),
                     "container",
                 )
@@ -216,13 +272,14 @@ name = "token"
         self.assert_invalid_field(
             service_toml(
                 container=(
-                    "[[container.ports]]\n"
+                    "[[container.endpoints]]\n"
+                    'name = "http"\n'
                     'host = "127.0.0.1:8080"\n'
-                    "container = 80\n"
+                    "port = 80\n"
                     'protocol = ["tcp"]'
                 )
             ),
-            "[container].ports[1].protocol",
+            "[container].endpoints[1].protocol",
         )
         self.assert_invalid_field(
             service_toml(
@@ -238,25 +295,28 @@ name = "token"
         self.assert_invalid(
             service_toml(
                 container=(
-                    "[[container.ports]]\n"
+                    "[[container.endpoints]]\n"
+                    'name = "dns-one"\n'
                     'host = "[::1]:5353"\n'
-                    "container = 5353\n"
+                    "port = 5353\n"
                     'protocol = "udp"\n\n'
-                    "[[container.ports]]\n"
+                    "[[container.endpoints]]\n"
+                    'name = "dns-two"\n'
                     'host = "[0:0:0:0:0:0:0:1]:5353"\n'
-                    "container = 5354\n"
+                    "port = 5354\n"
                     'protocol = "udp"'
                 )
             ),
-            "duplicate published port",
+            "duplicate publication",
         )
 
     def test_rejects_host_ports_without_tap_exception(self):
         self.assert_invalid(
             service_toml(
                 container=(
-                    'network = "host"\n\n[[container.ports]]\n'
-                    'host = "127.0.0.1:8080"\ncontainer = 80'
+                    'network = "host"\n\n[[container.endpoints]]\n'
+                    'name = "http"\n'
+                    'host = "127.0.0.1:8080"\nport = 80'
                 )
             ),
             "cannot be used with network",
@@ -283,19 +343,21 @@ name = "token"
     def test_disabled_krun_normalizes_to_absence(self):
         self.assertIsNone(self.load(service_toml(krun="enabled = false")).krun)
 
-    def test_tap_uses_explicit_probe_port_and_derives_network_values(self):
+    def test_tap_uses_named_probe_endpoint_and_derives_network_values(self):
         service = self.load(
             service_toml(
                 container=(
-                    'network = "host"\n\n[[container.ports]]\n'
-                    'host = "127.0.0.1:8081"\ncontainer = 8081\n\n'
-                    '[[container.ports]]\n'
-                    'host = "127.0.0.1:8080"\ncontainer = 8080'
+                    'network = "host"\n\n[[container.endpoints]]\n'
+                    'name = "admin"\n'
+                    'host = "127.0.0.1:8081"\nport = 8081\n\n'
+                    '[[container.endpoints]]\n'
+                    'name = "http"\n'
+                    'host = "127.0.0.1:8080"\nport = 8080'
                 ),
                 krun=(
                     "enabled = true\ncpus = 1\nram-mib = 128\n"
                     'network = "tap"\nipv4 = "10.253.99.2/30"\n'
-                    "probe-port = 8080"
+                    'probe-endpoint = "http"'
                 ),
             )
         )
@@ -304,7 +366,7 @@ name = "token"
         self.assertEqual(service.tap_name, "krun-51999")
         self.assertEqual(str(service.tap_guest), "10.253.99.2/30")
         self.assertEqual(str(service.tap_gateway), "10.253.99.1/30")
-        self.assertEqual(service.tap_spec.probe_port, 8080)
+        self.assertEqual(service.tap_spec.probe_endpoint, "http")
         artifacts = {
             artifact.path: artifact.content
             for artifact in compile_fleet(Fleet.build([service]))
@@ -315,10 +377,11 @@ name = "token"
         self.assertIn("/dev/tcp/10.253.99.2/8080", unit)
         self.assertNotIn("/dev/tcp/10.253.99.2/8081", unit)
 
-    def test_tap_probe_must_reference_a_declared_tcp_container_port(self):
+    def test_tap_probe_must_reference_a_declared_tcp_endpoint(self):
         container = (
-            'network = "host"\n\n[[container.ports]]\n'
-            'host = "127.0.0.1:8080"\ncontainer = 8080\n'
+            'network = "host"\n\n[[container.endpoints]]\n'
+            'name = "dns"\n'
+            'host = "127.0.0.1:8080"\nport = 8080\n'
             'protocol = "udp"'
         )
         base_krun = (
@@ -328,31 +391,29 @@ name = "token"
 
         self.assert_invalid(
             service_toml(container=container, krun=base_krun),
-            "missing 'probe-port'",
+            "missing 'probe-endpoint'",
         )
         self.assert_invalid(
             service_toml(
                 container=container,
-                krun=f"{base_krun}\nprobe-port = 8080",
+                krun=f'{base_krun}\nprobe-endpoint = "dns"',
             ),
-            "declared TCP container port",
+            "declared TCP endpoint",
         )
         self.assert_invalid(
             service_toml(
                 container=(
                     f"{container}\n\n"
-                    "[[container.ports]]\n"
+                    "[[container.endpoints]]\n"
+                    'name = "health"\n'
                     'host = "127.0.0.1:9090"\n'
-                    "container = 9090"
+                    "port = 9090"
                 ),
                 krun=(
-                    f"{base_krun}\nprobe-port = 9090\n\n"
-                    "[[krun.ingress]]\n"
-                    'from = "source"\n'
-                    "ports = [8080]"
+                    f'{base_krun}\nprobe-endpoint = "missing"'
                 ),
             ),
-            "TAP ingress ports must also be declared TCP ports.*8080",
+            "declared TCP endpoint",
         )
 
     def test_health_cmd_supports_only_explicit_disable(self):
@@ -413,27 +474,10 @@ name = "token"
                 container='sysctls = ["net.ipv4.ip_forward=%n"]'
             ),
             "[container].exec": service_toml(container='exec = "server; reboot"'),
-            "[startup.readiness].url": service_toml(
-                extra=(
-                    "[startup.readiness]\n"
-                    'url = "http://127.0.0.1:bad/ready"\n'
-                    "timeout-sec = 5\ninterval-sec = 1"
-                )
-            ),
         }
         for field, source in cases.items():
             with self.subTest(field=field):
                 self.assert_invalid_field(source, field)
-        self.assert_invalid_field(
-            service_toml(
-                extra=(
-                    "[startup.readiness]\n"
-                    'url = "http://${HOST}:8080/ready"\n'
-                    "timeout-sec = 5\ninterval-sec = 1"
-                )
-            ),
-            "[startup.readiness].url",
-        )
 
     def test_environment_names_are_identifiers(self):
         for environment_name in ("BAD-NAME", "1BAD"):
@@ -485,43 +529,6 @@ name = "token"
                     'path = "/usr/share/custom-coreos/somewhere-else"'
                 )
             ),
-            "[startup.readiness].marker": service_toml(
-                extra=(
-                    "[startup.readiness]\n"
-                    'marker = "/run/service/../ready"\n'
-                    "timeout-sec = 5\ninterval-sec = 1"
-                )
-            ),
-            "[[startup.readiness.paths]][1].mount-source": service_toml(
-                extra=(
-                    "[startup.readiness]\n"
-                    'marker = "/run/service/ready"\n'
-                    "timeout-sec = 5\ninterval-sec = 1\n\n"
-                    "[[startup.readiness.paths]]\n"
-                    'path = "/var/lib/service"\n'
-                    'mount-source = "tank/service;bad"'
-                )
-            ),
-            "[[startup.readiness.paths]][1].owner": service_toml(
-                extra=(
-                    "[startup.readiness]\n"
-                    'marker = "/run/service/ready"\n'
-                    "timeout-sec = 5\ninterval-sec = 1\n\n"
-                    "[[startup.readiness.paths]]\n"
-                    'path = "/var/lib/service"\n'
-                    'owner = "root"'
-                )
-            ),
-            "[[startup.readiness.paths]][1].access[1]": service_toml(
-                extra=(
-                    "[startup.readiness]\n"
-                    'marker = "/run/service/ready"\n'
-                    "timeout-sec = 5\ninterval-sec = 1\n\n"
-                    "[[startup.readiness.paths]]\n"
-                    'path = "/var/lib/service"\n'
-                    'access = ["delete"]'
-                )
-            ),
         }
         for field, source in cases.items():
             with self.subTest(field=field):
@@ -547,40 +554,57 @@ name = "token"
             "control characters",
         )
 
-    def test_startup_policy_rejects_ambiguous_or_persistent_readiness(self):
+    def test_startup_dependencies_are_typed_and_repeatable(self):
+        service = self.load(
+            service_toml(
+                extra="""
+[[startup.dependencies]]
+service = "immich-database"
+endpoint = "postgres"
+condition = "tcp"
+timeout-sec = 300
+interval-sec = 2
+
+[[startup.dependencies]]
+service = "immich-machine-learning"
+endpoint = "http"
+condition = "http"
+path = "/ping"
+timeout-sec = 600
+interval-sec = 5
+"""
+            )
+        )
+
+        self.assertEqual(len(service.startup.dependencies), 2)
+        self.assertEqual(service.startup.dependencies[0].service, "immich-database")
+        self.assertEqual(service.startup.dependencies[1].path, "/ping")
+
+    def test_startup_dependency_contract_is_closed(self):
         cases = {
-            "both targets": (
-                "[startup.readiness]\n"
-                'marker = "/run/service/ready"\n'
-                'url = "http://127.0.0.1/ready"\n'
-                "timeout-sec = 5\ninterval-sec = 1"
-            ),
-            "persistent marker": (
-                "[startup.readiness]\n"
-                'marker = "/var/lib/service/ready"\n'
-                "timeout-sec = 5\ninterval-sec = 1"
-            ),
-            "missing interval": (
-                "[startup.readiness]\n"
-                'marker = "/run/service/ready"\n'
-                "timeout-sec = 5"
-            ),
-            "URL without host": (
-                "[startup.readiness]\n"
-                'url = "http:///ready"\n'
-                "timeout-sec = 5\ninterval-sec = 1"
-            ),
-            "HTTP with path requirements": (
-                "[startup.readiness]\n"
-                'url = "http://127.0.0.1/ready"\n'
-                "timeout-sec = 5\ninterval-sec = 1\n\n"
-                "[[startup.readiness.paths]]\n"
-                'path = "/var/lib/service"'
+            "bad condition": 'condition = "udp"',
+            "HTTP without path": 'condition = "http"',
+            "TCP with path": 'condition = "tcp"\npath = "/ready"',
+            "interval exceeds timeout": (
+                'condition = "tcp"\ntimeout-sec = 1\ninterval-sec = 2'
             ),
         }
-        for label, startup in cases.items():
+        base = (
+            "[[startup.dependencies]]\n"
+            'service = "database"\n'
+            'endpoint = "postgres"\n'
+        )
+        for label, fields in cases.items():
             with self.subTest(label=label):
-                self.assert_invalid(service_toml(extra=startup), "startup.readiness")
+                timing = (
+                    "\ntimeout-sec = 5\ninterval-sec = 1"
+                    if "timeout-sec" not in fields
+                    else ""
+                )
+                self.assert_invalid(
+                    service_toml(extra=base + fields + timing),
+                    "startup.*dependencies",
+                )
 
     def test_startup_port_guard_is_validated(self):
         self.assert_invalid(

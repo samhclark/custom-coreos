@@ -15,10 +15,11 @@ terminator is part of the production service data path.
 
 - `[krun].ipv4` assigns the guest address; the first usable address is the host
   gateway.
-- `[[krun.ingress]]` allowlists source services and destination TCP ports.
+- Each `[[container.endpoints]]` declaration names a listener and its allowed
+  `consumers`; the compiler turns those relationships into TCP allowlists.
 - `[krun].host-access` allowlists guest access to selected host-gateway ports.
-- `[[container.ports]]` declares host publication. For TAP guests, the compiler
-  renders nftables DNAT rather than `PublishPort=`.
+- An endpoint's optional `host` declares host publication. For TAP guests, the
+  compiler renders nftables DNAT rather than `PublishPort=`.
 - Disabled services keep their allocated identity but disappear from active
   TAP, peer, and policy output.
 
@@ -66,7 +67,8 @@ dependencies.
 - `0.0.0.0:<port>` accepts any host address.
 - Other bind addresses are rejected until interface-specific policy is
   modeled and tested.
-- Inter-service traffic is denied unless represented by a typed ingress edge.
+- Inter-service traffic is denied unless the destination's named endpoint
+  allows the source service as a consumer.
 - Guest-to-host traffic is denied unless represented by typed host access.
 
 The narrow `nas-krun-tun` SELinux module grants only the TUN operations needed

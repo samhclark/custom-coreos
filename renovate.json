@@ -81,7 +81,7 @@
         "quadlets/*.toml"
       ],
       "prBodyNotes": [
-        "Run `python3 generate-quadlets.py` and commit the generated `overlay-root/` changes before merging."
+        "Run `make generate-quadlets` and commit the generated `overlay-root/` changes before merging."
       ]
     },
     {
