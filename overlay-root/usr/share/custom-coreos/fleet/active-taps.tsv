@@ -2,6 +2,10 @@
 # tap	user-unit	account-unit
 krun-51110	user@51110.service	ensure-nas-garage-account.service
 krun-51120	user@51120.service	ensure-nas-jellyfin-account.service
+krun-51130	user@51130.service	ensure-nas-immichserver-account.service
+krun-51140	user@51140.service	ensure-nas-immichdatabase-account.service
+krun-51150	user@51150.service	ensure-nas-immichvalkey-account.service
+krun-51160	user@51160.service	ensure-nas-immichmachinelearning-account.service
 krun-51210	user@51210.service	ensure-nas-grafana-account.service
 krun-51220	user@51220.service	ensure-nas-vmalert-account.service
 krun-51230	user@51230.service	ensure-nas-blackbox-account.service

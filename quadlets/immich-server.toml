@@ -1,0 +1,122 @@
+# ABOUTME: Production Immich API/web service with durable originals and
+# separately classified generated media.
+
+[service]
+name = "immich-server"
+application = "immich"
+role = "server"
+description = "Immich Photo and Video Server"
+documentation = "https://docs.immich.app/"
+
+[host]
+username = "_nas_immichserver"
+uid = 51130
+subid-start = 511300000
+display-name = "Immich server"
+
+[container]
+image = "ghcr.io/immich-app/immich-server:v3.1.0@sha256:b434cb9287eea1471c9974845914d4dd328c9c2d652e446ed4930f99944f0ceb"
+network = "host"
+container-user = 1000
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
+
+[container.environment]
+TZ = "America/Chicago"
+CPU_CORES = "4"
+DB_HOSTNAME = "immich-database.krun"
+DB_PORT = "5432"
+DB_USERNAME = "postgres"
+DB_PASSWORD_FILE = "/run/secrets/immich-db-password"
+DB_DATABASE_NAME = "immich"
+REDIS_HOSTNAME = "immich-valkey.krun"
+REDIS_PORT = "6379"
+IMMICH_MACHINE_LEARNING_URL = "http://immich-machine-learning.krun:3003"
+IMMICH_TRUSTED_PROXIES = "10.253.9.2"
+
+[krun]
+enabled = true
+cpus = 4
+ram-mib = 4096
+network = "tap"
+ipv4 = "10.253.10.2/30"
+probe-endpoint = "http"
+probe-timeout-sec = 300
+
+[[container.secrets]]
+name = "immich-db-password"
+
+[[container.endpoints]]
+name = "http"
+port = 2283
+host = "127.0.0.1:2283"
+consumers = ["caddy", "blackbox-exporter"]
+
+[[storage]]
+name = "library"
+kind = "managed-zfs"
+dataset = "tank/immich-server/library"
+host-path = "/var/lib/immich/library"
+mode = "0750"
+record-size = "128K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/data"
+access = "read-write"
+
+[[storage]]
+name = "thumbs"
+kind = "managed-zfs"
+dataset = "tank/immich-server/thumbs"
+host-path = "/var/lib/immich/thumbs"
+mode = "0750"
+record-size = "128K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/data/thumbs"
+access = "read-write"
+
+[[storage]]
+name = "encoded-video"
+kind = "managed-zfs"
+dataset = "tank/immich-server/encoded-video"
+host-path = "/var/lib/immich/encoded-video"
+mode = "0750"
+record-size = "1M"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/data/encoded-video"
+access = "read-write"
+
+[[startup.dependencies]]
+service = "immich-database"
+endpoint = "postgres"
+condition = "tcp"
+timeout-sec = 300
+interval-sec = 2
+
+[[startup.dependencies]]
+service = "immich-valkey"
+endpoint = "redis"
+condition = "tcp"
+timeout-sec = 300
+interval-sec = 2
+
+[unit]
+timeout-start-sec = 1200
+
+[startup]
+require-published-tcp-ports-free = true

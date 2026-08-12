@@ -23,6 +23,8 @@ here rather than reading rollout plans or evidence logs.
 - [`roadmap.md`](roadmap.md) — current work and settled invariants
 - [`operations/jellyfin-monitoring.md`](operations/jellyfin-monitoring.md) —
   playback monitoring setup and interpretation
+- [`operations/immich.md`](operations/immich.md) — production topology,
+  recovery classification, first use, and operator verification
 - [`investigations/jellyfin-hardware-transcoding.md`](investigations/jellyfin-hardware-transcoding.md)
   — the one active investigation
 

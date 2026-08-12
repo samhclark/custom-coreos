@@ -40,3 +40,8 @@ visualize.i.samhclark.com {
 jellyfin.i.samhclark.com {
 	reverse_proxy jellyfin.krun:8096
 }
+
+# Immich - private photo and video library
+immich.i.samhclark.com {
+	reverse_proxy immich-server.krun:2283
+}

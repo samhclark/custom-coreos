@@ -315,6 +315,43 @@ class FleetValidationTests(unittest.TestCase):
         self.assertNotIn("semanage fcontext", account_script)
         self.assertNotIn("restorecon", account_script)
 
+    def test_container_hardening_renders_without_raw_podman_arguments(self):
+        with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
+            directory = Path(directory_name)
+            service = self.write(
+                directory,
+                "service.toml",
+                service_toml(
+                    container='''network = "host"
+container-user = 1000
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+shm-size-mib = 128
+
+[[container.endpoints]]
+name = "http"
+port = 8080''',
+                    krun=(
+                        "enabled = true\ncpus = 1\nram-mib = 128\n"
+                        'network = "tap"\n'
+                        'ipv4 = "10.253.99.2/30"\n'
+                        'probe-endpoint = "http"'
+                    ),
+                ),
+            )
+            artifacts = {
+                artifact.path: artifact.content
+                for artifact in compile_fleet(Fleet.build([service]))
+            }
+        unit = artifacts[
+            Path("etc/containers/systemd/users/51999/service.container")
+        ]
+        self.assertIn("NoNewPrivileges=true", unit)
+        self.assertIn("DropCapability=NET_RAW", unit)
+        self.assertIn("ShmSize=128m", unit)
+        self.assertIn("User=1000", unit)
+        self.assertIn("UserNS=keep-id:uid=1000,gid=1000", unit)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,65 @@
+# ABOUTME: Production PostgreSQL/VectorChord database for Immich.
+
+[service]
+name = "immich-database"
+application = "immich"
+role = "database"
+description = "Immich PostgreSQL Database"
+documentation = "https://docs.immich.app/install/docker-compose/"
+
+[host]
+username = "_nas_immichdatabase"
+uid = 51140
+subid-start = 511400000
+display-name = "Immich database"
+
+[container]
+image = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23"
+network = "host"
+container-user = 1000
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+shm-size-mib = 128
+
+[container.environment]
+POSTGRES_PASSWORD_FILE = "/run/secrets/immich-db-password"
+POSTGRES_USER = "postgres"
+POSTGRES_DB = "immich"
+POSTGRES_INITDB_ARGS = "--data-checksums"
+DB_STORAGE_TYPE = "HDD"
+
+[krun]
+enabled = true
+cpus = 2
+ram-mib = 2048
+network = "tap"
+ipv4 = "10.253.11.2/30"
+probe-endpoint = "postgres"
+probe-timeout-sec = 120
+
+[[container.secrets]]
+name = "immich-db-password"
+
+[[container.endpoints]]
+name = "postgres"
+port = 5432
+consumers = ["immich-server"]
+
+[[storage]]
+name = "data"
+kind = "managed-zfs"
+dataset = "tank/immich-database/data"
+host-path = "/var/lib/immich/database"
+mode = "0750"
+record-size = "16K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/var/lib/postgresql/data"
+access = "read-write"
+
+[unit]
+timeout-start-sec = 900

@@ -66,8 +66,19 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         lines.append(f"Sysctl={setting}")
     if container.container_user is not None:
         lines.append(f"User={container.container_user}")
+        if container.container_user > 0:
+            lines.append(
+                "UserNS=keep-id:"
+                f"uid={container.container_user},gid={container.container_user}"
+            )
     if container.health_cmd is not None:
         lines.append(f"HealthCmd={container.health_cmd}")
+    if container.no_new_privileges:
+        lines.append("NoNewPrivileges=true")
+    for capability in container.drop_capabilities:
+        lines.append(f"DropCapability={capability}")
+    if container.shm_size_mib is not None:
+        lines.append(f"ShmSize={container.shm_size_mib}m")
 
     if container.environment:
         lines.append("")
@@ -166,7 +177,7 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         probe = service.endpoints_by_name[service.tap_spec.probe_endpoint]
         lines.append(
             "ExecStartPost=/usr/bin/bash -ceu '"
-            "for i in {1..30}; do "
+            f"for i in {{1..{service.tap_spec.probe_timeout_sec}}}; do "
             f"if /usr/bin/timeout 1 /usr/bin/bash -c \"</dev/tcp/{service.tap_guest.ip}/{probe.port}\" "
             ">/dev/null 2>&1; "
             "then exit 0; fi; sleep 1; done; "

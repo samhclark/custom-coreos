@@ -6,15 +6,16 @@ table ip nas_krun_nat {
         iifname "lo" ip daddr 127.0.0.1 tcp dport 3902 dnat to 10.253.1.2:3902
         iifname "lo" ip daddr 127.0.0.1 tcp dport 3903 dnat to 10.253.1.2:3903
         iifname "lo" ip daddr 127.0.0.1 tcp dport 8096 dnat to 10.253.2.2:8096
+        iifname "lo" ip daddr 127.0.0.1 tcp dport 2283 dnat to 10.253.10.2:2283
         iifname "lo" ip daddr 127.0.0.1 tcp dport 3000 dnat to 10.253.3.2:3000
         iifname "lo" ip daddr 127.0.0.1 tcp dport 8880 dnat to 10.253.4.2:8880
         iifname "lo" ip daddr 127.0.0.1 tcp dport 9115 dnat to 10.253.5.2:9115
         iifname "lo" ip daddr 127.0.0.1 tcp dport 9093 dnat to 10.253.6.2:9093
         iifname "lo" ip daddr 127.0.0.1 tcp dport 8428 dnat to 10.253.7.2:8428
         iifname "lo" ip daddr 127.0.0.1 tcp dport 9594 dnat to 10.253.8.2:9594
-        iifname != "krun-51110" iifname != "krun-51120" iifname != "krun-51210" iifname != "krun-51220" iifname != "krun-51230" iifname != "krun-51240" iifname != "krun-51250" iifname != "krun-51260" iifname != "krun-51310" fib daddr type local tcp dport 80 dnat to 10.253.9.2:80
-        iifname != "krun-51110" iifname != "krun-51120" iifname != "krun-51210" iifname != "krun-51220" iifname != "krun-51230" iifname != "krun-51240" iifname != "krun-51250" iifname != "krun-51260" iifname != "krun-51310" fib daddr type local tcp dport 443 dnat to 10.253.9.2:443
-        iifname != "krun-51110" iifname != "krun-51120" iifname != "krun-51210" iifname != "krun-51220" iifname != "krun-51230" iifname != "krun-51240" iifname != "krun-51250" iifname != "krun-51260" iifname != "krun-51310" fib daddr type local udp dport 443 dnat to 10.253.9.2:443
+        iifname != "krun-51110" iifname != "krun-51120" iifname != "krun-51130" iifname != "krun-51140" iifname != "krun-51150" iifname != "krun-51160" iifname != "krun-51210" iifname != "krun-51220" iifname != "krun-51230" iifname != "krun-51240" iifname != "krun-51250" iifname != "krun-51260" iifname != "krun-51310" fib daddr type local tcp dport 80 dnat to 10.253.9.2:80
+        iifname != "krun-51110" iifname != "krun-51120" iifname != "krun-51130" iifname != "krun-51140" iifname != "krun-51150" iifname != "krun-51160" iifname != "krun-51210" iifname != "krun-51220" iifname != "krun-51230" iifname != "krun-51240" iifname != "krun-51250" iifname != "krun-51260" iifname != "krun-51310" fib daddr type local tcp dport 443 dnat to 10.253.9.2:443
+        iifname != "krun-51110" iifname != "krun-51120" iifname != "krun-51130" iifname != "krun-51140" iifname != "krun-51150" iifname != "krun-51160" iifname != "krun-51210" iifname != "krun-51220" iifname != "krun-51230" iifname != "krun-51240" iifname != "krun-51250" iifname != "krun-51260" iifname != "krun-51310" fib daddr type local udp dport 443 dnat to 10.253.9.2:443
         iifname "lo" ip daddr 127.0.0.1 tcp dport 2019 dnat to 10.253.9.2:2019
     }
 
@@ -24,6 +25,7 @@ table ip nas_krun_nat {
         ip daddr 127.0.0.1 tcp dport 3902 dnat to 10.253.1.2:3902
         ip daddr 127.0.0.1 tcp dport 3903 dnat to 10.253.1.2:3903
         ip daddr 127.0.0.1 tcp dport 8096 dnat to 10.253.2.2:8096
+        ip daddr 127.0.0.1 tcp dport 2283 dnat to 10.253.10.2:2283
         ip daddr 127.0.0.1 tcp dport 3000 dnat to 10.253.3.2:3000
         ip daddr 127.0.0.1 tcp dport 8880 dnat to 10.253.4.2:8880
         ip daddr 127.0.0.1 tcp dport 9115 dnat to 10.253.5.2:9115
@@ -40,6 +42,7 @@ table ip nas_krun_nat {
         type nat hook postrouting priority srcnat; policy accept;
         oifname "krun-51110" ip saddr 127.0.0.0/8 ip daddr 10.253.1.2 snat to 10.253.1.1
         oifname "krun-51120" ip saddr 127.0.0.0/8 ip daddr 10.253.2.2 snat to 10.253.2.1
+        oifname "krun-51130" ip saddr 127.0.0.0/8 ip daddr 10.253.10.2 snat to 10.253.10.1
         oifname "krun-51210" ip saddr 127.0.0.0/8 ip daddr 10.253.3.2 snat to 10.253.3.1
         oifname "krun-51220" ip saddr 127.0.0.0/8 ip daddr 10.253.4.2 snat to 10.253.4.1
         oifname "krun-51230" ip saddr 127.0.0.0/8 ip daddr 10.253.5.2 snat to 10.253.5.1
@@ -47,14 +50,18 @@ table ip nas_krun_nat {
         oifname "krun-51250" ip saddr 127.0.0.0/8 ip daddr 10.253.7.2 snat to 10.253.7.1
         oifname "krun-51260" ip saddr 127.0.0.0/8 ip daddr 10.253.8.2 snat to 10.253.8.1
         oifname "krun-51310" ip saddr 127.0.0.0/8 ip daddr 10.253.9.2 snat to 10.253.9.1
-        ip saddr 10.253.1.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.2.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.3.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.4.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.5.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.6.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.7.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.8.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
-        ip saddr 10.253.9.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.1.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.2.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.10.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.11.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.12.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.13.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.3.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.4.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.5.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.6.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.7.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.8.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
+        ip saddr 10.253.9.2 oifname != "krun-51110" oifname != "krun-51120" oifname != "krun-51130" oifname != "krun-51140" oifname != "krun-51150" oifname != "krun-51160" oifname != "krun-51210" oifname != "krun-51220" oifname != "krun-51230" oifname != "krun-51240" oifname != "krun-51250" oifname != "krun-51260" oifname != "krun-51310" masquerade
     }
 }

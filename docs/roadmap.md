@@ -6,7 +6,7 @@ where production evidence justifies it.
 
 ## Current platform
 
-- Nine image-defined services run as dedicated rootless users under libkrun.
+- Thirteen image-defined services run as dedicated rootless users under libkrun.
 - Each microVM has a generated root-managed routed TAP, `/30`, DHCP lease,
   nftables policy, and fail-closed readiness lifecycle.
 - `quadlets/*.toml` is the service source of truth. The typed Python compiler
@@ -44,9 +44,10 @@ architecture or operating instructions.
    investigating safe Intel media-device exposure. Software processing is the
    production configuration until that evidence is complete. See
    `docs/investigations/jellyfin-hardware-transcoding.md`.
-2. **Service expansion.** Immich, Audiobookshelf, and the selected media
-   automation services remain candidates. Add them only when storage,
-   exposure, secrets, backup, and monitoring contracts are explicit.
+2. **Service expansion.** Immich is production-configured and awaiting its
+   first NAS validation. Audiobookshelf and the selected media automation
+   services remain candidates. Add them only when storage, exposure, secrets,
+   backup, and monitoring contracts are explicit.
 3. **Jellyfin operational validation.** Continue representative playback,
    monitoring, and recovery checks without weakening the VM boundary or
    privacy-limited exporter contract.

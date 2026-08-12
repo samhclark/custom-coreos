@@ -1,0 +1,45 @@
+# ABOUTME: Persistent Valkey queue/cache service for Immich.
+
+[service]
+name = "immich-valkey"
+application = "immich"
+role = "cache"
+description = "Immich Valkey Queue and Cache"
+documentation = "https://valkey.io/"
+
+[host]
+username = "_nas_immichvalkey"
+uid = 51150
+subid-start = 511500000
+display-name = "Immich Valkey"
+
+[container]
+image = "docker.io/valkey/valkey:9@sha256:8e8d64b405ce18f41b8e5ee20aa4687a8ed0022d1298f2ce31cdcf3a76e09411"
+network = "host"
+container-user = 1000
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+
+[krun]
+enabled = true
+cpus = 1
+ram-mib = 512
+network = "tap"
+ipv4 = "10.253.12.2/30"
+probe-endpoint = "redis"
+
+[[container.endpoints]]
+name = "redis"
+port = 6379
+consumers = ["immich-server"]
+
+[[storage]]
+name = "data"
+kind = "directory"
+host-path = "/var/lib/immich/valkey"
+mode = "0750"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/data"
+access = "read-write"

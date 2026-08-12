@@ -357,6 +357,7 @@ name = "token"
                 krun=(
                     "enabled = true\ncpus = 1\nram-mib = 128\n"
                     'network = "tap"\nipv4 = "10.253.99.2/30"\n'
+                    "probe-timeout-sec = 120\n"
                     'probe-endpoint = "http"'
                 ),
             )
@@ -367,6 +368,7 @@ name = "token"
         self.assertEqual(str(service.tap_guest), "10.253.99.2/30")
         self.assertEqual(str(service.tap_gateway), "10.253.99.1/30")
         self.assertEqual(service.tap_spec.probe_endpoint, "http")
+        self.assertEqual(service.tap_spec.probe_timeout_sec, 120)
         artifacts = {
             artifact.path: artifact.content
             for artifact in compile_fleet(Fleet.build([service]))
@@ -376,6 +378,7 @@ name = "token"
         ]
         self.assertIn("/dev/tcp/10.253.99.2/8080", unit)
         self.assertNotIn("/dev/tcp/10.253.99.2/8081", unit)
+        self.assertIn("for i in {1..120}", unit)
 
     def test_tap_probe_must_reference_a_declared_tcp_endpoint(self):
         container = (
@@ -422,6 +425,30 @@ name = "token"
         self.assert_invalid(
             service_toml(container='health-cmd = "curl /health"'),
             "supports only",
+        )
+
+    def test_container_hardening_and_shared_memory_are_typed(self):
+        service = self.load(
+            service_toml(
+                container='''no-new-privileges = true
+drop-capabilities = ["NET_RAW", "SYS_CHROOT"]
+shm-size-mib = 128'''
+            )
+        )
+        self.assertTrue(service.container.no_new_privileges)
+        self.assertEqual(
+            service.container.drop_capabilities,
+            ("NET_RAW", "SYS_CHROOT"),
+        )
+        self.assertEqual(service.container.shm_size_mib, 128)
+
+        self.assert_invalid(
+            service_toml(container='drop-capabilities = ["net_raw"]'),
+            "invalid Linux capability",
+        )
+        self.assert_invalid(
+            service_toml(container="shm-size-mib = 0"),
+            "must be at least 1",
         )
 
     def test_single_line_fields_reject_directive_injection(self):

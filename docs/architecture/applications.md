@@ -73,12 +73,17 @@ readiness when a component needs both.
 
 ## Immich as the proving case
 
-The compiler tests describe a non-deployed Immich application with `server`,
-`database`, `cache`, and `machine-learning` roles. The server combines storage
-readiness with TCP dependencies on PostgreSQL and Redis and an HTTP dependency
-on machine learning. This is deliberately a compile-time fixture: real Immich
-deployment still requires reviewed images, storage, secrets, sizing, ingress,
-and recovery decisions.
+The production Immich application has `server`, `database`, `cache`, and
+`machine-learning` roles. The server combines storage readiness with named TCP
+dependencies on PostgreSQL and Valkey. Machine learning remains independently
+restartable: the server knows its named address, but core photo availability is
+not coupled to model-service startup.
+
+This deployment also forced two intentionally narrow container additions:
+typed shared-memory sizing for PostgreSQL and the official rootless hardening
+fields (`no-new-privileges` and dropped capabilities). A positive
+`container-user` generates a matching `keep-id` user namespace, preserving the
+simple rule that the dedicated host service identity owns its declared storage.
 
 The next useful proving case is the *arr stack, especially shared storage and a
 VPN-constrained network path. Concrete needs from that suite should drive any

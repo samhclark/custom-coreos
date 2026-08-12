@@ -1,0 +1,59 @@
+# ABOUTME: CPU-only machine-learning service and rebuildable model caches for
+# Immich.
+
+[service]
+name = "immich-machine-learning"
+application = "immich"
+role = "machine-learning"
+description = "Immich Machine Learning"
+documentation = "https://docs.immich.app/features/ml-hardware-acceleration/"
+
+[host]
+username = "_nas_immichmachinelearning"
+uid = 51160
+subid-start = 511600000
+display-name = "Immich machine learning"
+
+[container]
+image = "ghcr.io/immich-app/immich-machine-learning:v3.1.0@sha256:5a0839dc5303cd7215bcd2180a26aed3af41675aefb3e75e5157e9f10ad16e6e"
+network = "host"
+container-user = 1000
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
+
+[krun]
+enabled = true
+cpus = 4
+ram-mib = 4096
+network = "tap"
+ipv4 = "10.253.13.2/30"
+probe-endpoint = "http"
+probe-timeout-sec = 120
+
+[[container.endpoints]]
+name = "http"
+port = 3003
+consumers = ["immich-server"]
+
+[[storage]]
+name = "cache"
+kind = "directory"
+host-path = "/var/lib/immich/machine-learning"
+mode = "0750"
+subdirectories = ["models", "dot-cache", "config"]
+
+[[storage.exports]]
+subpath = "models"
+container-path = "/cache"
+access = "read-write"
+
+[[storage.exports]]
+subpath = "dot-cache"
+container-path = "/.cache"
+access = "read-write"
+
+[[storage.exports]]
+subpath = "config"
+container-path = "/.config"
+access = "read-write"
