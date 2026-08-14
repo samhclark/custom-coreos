@@ -501,6 +501,9 @@ shm-size-mib = 128'''
                 container='sysctls = ["net.ipv4.ip_forward=%n"]'
             ),
             "[container].exec": service_toml(container='exec = "server; reboot"'),
+            "[container].entrypoint": service_toml(
+                container='entrypoint = "server; reboot"'
+            ),
         }
         for field, source in cases.items():
             with self.subTest(field=field):

@@ -307,12 +307,14 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
         raw,
         path,
         {
-            "image", "enabled", "network", "container-user", "health-cmd",
+            "image", "entrypoint", "enabled", "network", "container-user",
+            "health-cmd",
             "no-new-privileges", "drop-capabilities", "shm-size-mib", "dns",
             "sysctls", "environment", "volumes", "secrets", "endpoints", "exec",
         },
     )
     image = _string(_required(table, "image", path), f"{path}.image")
+    entrypoint = _optional_string(table, "entrypoint", path)
     health_cmd_text = _optional_string(table, "health-cmd", path)
     if health_cmd_text is not None and health_cmd_text != "none":
         _fail(f"{path}.health-cmd", 'currently supports only "none"')
@@ -328,6 +330,7 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
     exec_text = _optional_string(table, "exec", path)
     return ContainerSpec(
         image=image,
+        entrypoint=entrypoint,
         enabled=_boolean(table["enabled"], f"{path}.enabled") if "enabled" in table else True,
         network=network,
         container_user=_integer(table["container-user"], f"{path}.container-user")

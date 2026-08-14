@@ -42,6 +42,8 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     lines += ["", "[Container]"]
     lines.append(f"ContainerName={info.name}")
     lines.append(f"Image={container.image}")
+    if container.entrypoint is not None:
+        lines.append(f"Entrypoint={container.entrypoint}")
     if krun is not None:
         lines.append("PodmanArgs=--runtime=krun")
         lines.append(f"Annotation=krun.cpus={krun.cpus}")

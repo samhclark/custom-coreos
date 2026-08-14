@@ -80,7 +80,7 @@ validate_properties() {
 
         case "${key}" in
             recordsize)
-                [[ "${value}" =~ ^(4K|16K|128K|1M)$ ]] || return 1
+                [[ "${value}" =~ ^(4K|16K|32K|128K|1M)$ ]] || return 1
                 ;;
             compression)
                 [[ "${value}" == "off" || "${value}" == "lz4" ]] || return 1

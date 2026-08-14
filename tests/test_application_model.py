@@ -58,6 +58,13 @@ class ImmichDeploymentTests(unittest.TestCase):
         self.assertIn("tcp 10.253.12.2:6379 300 2", server)
         self.assertIn("for i in {1..300}", server)
 
+    def test_valkey_bypasses_rootful_image_entrypoint(self):
+        valkey = self.artifacts[
+            Path("etc/containers/systemd/users/51150/immich-valkey.container")
+        ]
+        self.assertIn("Entrypoint=valkey-server", valkey)
+        self.assertIn("Exec=--port 6379", valkey)
+
     def test_database_and_rebuildable_components_keep_distinct_storage(self):
         database = self.artifacts[
             Path("etc/containers/systemd/users/51140/immich-database.container")

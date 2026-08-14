@@ -215,6 +215,16 @@ class StorageRuntimeTests(unittest.TestCase):
             ],
         )
 
+    def test_postgresql_recordsize_is_accepted(self):
+        data_path = self.root / "data"
+        manifest, _ = self.manifest(
+            f"managed-zfs|tank/sample|{data_path}|0750|recordsize=32K"
+        )
+
+        result = self.run_runtime(manifest)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_healthy_rerun_performs_no_mutations(self):
         directory = self.root / "directory"
         data_path = self.root / "data"

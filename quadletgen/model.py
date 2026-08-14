@@ -110,6 +110,7 @@ class SecretMount:
 @dataclass(frozen=True, slots=True)
 class ContainerSpec:
     image: str
+    entrypoint: str | None = None
     enabled: bool = True
     network: Literal["host"] | None = None
     container_user: int | None = None
@@ -459,6 +460,8 @@ def _validate_container(service: Service) -> None:
     _validate_unit_atom(container.image, f"{path}.image")
     if not PINNED_IMAGE_RE.fullmatch(container.image):
         _fail(f"{path}.image", "must use an immutable name:tag@sha256 digest")
+    if container.entrypoint is not None:
+        _validate_unit_atom(container.entrypoint, f"{path}.entrypoint")
     if type(container.enabled) is not bool:
         _fail(f"{path}.enabled", "must be a boolean")
     if container.network not in {None, "host"}:
