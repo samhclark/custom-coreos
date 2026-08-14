@@ -7,6 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from quadletgen.storage_model import (
+    ZfsCompression,
+    ZfsPrimaryCache,
+    ZfsRecordSize,
+)
+
 
 REPO = Path(__file__).resolve().parents[1]
 RUNTIME = REPO / "overlay-root/usr/local/bin/nas-prepare-storage.sh"
@@ -215,15 +221,39 @@ class StorageRuntimeTests(unittest.TestCase):
             ],
         )
 
-    def test_postgresql_recordsize_is_accepted(self):
-        data_path = self.root / "data"
-        manifest, _ = self.manifest(
-            f"managed-zfs|tank/sample|{data_path}|0750|recordsize=32K"
+    def test_typed_zfs_property_vocabulary_is_accepted_by_runtime(self):
+        records = []
+        expected_options = []
+        properties = (
+            ("recordsize", tuple(ZfsRecordSize)),
+            ("compression", tuple(ZfsCompression)),
+            ("primarycache", tuple(ZfsPrimaryCache)),
         )
+        for property_name, values in properties:
+            for index, value in enumerate(values):
+                dataset = f"tank/sample/{property_name}-{index}"
+                data_path = self.root / f"{property_name}-{index}"
+                option = f"{property_name}={value.value}"
+                records.append(
+                    f"managed-zfs|{dataset}|{data_path}|0750|{option}"
+                )
+                expected_options.append(option)
+        manifest, _ = self.manifest(*records)
 
         result = self.run_runtime(manifest)
 
         self.assertEqual(result.returncode, 0, result.stderr)
+        creates = [
+            command
+            for command in self.commands()
+            if command[0] == "zfs" and command[1:2] == ["create"]
+        ]
+        for option in expected_options:
+            with self.subTest(option=option):
+                self.assertTrue(
+                    any(option in command for command in creates),
+                    f"runtime did not pass {option} to zfs create",
+                )
 
     def test_healthy_rerun_performs_no_mutations(self):
         directory = self.root / "directory"
