@@ -121,7 +121,8 @@ class KrunTapNetworkTests(unittest.TestCase):
             ")\n",
         )
         self.assertIn(
-            "semodule -i /usr/share/selinux/targeted/nas-krun-tun.cil",
+            "semodule --noreload --install \\\n"
+            "        /usr/share/selinux/targeted/nas-krun-tun.cil",
             CONTAINERFILE,
         )
         self.assertNotIn("container_use_devices", CONTAINERFILE)
@@ -129,6 +130,25 @@ class KrunTapNetworkTests(unittest.TestCase):
             (REPO / "scripts/validate-krun-tun-selinux.sh").exists(),
             "the retired live-policy mutation helper must not return",
         )
+
+    def test_selinux_policy_changes_share_the_policy_store_copy_up_layer(self):
+        policy_layer = CONTAINERFILE[
+            CONTAINERFILE.index("RUN --mount=type=bind,from=zfs-rpms") :
+            CONTAINERFILE.index("\n\nCOPY --from=crun-builder")
+        ]
+        policy_steps = (
+            "cp -a /etc/selinux/targeted /etc/selinux/targeted.rebuilt",
+            "rm -rf /etc/selinux/targeted",
+            "mv /etc/selinux/targeted.rebuilt /etc/selinux/targeted",
+            "dnf install -y",
+            "/usr/share/selinux/targeted/gssproxy-local.cil",
+            "/usr/share/selinux/targeted/nas-krun-tun.cil",
+            "semanage fcontext -a",
+        )
+        positions = [policy_layer.index(step) for step in policy_steps]
+        self.assertEqual(positions, sorted(positions))
+        self.assertEqual(CONTAINERFILE.count("semodule --noreload --install"), 2)
+        self.assertEqual(CONTAINERFILE.count("cp -a /etc/selinux/targeted"), 1)
 
     def test_generic_networkd_wait_online_is_disabled(self):
         self.assertIn(

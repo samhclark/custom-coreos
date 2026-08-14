@@ -83,12 +83,14 @@ RUN /bin/bash -c 'set -euo pipefail; \
       "d /var/lib/nas-secrets 0700 root root -" \
       > /usr/lib/tmpfiles.d/nas-secrets.conf'
 
-RUN /bin/bash -c 'set -euo pipefail; \
-    semodule -i /usr/share/selinux/targeted/gssproxy-local.cil; \
-    semodule -i /usr/share/selinux/targeted/nas-krun-tun.cil'
-
 RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     /bin/bash -c 'set -euo pipefail; \
+    # Copy up the policy store so RPM scriptlets and local policy changes all \
+    # transact within this layer. Cross-layer renames can fail with EXDEV and \
+    # leave libsemanage unable to replace its non-empty active directory. \
+    cp -a /etc/selinux/targeted /etc/selinux/targeted.rebuilt; \
+    rm -rf /etc/selinux/targeted; \
+    mv /etc/selinux/targeted.rebuilt /etc/selinux/targeted; \
     # Validate that provided kernel version matches actual CoreOS kernel \
     [[ "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")" == "${KERNEL_VERSION}" ]]; \
     arch="$(rpm -qa kernel --queryformat "%{ARCH}")"; \
@@ -103,6 +105,17 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         /zfs-rpms/*.noarch.rpm \
         /zfs-rpms/other/zfs-dracut-*.noarch.rpm \
         /zfs-rpms/*."${arch}".rpm; \
+    semodule --noreload --install \
+        /usr/share/selinux/targeted/gssproxy-local.cil; \
+    semodule --noreload --install \
+        /usr/share/selinux/targeted/nas-krun-tun.cil; \
+    mapfile -t image_assets < <( \
+        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/assets.list \
+    ); \
+    for asset in "${image_assets[@]}"; do \
+        semanage fcontext -a -t container_file_t -r s0 "${asset}(/.*)?"; \
+        restorecon -F -R -- "${asset}"; \
+    done; \
     depmod -a "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")"; \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
@@ -145,15 +158,6 @@ RUN /bin/bash -c 'set -euo pipefail; \
     /usr/bin/crun --version | grep -F "crun version 1.28"; \
     grep -aFq "krun.tap_name" /usr/bin/crun; \
     restorecon -F /usr/bin/crun'
-
-RUN /bin/bash -c 'set -euo pipefail; \
-    mapfile -t image_assets < <( \
-        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/assets.list \
-    ); \
-    for asset in "${image_assets[@]}"; do \
-        semanage fcontext -a -t container_file_t -r s0 "${asset}(/.*)?"; \
-        restorecon -F -R -- "${asset}"; \
-    done'
 
 RUN ["bootc", "container", "lint"]
 
