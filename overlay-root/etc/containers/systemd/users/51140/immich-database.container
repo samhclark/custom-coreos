@@ -27,8 +27,7 @@ AddHost=victoria-metrics.krun:10.253.7.2
 AddHost=jellyfin-exporter.krun:10.253.8.2
 AddHost=caddy.krun:10.253.9.2
 AddHost=host.krun.internal:10.253.11.1
-User=1000
-UserNS=keep-id:uid=1000,gid=1000
+User=0
 NoNewPrivileges=true
 DropCapability=NET_RAW
 ShmSize=128m
