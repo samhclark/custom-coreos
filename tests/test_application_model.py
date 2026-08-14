@@ -69,6 +69,8 @@ class ImmichDeploymentTests(unittest.TestCase):
         database = self.artifacts[
             Path("etc/containers/systemd/users/51140/immich-database.container")
         ]
+        self.assertIn("User=1000", database)
+        self.assertIn("UserNS=keep-id:uid=1000,gid=1000", database)
         self.assertIn("ShmSize=128m", database)
         self.assertIn("Environment=POSTGRES_INITDB_ARGS=--data-checksums", database)
         self.assertIn("Environment=DB_STORAGE_TYPE=HDD", database)
@@ -83,6 +85,7 @@ class ImmichDeploymentTests(unittest.TestCase):
             Path("usr/share/custom-coreos/storage/immich-database.storage-manifest")
         ]
         self.assertIn("tank/immich-database/data", database_manifest)
+        self.assertIn("|0700|", database_manifest)
         self.assertIn("recordsize=32K", database_manifest)
 
     def test_endpoint_consumers_generate_only_required_immich_edges(self):

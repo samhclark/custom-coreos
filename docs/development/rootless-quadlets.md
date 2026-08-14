@@ -65,11 +65,25 @@ shell syntax in TOML.
 
 Rootless refers to the host account running Podman. `container-user = 0` is
 still unprivileged on the host through the rootless user namespace and is valid
-when the image expects container root. A positive `container-user` generates a
-matching `keep-id` user namespace, so the service host UID appears as that UID
-inside the container and remains the owner of declared storage. This supports
-images designed for a fixed non-root UID without handing their data to a
-subordinate-ID-only owner.
+only when the image expects container root **and its entrypoint leaves the
+effective service process as container root**. An entrypoint that starts as root
+and drops to an internal account instead hands writable files to a subordinate
+host ID, which conflicts with the storage runtime's service-account ownership
+contract.
+
+A positive `container-user` generates a matching `keep-id` user namespace, so
+the service host UID appears as that UID inside the container and remains the
+owner of declared storage. Prefer this when the image supports a fixed non-root
+UID. Treat the effective UID after entrypoint processing, writable paths,
+signals, and required entrypoint behavior as a versioned image interface; test
+those properties again whenever the image digest changes.
+
+Use digest-pinned upstream or application-supported images while they satisfy
+that interface. A locally maintained image is justified when it adds a required
+capability, closes an unacceptable provenance gap, or resolves a demonstrated
+runtime incompatibility. It is not the default merely because an image was
+published for an upstream Compose deployment: owning an image also means owning
+its security updates and compatibility release train.
 
 ### 3. Allocate the TAP and exposure policy
 

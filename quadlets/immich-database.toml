@@ -16,7 +16,7 @@ display-name = "Immich database"
 [container]
 image = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23"
 network = "host"
-container-user = 0
+container-user = 1000
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
 shm-size-mib = 128
@@ -50,7 +50,7 @@ name = "data"
 kind = "managed-zfs"
 dataset = "tank/immich-database/data"
 host-path = "/var/lib/immich/database"
-mode = "0750"
+mode = "0700"
 record-size = "32K"
 compression = "lz4"
 atime = false

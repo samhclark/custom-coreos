@@ -84,6 +84,9 @@ typed shared-memory sizing for PostgreSQL and the official rootless hardening
 fields (`no-new-privileges` and dropped capabilities). A positive
 `container-user` generates a matching `keep-id` user namespace, preserving the
 simple rule that the dedicated host service identity owns its declared storage.
+The PostgreSQL image's wrapper supports that UID directly; running the wrapper
+as container root would let the inherited PostgreSQL entrypoint drop to its
+internal UID instead and violate the same ownership rule.
 
 The next useful proving case is the *arr stack, especially shared storage and a
 VPN-constrained network path. Concrete needs from that suite should drive any
