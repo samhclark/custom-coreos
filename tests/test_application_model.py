@@ -69,11 +69,46 @@ class ImmichDeploymentTests(unittest.TestCase):
         database = self.artifacts[
             Path("etc/containers/systemd/users/51140/immich-database.container")
         ]
-        self.assertIn("User=1000", database)
+        self.assertIn("User=1000:1000\n", database)
         self.assertIn("UserNS=keep-id:uid=1000,gid=1000", database)
+        self.assertIn(
+            "Entrypoint=/usr/share/custom-coreos/immich-database/"
+            "immich-database-entrypoint.sh",
+            database,
+        )
+        self.assertIn(
+            "Exec=postgres -c config_file=/etc/postgresql/postgresql.conf",
+            database,
+        )
+        self.assertIn(
+            "Volume=/usr/share/custom-coreos/immich-database:"
+            "/usr/share/custom-coreos/immich-database:ro",
+            database,
+        )
         self.assertIn("ShmSize=128m", database)
         self.assertIn("Environment=POSTGRES_INITDB_ARGS=--data-checksums", database)
         self.assertIn("Environment=DB_STORAGE_TYPE=HDD", database)
+
+        assets = self.artifacts[
+            Path("usr/share/custom-coreos/fleet/assets.list")
+        ]
+        self.assertIn("/usr/share/custom-coreos/immich-database", assets)
+
+        entrypoint = (
+            REPO
+            / "overlay-root/usr/share/custom-coreos/immich-database/"
+            "immich-database-entrypoint.sh"
+        )
+        self.assertTrue(entrypoint.stat().st_mode & 0o111)
+        entrypoint_text = entrypoint.read_text()
+        self.assertIn('case "${effective_uid}" in', entrypoint_text)
+        self.assertIn("exec gosu 1000:1000", entrypoint_text)
+        self.assertIn('[[ "${effective_gid}" != 1000 ]]', entrypoint_text)
+        self.assertIn('exec "${entrypoint}" "$@"', entrypoint_text)
+        self.assertIn(
+            'entrypoint="/usr/local/bin/immich-docker-entrypoint.sh"',
+            entrypoint_text,
+        )
 
         server_manifest = self.artifacts[
             Path("usr/share/custom-coreos/storage/immich-server.storage-manifest")

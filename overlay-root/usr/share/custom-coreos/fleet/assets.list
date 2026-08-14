@@ -5,6 +5,7 @@
 /usr/share/custom-coreos/caddy
 /usr/share/custom-coreos/garage
 /usr/share/custom-coreos/grafana
+/usr/share/custom-coreos/immich-database
 /usr/share/custom-coreos/jellyfin-exporter
 /usr/share/custom-coreos/victoria-metrics
 /usr/share/custom-coreos/vmalert

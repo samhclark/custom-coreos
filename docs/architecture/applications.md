@@ -82,11 +82,28 @@ not coupled to model-service startup.
 This deployment also forced two intentionally narrow container additions:
 typed shared-memory sizing for PostgreSQL and the official rootless hardening
 fields (`no-new-privileges` and dropped capabilities). A positive
-`container-user` generates a matching `keep-id` user namespace, preserving the
-simple rule that the dedicated host service identity owns its declared storage.
-The PostgreSQL image's wrapper supports that UID directly; running the wrapper
-as container root would let the inherited PostgreSQL entrypoint drop to its
-internal UID instead and violate the same ownership rule.
+`container-user` generates both `User=UID:GID` and a matching `keep-id` user
+namespace. The service host identity therefore remains the owner of its
+declared storage, while the intended application identity appears inside the
+container as UID/GID 1000:1000.
+
+Immich PostgreSQL needs one additional, image-specific compatibility boundary.
+The upstream wrapper alone does not prove the production UID contract: under
+libkrun, the guest can enter the wrapper as guest root even when the generated
+unit requests `User=1000:1000`. The database service consequently mounts the
+small image-controlled `/usr/share/custom-coreos/immich-database/` adapter
+tree read-only and invokes it as its entrypoint. The adapter has two supported
+branches:
+
+- If it starts as guest root, it uses the image's existing `gosu` to become
+  1000:1000 before delegating to the upstream Immich PostgreSQL wrapper.
+- If it starts as 1000:1000, it delegates directly without changing ownership.
+
+This preserves the storage ownership rule in both runtimes. The Podman image
+smoke exercises both branches, while the opt-in `make probe-krun-user` command
+characterizes the identity that the actual libkrun runtime supplies. The
+adapter is deliberately scoped to this demonstrated image/runtime boundary;
+it is not a general replacement for a compatible upstream entrypoint.
 
 The next useful proving case is the *arr stack, especially shared storage and a
 VPN-constrained network path. Concrete needs from that suite should drive any

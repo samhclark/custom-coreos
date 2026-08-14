@@ -71,19 +71,57 @@ and drops to an internal account instead hands writable files to a subordinate
 host ID, which conflicts with the storage runtime's service-account ownership
 contract.
 
-A positive `container-user` generates a matching `keep-id` user namespace, so
-the service host UID appears as that UID inside the container and remains the
-owner of declared storage. Prefer this when the image supports a fixed non-root
-UID. Treat the effective UID after entrypoint processing, writable paths,
-signals, and required entrypoint behavior as a versioned image interface; test
-those properties again whenever the image digest changes.
+A positive `container-user` generates `User=UID:GID` and a matching `keep-id`
+user namespace, so the requested container UID/GID appears inside the
+container and the service host UID/GID remains the owner of declared storage.
+Prefer this when the image supports a fixed non-root UID. Treat the effective
+UID/GID after entrypoint processing, writable paths, signals, and required
+entrypoint behavior as a versioned image interface; test those properties
+again whenever the image digest changes.
+
+The OCI `User=` request is a contract, not evidence about what every virtual
+machine-backed runtime actually supplies to the entrypoint. In particular,
+libkrun may start an image entrypoint as guest root even when the generated
+unit requests `User=1000:1000`. Do not solve that by making the service
+rootful, weakening storage ownership, or assuming the upstream wrapper will
+drop to the right identity. For a demonstrated image-specific mismatch, add a
+narrow image-controlled adapter as a read-only asset and keep the normal
+UID/GID path intact. The adapter should explicitly handle only the observed
+guest-root and intended non-root branches, then delegate to the upstream
+entrypoint.
+
+Immich PostgreSQL is the current example. Its database Quadlet requests
+`User=1000:1000` and mounts the image-controlled
+`/usr/share/custom-coreos/immich-database/` adapter tree read-only. The adapter
+uses the image-provided `gosu` to transition guest root to 1000:1000 before
+invoking the upstream wrapper; when the runtime already supplies 1000:1000, it
+delegates without a transition. This makes the image boundary explicit while
+avoiding a locally rebuilt database image.
+
+Validate image identity in two layers. The networked, opt-in Podman smoke must
+exercise both the normal 1000:1000 process branch and a 0:0 guest-root
+emulation, checking readiness, data-directory initialization, and host
+ownership in each case. The separate opt-in `make probe-krun-user` command
+should run the pinned image under libkrun and report whether the runtime
+supplied guest root or 1000:1000. Keep that probe outside canonical offline
+`make check` and `make test` because it depends on the local runtime and
+networked image availability.
 
 Use digest-pinned upstream or application-supported images while they satisfy
 that interface. A locally maintained image is justified when it adds a required
 capability, closes an unacceptable provenance gap, or resolves a demonstrated
-runtime incompatibility. It is not the default merely because an image was
-published for an upstream Compose deployment: owning an image also means owning
-its security updates and compatibility release train.
+runtime incompatibility that a narrow adapter cannot safely contain. Do not
+introduce a `lab-immich-db` image merely to work around this one libkrun
+identity boundary: the adapter preserves the upstream PostgreSQL, pgvector,
+VectorChord, and tuning contract without creating another security-update and
+compatibility release train.
+
+Reconsider a local Immich database image only if the adapter cannot support a
+required upstream release, the upstream image requires changes that cannot be
+expressed as a narrow read-only asset, provenance becomes unacceptable, or the
+project would otherwise need repeated image-specific patches. Any such image
+would need its own digest/update policy, smoke coverage, and explicit decision
+to own the database extension and security-update release train.
 
 ### 3. Allocate the TAP and exposure policy
 

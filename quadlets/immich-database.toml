@@ -17,6 +17,8 @@ display-name = "Immich database"
 image = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:bcf63357191b76a916ae5eb93464d65c07511da41e3bf7a8416db519b40b1c23"
 network = "host"
 container-user = 1000
+entrypoint = "/usr/share/custom-coreos/immich-database/immich-database-entrypoint.sh"
+exec = "postgres -c config_file=/etc/postgresql/postgresql.conf"
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
 shm-size-mib = 128
@@ -27,6 +29,12 @@ POSTGRES_USER = "postgres"
 POSTGRES_DB = "immich"
 POSTGRES_INITDB_ARGS = "--data-checksums"
 DB_STORAGE_TYPE = "HDD"
+
+[[container.volumes]]
+comment = "Image-controlled PostgreSQL entrypoint adapter (read-only)"
+source = "/usr/share/custom-coreos/immich-database"
+target = "/usr/share/custom-coreos/immich-database"
+options = "ro"
 
 [krun]
 enabled = true
@@ -39,6 +47,9 @@ probe-timeout-sec = 120
 
 [[container.secrets]]
 name = "immich-db-password"
+
+[assets]
+path = "/usr/share/custom-coreos/immich-database"
 
 [[container.endpoints]]
 name = "postgres"

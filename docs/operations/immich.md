@@ -12,9 +12,21 @@ Immich v3.1.0 runs as four rootless libkrun guests:
 | machine learning | 51160 | `10.253.13.2` | 4 vCPU, 4 GiB | rebuildable model/config caches |
 
 All containers follow Immich's rootless UID 1000 contract through generated
-`keep-id` namespaces. They use the upstream rootless hardening settings and
-CPU-only processing; no host GPU is exposed. PostgreSQL gets the upstream
-recommended 128 MiB shared-memory allocation and HDD-oriented configuration.
+`User=1000:1000` settings and matching `keep-id` namespaces. They use the
+upstream rootless hardening settings and CPU-only processing; no host GPU is
+exposed. PostgreSQL gets the upstream recommended 128 MiB shared-memory
+allocation and HDD-oriented configuration.
+
+The PostgreSQL service has an additional compatibility boundary because
+libkrun may supply guest root to an entrypoint despite the requested
+`User=1000:1000`. Its Quadlet mounts the image-controlled
+`/usr/share/custom-coreos/immich-database/` adapter tree read-only and uses
+that adapter as the entrypoint before the upstream Immich PostgreSQL wrapper.
+The adapter has exactly two supported branches: it uses the image's existing
+`gosu` to become 1000:1000 when it starts as guest root, and delegates directly
+when it already starts as 1000:1000. The upstream wrapper alone is therefore
+not the production UID guarantee; the generated UID/GID request and this
+adapter are the combined contract.
 
 Only the server is host-published, on loopback TCP 2283. Caddy exposes it as
 `https://photos.i.samhclark.com`. PostgreSQL, Valkey, and machine learning have
@@ -50,7 +62,17 @@ No off-site replication is enabled by this deployment. See the discussion-only
 PostgreSQL uses Immich's public-source companion image because it packages the
 exact PostgreSQL, pgvector, VectorChord, and tuning contract supported by this
 Immich release. Valkey uses the official upstream image. Both remain pinned by
-digest and run as UID 1000; there is no local companion-image release train.
+digest and target UID 1000; there is no local companion-image release train.
+
+The database adapter is intentionally a read-only mounted asset rather than a
+new `lab-immich-db` image. It keeps the upstream database contents, extensions,
+tuning, digest, and security-update path intact while containing the one
+demonstrated libkrun identity mismatch. A local database image should be
+considered only if a future upstream release cannot be safely handled by this
+narrow adapter, requires image changes beyond a read-only asset, creates an
+unacceptable provenance gap, or forces repeated image-specific patches. At
+that point the project would also need to own a separate digest/update policy,
+extension compatibility checks, and security-update release train.
 
 After changing either image digest or its user/entrypoint settings, run the
 networked, opt-in compatibility smoke before deployment:
@@ -60,9 +82,25 @@ make smoke-immich-images
 ```
 
 This initializes disposable PostgreSQL state with checksums and requires both
-PostgreSQL and Valkey to answer under their declared users. It deliberately
-tests the external image boundary outside canonical offline `make check` and
-`make test`.
+PostgreSQL and Valkey to answer under their declared users. PostgreSQL is
+started twice: once as 1000:1000 and once with a 0:0 process identity that
+emulates libkrun guest-root entry. Both runs exercise the adapter's respective
+branch, require readiness and enabled checksums, and verify that host ownership
+does not change. It deliberately tests the external image boundary outside
+canonical offline `make check` and `make test`.
+
+The Podman smoke is not a substitute for observing the deployed runtime. When
+libkrun is available, run the separate opt-in probe:
+
+```bash
+make probe-krun-user
+```
+
+The probe runs the pinned image under libkrun and classifies the observed
+entrypoint identity as either guest root or 1000:1000. Either result is
+supported by the adapter; any other identity is a compatibility failure that
+must be investigated before deployment. The probe remains opt-in because it
+depends on the local libkrun runtime and networked image access.
 
 ## First use
 
@@ -106,6 +144,15 @@ only the affected user unit before changing state, for example:
 ```bash
 sudo journalctl --unit user@51130.service --boot --lines 100 --no-pager
 ```
+
+For the database, also inspect the service journal for the adapter's identity
+diagnostic. A healthy deployment should report either that it transitioned
+guest root to 1000:1000 or that it was already running as 1000:1000. The
+database user unit should remain active, TCP 5432 should answer through the
+generated `immich-database.krun` endpoint, and the restart counter should stop
+increasing. Confirm that `/var/lib/immich/database` remains mode `0700` and
+owned by `_nas_immichdatabase`; the adapter must not repair ownership from
+inside the rootless guest.
 
 If `nas-prepare-immich-database-storage.service` requests an explicit repair,
 first confirm `immich-database.service` is stopped and inspect the reported

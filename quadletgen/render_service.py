@@ -67,7 +67,12 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     for setting in container.sysctls:
         lines.append(f"Sysctl={setting}")
     if container.container_user is not None:
-        lines.append(f"User={container.container_user}")
+        user = (
+            f"{container.container_user}:{container.container_user}"
+            if container.container_user > 0
+            else str(container.container_user)
+        )
+        lines.append(f"User={user}")
         if container.container_user > 0:
             lines.append(
                 "UserNS=keep-id:"

@@ -30,7 +30,7 @@ AddHost=host.krun.internal:10.253.13.1
 DNS=100.100.100.100
 DNS=75.75.75.75
 DNS=75.75.76.76
-User=1000
+User=1000:1000
 UserNS=keep-id:uid=1000,gid=1000
 NoNewPrivileges=true
 DropCapability=NET_RAW
