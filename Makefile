@@ -118,6 +118,10 @@ check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
 test: ## Run unit tests
 	@$(UV_RUN) python -m unittest discover -s tests -v
 
+.PHONY: smoke-immich-images
+smoke-immich-images: ## Run Podman-only smoke tests for pinned Immich companion images
+	@CONTAINER_CLI="$(PODMAN)" $(UV_RUN) python scripts/smoke-immich-images.py
+
 .PHONY: typecheck
 typecheck: ## Run strict static Python type checks
 	@$(UV_RUN) ty check

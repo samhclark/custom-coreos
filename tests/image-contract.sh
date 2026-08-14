@@ -17,6 +17,7 @@ bootc container lint
 /usr/bin/crun --version | grep -Fq 'crun version 1.28'
 grep -aFq 'krun.tap_name' /usr/bin/crun
 /usr/local/bin/sops --version | grep -Fq 'sops 3.13.3'
+test -x /usr/local/bin/nas-diagnose-immich
 
 semodule -l | grep -Eq '^gssproxy-local[[:space:]]'
 semodule -l | grep -Eq '^nas-krun-tun[[:space:]]'

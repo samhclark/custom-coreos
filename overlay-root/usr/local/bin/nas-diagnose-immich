@@ -1,0 +1,231 @@
+#!/usr/bin/env bash
+# ABOUTME: Collects read-only, secret-safe evidence for Immich startup failures.
+# ABOUTME: Inspects host units, rootless user units, storage, networking, and logs.
+
+set -uo pipefail
+
+export LC_ALL=C
+export SYSTEMD_COLORS=0
+export SYSTEMD_PAGER=cat
+
+# sudo/runuser must not inherit an operator directory that a service account
+# cannot traverse.  This also makes the script safe to invoke from any cwd.
+TRAVERSABLE_CWD=/
+cd "${TRAVERSABLE_CWD}" || {
+    printf 'Unable to change to %s.\n' "${TRAVERSABLE_CWD}" >&2
+    exit 1
+}
+
+if (( EUID != 0 )) && ! command -v sudo >/dev/null 2>&1; then
+    printf 'Run this script as root or install sudo.\n' >&2
+    exit 1
+fi
+
+section() {
+    printf '\n===== %s =====\n' "$1"
+}
+
+redact() {
+    # Logs and journal entries are useful, but must not become a way to print
+    # a password, token, authorization header, or credential-bearing URL.
+    sed -E \
+        -e '/(password|passwd|secret|token|authorization|api[_-]?key)/I s/.*/[REDACTED sensitive log line]/' \
+        -e 's#(://[^:/[:space:]]+):[^@/[:space:]]+@#\1:[REDACTED]@#g' \
+        -e 's/(Bearer[[:space:]]+)[^[:space:]]+/\1[REDACTED]/Ig'
+}
+
+run() {
+    local description=$1
+    shift
+    printf '\n-- %s --\n' "${description}"
+    "$@" 2>&1 | redact
+    local status=${PIPESTATUS[0]}
+    if (( status != 0 )); then
+        printf '[command exited with status %d]\n' "${status}"
+    fi
+    return 0
+}
+
+root_cmd() {
+    if (( EUID == 0 )); then
+        "$@"
+    else
+        sudo -- "$@"
+    fi
+}
+
+service_cmd() {
+    local user=$1
+    local uid=$2
+    shift 2
+
+    # DBUS_SESSION_BUS_ADDRESS uses the standard unix:path address syntax.
+    # HOME is explicit so Podman never falls back to the operator's home.
+    local -a environment=(
+        "HOME=/var/home/${user}"
+        "XDG_RUNTIME_DIR=/run/user/${uid}"
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/${uid}/bus"
+    )
+
+    if (( EUID == 0 )); then
+        runuser -u "${user}" -- env "${environment[@]}" "$@"
+    else
+        sudo -u "${user}" -- env "${environment[@]}" "$@"
+    fi
+}
+
+service_unit() {
+    local user=$1
+    local uid=$2
+    local unit=$3
+    run "${unit} status for ${user}" \
+        service_cmd "${user}" "${uid}" systemctl --user --no-pager --full status "${unit}"
+    run "${unit} state for ${user}" \
+        service_cmd "${user}" "${uid}" systemctl --user show "${unit}" \
+            -p ActiveState -p SubState -p Result -p ExecMainStatus \
+            -p ExecMainCode -p NRestarts -p ExecMainStartTimestamp
+}
+
+storage_path_metadata() {
+    local path
+    for path in \
+        /run/nas-storage/immich-server/ready \
+        /run/nas-storage/immich-database/ready \
+        /run/nas-storage/immich-valkey/ready \
+        /run/nas-storage/immich-machine-learning/ready \
+        /var/lib/immich/library \
+        /var/lib/immich/thumbs \
+        /var/lib/immich/encoded-video \
+        /var/lib/immich/database \
+        /var/lib/immich/valkey \
+        /var/lib/immich/machine-learning; do
+        run "metadata for ${path}" root_cmd stat \
+            --format='%A mode=%a owner=%U:%G size=%s path=%n' "${path}"
+    done
+}
+
+podman_service_diagnostics() {
+    local user=$1
+    local uid=$2
+    local container=$3
+
+    printf '\n--- %s (%s) ---\n' "${container}" "${user}"
+    if ! service_cmd "${user}" "${uid}" podman container exists "${container}"; then
+        printf 'Container does not exist for this service user.\n'
+        return 0
+    fi
+
+    run "${container} Podman state" \
+        service_cmd "${user}" "${uid}" podman ps -a \
+            --filter "name=^${container}$" \
+            --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+    run "${container} runtime metadata" \
+        service_cmd "${user}" "${uid}" podman inspect "${container}" \
+            --format 'status={{.State.Status}} exit_code={{.State.ExitCode}} image={{.ImageName}} runtime={{.OCIRuntime}} user={{.Config.User}}'
+    run "${container} recent logs (sensitive lines redacted)" \
+        service_cmd "${user}" "${uid}" podman logs --tail 120 "${container}"
+}
+
+section 'collection metadata'
+printf 'collected_at=%s\n' "$(date --iso-8601=seconds)"
+printf 'hostname=%s\n' "$(hostname)"
+printf 'boot_id=%s\n' "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || printf unknown)"
+printf 'kernel=%s\n' "$(uname -r)"
+run 'system state' root_cmd systemctl is-system-running
+run 'failed system units' root_cmd systemctl --no-pager --failed
+run 'SELinux mode' root_cmd getenforce
+run 'runtime versions' bash -c 'podman --version; crun --version | head -5'
+
+section 'Immich user managers'
+for uid in 51130 51140 51150 51160; do
+    run "user@${uid}.service active state" \
+        root_cmd systemctl is-active "user@${uid}.service"
+    run "user@${uid}.service manager state" \
+        root_cmd systemctl show "user@${uid}.service" \
+            -p ActiveState -p SubState -p Result -p ExecMainStatus
+done
+
+section 'Immich user services'
+service_unit _nas_immichserver 51130 immich-server.service
+service_unit _nas_immichdatabase 51140 immich-database.service
+service_unit _nas_immichvalkey 51150 immich-valkey.service
+service_unit _nas_immichmachinelearning 51160 immich-machine-learning.service
+
+section 'storage preparation and readiness'
+for unit in \
+    nas-prepare-immich-server-storage.service \
+    nas-prepare-immich-database-storage.service \
+    nas-prepare-immich-valkey-storage.service \
+    nas-prepare-immich-machine-learning-storage.service; do
+    run "${unit}" root_cmd systemctl --no-pager --full status "${unit}"
+done
+storage_path_metadata
+run 'tank pool status' root_cmd zpool status tank
+run 'Immich dataset properties' root_cmd zfs list \
+    -o name,mounted,mountpoint,readonly,recordsize,compression,atime \
+    tank/immich-server/library \
+    tank/immich-server/thumbs \
+    tank/immich-server/encoded-video \
+    tank/immich-database/data
+
+section 'runtime secrets (metadata and readability only)'
+run 'secret distributor state' root_cmd systemctl --no-pager --full status \
+    sops-distribute-secrets.service
+for secret_path in \
+    /run/nas-secrets/immich-server/immich-db-password \
+    /run/nas-secrets/immich-database/immich-db-password; do
+    run "secret file metadata for ${secret_path}" root_cmd stat \
+        --format='%A mode=%a owner=%U:%G size=%s path=%n' "${secret_path}"
+done
+run 'server secret readability' service_cmd _nas_immichserver 51130 \
+    test -r /run/nas-secrets/immich-server/immich-db-password
+run 'database secret readability' service_cmd _nas_immichdatabase 51140 \
+    test -r /run/nas-secrets/immich-database/immich-db-password
+
+section 'network policy, TAPs, and listeners'
+run 'libkrun network policy state' root_cmd systemctl --no-pager --full status \
+    nas-krun-network-policy.service
+run 'libkrun network policy readiness marker' root_cmd test -r \
+    /run/nas-krun-network/policy-ready
+run 'Immich TAP state' root_cmd networkctl --no-pager status \
+    krun-51130 krun-51140 krun-51150 krun-51160
+run 'Immich forwarding policy' root_cmd nft list chain inet filter nas_krun_forward
+run 'Immich NAT policy' root_cmd nft list table ip nas_krun_nat
+for endpoint in \
+    10.253.10.2:2283 \
+    10.253.11.2:5432 \
+    10.253.12.2:6379 \
+    10.253.13.2:3003; do
+    host=${endpoint%:*}
+    port=${endpoint##*:}
+    run "TCP listener ${endpoint}" root_cmd timeout 3 bash -c \
+        "</dev/tcp/${host}/${port}"
+done
+run 'Immich loopback ping status' root_cmd curl --fail --silent --show-error \
+    --output /dev/null --write-out 'http_status=%{http_code} total_time=%{time_total}s\n' \
+    --max-time 10 http://127.0.0.1:2283/api/server/ping
+
+section 'rootless Podman state and recent logs'
+podman_service_diagnostics _nas_immichserver 51130 immich-server
+podman_service_diagnostics _nas_immichdatabase 51140 immich-database
+podman_service_diagnostics _nas_immichvalkey 51150 immich-valkey
+podman_service_diagnostics _nas_immichmachinelearning 51160 immich-machine-learning
+
+section 'relevant journal excerpts (sensitive lines redacted)'
+run 'host Immich and readiness journal' root_cmd journalctl --boot --no-pager \
+    --since '-30 min' \
+    -u sops-distribute-secrets.service \
+    -u nas-krun-network-policy.service \
+    -u nas-prepare-immich-server-storage.service \
+    -u nas-prepare-immich-database-storage.service \
+    -u nas-prepare-immich-valkey-storage.service \
+    -u nas-prepare-immich-machine-learning-storage.service
+for uid in 51130 51140 51150 51160; do
+    run "user@${uid}.service journal" root_cmd journalctl --boot --no-pager \
+        --since '-30 min' -u "user@${uid}.service"
+done
+run 'kernel and SELinux excerpts' root_cmd journalctl --boot --no-pager \
+    --since '-30 min' -k -g 'avc|denied|krun|tap|tun' -i
+
+section 'end of diagnostics'
+echo 'No services, containers, interfaces, devices, policies, or files were changed.'
