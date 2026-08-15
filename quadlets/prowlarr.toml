@@ -1,0 +1,74 @@
+# ABOUTME: Prowlarr indexer management with Mullvad-only internet egress and
+# explicit API edges to the media automation services.
+
+[service]
+name = "prowlarr"
+application = "media-automation"
+role = "indexers"
+description = "Prowlarr Indexer Management"
+documentation = "https://prowlarr.com/"
+
+[host]
+username = "_nas_prowlarr"
+uid = 51430
+subid-start = 514300000
+display-name = "Prowlarr"
+
+[identity]
+mapped-container-id = 1000
+
+[container]
+image = "lscr.io/linuxserver/prowlarr:2.5.2.5491-ls156@sha256:1295cff29d10b486c0d8324d1559a552140a5932bf8b3d87e398654414f63f92"
+network = "host"
+container-user = 0
+entrypoint = "/usr/share/custom-coreos/prowlarr/prowlarr-entrypoint.sh"
+health-cmd = "none"
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+dns = ["100.100.100.100"]
+
+[container.environment]
+TZ = "America/Chicago"
+
+[[container.volumes]]
+comment = "Image-controlled libkrun entrypoint adapter (read-only)"
+source = "/usr/share/custom-coreos/prowlarr"
+target = "/usr/share/custom-coreos/prowlarr"
+options = "ro"
+
+[krun]
+enabled = true
+cpus = 1
+ram-mib = 512
+network = "tap"
+ipv4 = "10.253.16.2/30"
+probe-endpoint = "http"
+probe-timeout-sec = 300
+egress = "mullvad"
+
+[[container.endpoints]]
+name = "http"
+port = 9696
+consumers = ["caddy", "sonarr", "radarr"]
+
+[assets]
+path = "/usr/share/custom-coreos/prowlarr"
+
+[[storage]]
+name = "config"
+kind = "managed-zfs"
+dataset = "tank/prowlarr/config"
+host-path = "/var/lib/prowlarr/config"
+mode = "0750"
+record-size = "16K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/config"
+access = "read-write"
+
+[unit]
+timeout-start-sec = 900

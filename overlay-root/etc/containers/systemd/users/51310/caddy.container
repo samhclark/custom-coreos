@@ -26,10 +26,12 @@ AddHost=alertmanager.krun:10.253.6.2
 AddHost=victoria-metrics.krun:10.253.7.2
 AddHost=jellyfin-exporter.krun:10.253.8.2
 AddHost=caddy.krun:10.253.9.2
+AddHost=sonarr.krun:10.253.14.2
+AddHost=radarr.krun:10.253.15.2
+AddHost=prowlarr.krun:10.253.16.2
+AddHost=sabnzbd.krun:10.253.17.2
 AddHost=host.krun.internal:10.253.9.1
 DNS=100.100.100.100
-DNS=75.75.75.75
-DNS=75.75.76.76
 User=0
 
 # Image-controlled configuration (read-only)

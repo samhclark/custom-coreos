@@ -42,8 +42,8 @@ class CompilerCharacterizationTests(unittest.TestCase):
     def test_current_fleet_is_typed_and_uid_ordered(self):
         fleet = current_fleet()
 
-        self.assertEqual(len(fleet.services), 13)
-        self.assertEqual(len(fleet.active_taps), 13)
+        self.assertEqual(len(fleet.services), 17)
+        self.assertEqual(len(fleet.active_taps), 17)
         self.assertEqual(
             [service.host.uid for service in fleet.services],
             sorted(service.host.uid for service in fleet.services),
@@ -125,6 +125,10 @@ class FleetManifestTests(unittest.TestCase):
             )
             for secret in service.container.secrets
         ]
+        if self.fleet.egress is not None:
+            expected_secrets.append(
+                ["mullvad", "root", self.fleet.egress.secret_name]
+            )
         expected_assets = [
             [service.assets.path]
             for service in sorted(
@@ -148,6 +152,15 @@ class FleetManifestTests(unittest.TestCase):
         self.assertNotIn("COPY quadlets/", containerfile)
         self.assertIn("fleet/account-units.list", containerfile)
         self.assertIn("fleet/assets.list", containerfile)
+        self.assertIn("fleet/shared-storage-paths.list", containerfile)
+        self.assertIn(
+            'semanage fcontext -a -t container_file_t -r s0 "${path}(/.*)?"',
+            containerfile,
+        )
+        self.assertNotIn(
+            'restorecon -F -R -- "${path}"',
+            containerfile,
+        )
         self.assertNotIn("ensure-nas-alertmanager-account.service \\", containerfile)
         self.assertIn("fleet/secrets.tsv", distributor)
         self.assertNotIn("read_quadlet_secret_rows", distributor)
@@ -182,7 +195,7 @@ class StartupPolicyTests(unittest.TestCase):
         }
 
     def test_current_services_use_typed_startup_policy_only(self):
-        for toml_path in (REPO / "quadlets").glob("*.toml"):
+        for toml_path in (REPO / "quadlets").glob("[!_]*.toml"):
             self.assertNotIn("[unit.extra]", toml_path.read_text())
 
         garage = self.artifacts[
@@ -218,12 +231,7 @@ class StartupPolicyTests(unittest.TestCase):
             jellyfin,
         )
         self.assertIn(
-            "--path /var/zfs/tank/videos/movies --source tank/videos "
-            "--access rx",
-            jellyfin,
-        )
-        self.assertIn(
-            "--path /var/zfs/tank/videos/tv-shows --source tank/videos "
+            "--path /var/zfs/tank/videos/data/media --source tank/videos "
             "--access rx",
             jellyfin,
         )

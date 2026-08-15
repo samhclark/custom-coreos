@@ -20,7 +20,7 @@ network = "host"
 container-user = 1000
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
-dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
+dns = ["100.100.100.100"]
 
 [container.environment]
 TZ = "America/Chicago"

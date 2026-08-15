@@ -7,5 +7,9 @@
 /usr/share/custom-coreos/grafana
 /usr/share/custom-coreos/immich-database
 /usr/share/custom-coreos/jellyfin-exporter
+/usr/share/custom-coreos/prowlarr
+/usr/share/custom-coreos/radarr
+/usr/share/custom-coreos/sabnzbd
+/usr/share/custom-coreos/sonarr
 /usr/share/custom-coreos/victoria-metrics
 /usr/share/custom-coreos/vmalert

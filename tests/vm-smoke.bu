@@ -106,6 +106,8 @@ systemd:
       mask: true
     - name: nas-krun-network-policy.service
       mask: true
+    - name: nas-egress-mullvad.service
+      mask: true
     - name: sops-distribute-secrets.service
       mask: true
     - name: tailscaled.service
@@ -122,6 +124,16 @@ systemd:
       mask: true
     - name: nas-prepare-jellyfin-storage.service
       mask: true
+    - name: nas-prepare-media-storage.service
+      mask: true
+    - name: nas-prepare-prowlarr-storage.service
+      mask: true
+    - name: nas-prepare-radarr-storage.service
+      mask: true
+    - name: nas-prepare-sabnzbd-storage.service
+      mask: true
+    - name: nas-prepare-sonarr-storage.service
+      mask: true
     - name: nas-prepare-victoria-metrics-storage.service
       mask: true
     - name: zfs-scrub-monthly@tank.timer
@@ -133,8 +145,4 @@ systemd:
     - name: zfs-snapshots-daily@videos.timer
       mask: true
     - name: zfs-snapshots-weekly@videos.timer
-      mask: true
-    - name: zfs-snapshots-monthly@videos.timer
-      mask: true
-    - name: zfs-snapshots-yearly@videos.timer
       mask: true

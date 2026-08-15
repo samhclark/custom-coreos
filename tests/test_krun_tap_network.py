@@ -10,8 +10,8 @@ import unittest
 import uuid
 from pathlib import Path
 
-from quadletgen.model import Fleet, KrunNetwork
-from quadletgen.parser import load_service
+from quadletgen.model import KrunNetwork
+from tests.quadlet_test_support import current_fleet
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -44,14 +44,11 @@ SELINUX_POLICY = (
 
 class KrunTapNetworkTests(unittest.TestCase):
     def load_configs(self):
-        return [
-            load_service(path)
-            for path in sorted((REPO / "quadlets").glob("*.toml"))
-        ]
+        return list(current_fleet().services)
 
     def test_every_generated_microvm_uses_a_unique_tap_and_subnet(self):
         configs = self.load_configs()
-        fleet = Fleet.build(configs)
+        fleet = current_fleet()
 
         taps = set()
         subnets = set()

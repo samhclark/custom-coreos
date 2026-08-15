@@ -1,4 +1,4 @@
-# ABOUTME: Regression tests for Jellyfin's owned and preserve-owner storage.
+# ABOUTME: Regression tests for Jellyfin's owned state and shared media export.
 
 import unittest
 from pathlib import Path
@@ -27,29 +27,40 @@ class JellyfinStoragePreparationTests(unittest.TestCase):
             SERVICE,
         )
 
-    def test_existing_media_dataset_is_required_and_never_created(self):
+    def test_media_dataset_is_prepared_once_by_the_fleet_resource(self):
         self.assertIn(
-            "existing-zfs|tank/videos|/var/zfs/tank/videos",
-            MANIFEST,
+            "resource|media|media|52000|2775|tank/videos|/var/zfs/tank/videos",
+            (
+                REPO
+                / "overlay-root/usr/share/custom-coreos/storage/media.storage-manifest"
+            ).read_text(),
         )
         self.assertNotIn("managed-zfs|tank/videos", MANIFEST)
+        self.assertNotIn("existing-zfs|tank/videos", MANIFEST)
 
     def test_media_is_read_only_without_recursive_podman_relabel(self):
         self.assertIn(
-            "Volume=/var/zfs/tank/videos/movies:/media/movies:ro",
+            "Volume=/var/zfs/tank/videos/data/media:/data/media:ro",
             QUADLET,
         )
-        self.assertIn(
-            "Volume=/var/zfs/tank/videos/tv-shows:/media/tv-shows:ro",
-            QUADLET,
-        )
-        self.assertNotIn("/media/movies:ro,Z", QUADLET)
-        self.assertNotIn("/media/tv-shows:ro,Z", QUADLET)
+        self.assertNotIn("/data/media:ro,Z", QUADLET)
 
-    def test_uses_actual_videos_mountpoint_and_requires_both_libraries(self):
-        self.assertIn("/var/zfs/tank/videos/movies", QUADLET)
-        self.assertIn("/var/zfs/tank/videos/tv-shows", QUADLET)
-        self.assertIn("--source tank/videos --access rx", QUADLET)
+    def test_jellyfin_keeps_the_shared_media_group(self):
+        self.assertIn("GroupAdd=keep-groups", QUADLET)
+        self.assertIn("m _nas_jellyfin media\n", (
+            REPO / "overlay-root/usr/lib/sysusers.d/nas-fleet-groups.conf"
+        ).read_text())
+        self.assertIn("_nas_jellyfin:52000:1\n", (
+            REPO / "overlay-root/etc/subgid"
+        ).read_text())
+
+    def test_waits_for_the_single_fleet_readiness_marker(self):
+        self.assertIn(
+            "marker /run/nas-storage/media/ready 300 2 "
+            "--path /var/zfs/tank/videos/data/media "
+            "--source tank/videos --access rx",
+            QUADLET,
+        )
 
     def test_private_dataset_properties_are_creation_only(self):
         self.assertIn(

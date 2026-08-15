@@ -19,7 +19,7 @@ image = "docker.io/grafana/grafana:13.1.2@sha256:d177053ab62253815f130d81504f770
 network = "host"
 # Avoid the host's loopback-only systemd-resolved stub inside the krun guest.
 # Plugin installation can require external name resolution during startup.
-dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
+dns = ["100.100.100.100"]
 container-user = 0
 
 [krun]

@@ -1,0 +1,82 @@
+# ABOUTME: SABnzbd Usenet downloader with Mullvad-only internet egress and
+# bounded access to the shared TRaSH-layout Usenet tree.
+
+[service]
+name = "sabnzbd"
+application = "media-automation"
+role = "download-client"
+description = "SABnzbd Usenet Downloader"
+documentation = "https://sabnzbd.org/"
+
+[host]
+username = "_nas_sabnzbd"
+uid = 51440
+subid-start = 514400000
+display-name = "SABnzbd"
+
+[identity]
+supplemental-groups = ["media"]
+mapped-container-id = 1000
+mapped-group = "media"
+
+[container]
+image = "lscr.io/linuxserver/sabnzbd:5.1.0-ls266@sha256:b0f9755d795913bd26ae3f3a12805668ab0681ab847a7624568559c573fc7cae"
+network = "host"
+container-user = 0
+entrypoint = "/usr/share/custom-coreos/sabnzbd/sabnzbd-entrypoint.sh"
+health-cmd = "none"
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+dns = ["100.100.100.100"]
+
+[container.environment]
+TZ = "America/Chicago"
+
+[[container.volumes]]
+comment = "Image-controlled libkrun entrypoint adapter (read-only)"
+source = "/usr/share/custom-coreos/sabnzbd"
+target = "/usr/share/custom-coreos/sabnzbd"
+options = "ro"
+
+[krun]
+enabled = true
+cpus = 2
+ram-mib = 2048
+network = "tap"
+ipv4 = "10.253.17.2/30"
+probe-endpoint = "http"
+probe-timeout-sec = 300
+egress = "mullvad"
+
+[[container.endpoints]]
+name = "http"
+port = 8080
+consumers = ["caddy", "sonarr", "radarr"]
+
+[assets]
+path = "/usr/share/custom-coreos/sabnzbd"
+
+[[storage]]
+name = "config"
+kind = "managed-zfs"
+dataset = "tank/sabnzbd/config"
+host-path = "/var/lib/sabnzbd/config"
+mode = "0750"
+record-size = "16K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/config"
+access = "read-write"
+
+[[shared-storage]]
+resource = "media"
+subpath = "data/usenet"
+container-path = "/data/usenet"
+access = "read-write"
+
+[unit]
+timeout-start-sec = 900

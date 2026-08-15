@@ -12,7 +12,9 @@ from .errors import ConfigError
 from .storage_model import (
     DirectoryStorage,
     ExistingZfsStorage,
+    FleetZfsStorage,
     ManagedZfsStorage,
+    SharedStorageExport,
     StorageAccess,
     StorageExport,
     StorageSpec,
@@ -52,6 +54,60 @@ def parse_storage(raw: object, source: str) -> tuple[StorageSpec, ...]:
     return storage
 
 
+def parse_shared_storage(
+    raw: object,
+    source: str,
+) -> tuple[SharedStorageExport, ...]:
+    """Decode service references to fleet-owned storage resources."""
+
+    path = f"{source}: [[shared-storage]]"
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        _fail(path, "must be an array of tables")
+    result = []
+    for index, item in enumerate(raw, start=1):
+        item_path = f"{path}[{index}]"
+        table = _table(
+            item,
+            item_path,
+            {"resource", "subpath", "container-path", "access"},
+        )
+        access = _string(
+            _required(table, "access", item_path),
+            f"{item_path}.access",
+        )
+        if access not in {item.value for item in StorageAccess}:
+            _fail(
+                f"{item_path}.access",
+                'must be "read-only" or "read-write"',
+            )
+        try:
+            result.append(
+                SharedStorageExport(
+                    resource=_string(
+                        _required(table, "resource", item_path),
+                        f"{item_path}.resource",
+                    ),
+                    subpath=_string(
+                        _required(table, "subpath", item_path),
+                        f"{item_path}.subpath",
+                    ),
+                    container_path=_string(
+                        _required(table, "container-path", item_path),
+                        f"{item_path}.container-path",
+                    ),
+                    access=StorageAccess(access),
+                )
+            )
+        except ConfigError as error:
+            _reraise_model_error(error, source)
+    targets = [export.container_path for export in result]
+    if len(set(targets)) != len(targets):
+        _fail(path, "cannot repeat a container path")
+    return tuple(result)
+
+
 def _parse_storage_item(raw: object, source: str, index: int) -> StorageSpec:
     item_path = f"{source}: [[storage]][{index}]"
     discriminator = _table(raw, item_path, COMMON_KEYS | {
@@ -80,6 +136,73 @@ def _parse_storage_item(raw: object, source: str, index: int) -> StorageSpec:
         f"{item_path}.kind",
         'must be "directory", "managed-zfs", or "existing-zfs"',
     )
+
+
+def parse_fleet_storage(raw: object, source: str) -> tuple[FleetZfsStorage, ...]:
+    """Decode validation-only, required-existing fleet storage resources."""
+
+    path = f"{source}: [[resources]]"
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        _fail(path, "must be an array of tables")
+    result = []
+    for index, item in enumerate(raw, start=1):
+        item_path = f"{path}[{index}]"
+        table = _table(
+            item,
+            item_path,
+            {
+                "name",
+                "kind",
+                "dataset",
+                "host-path",
+                "shared-group",
+                "mode",
+                "required-paths",
+            },
+        )
+        kind = _string(
+            _required(table, "kind", item_path),
+            f"{item_path}.kind",
+        )
+        if kind != "existing-zfs":
+            _fail(f"{item_path}.kind", 'must be "existing-zfs"')
+        try:
+            result.append(
+                FleetZfsStorage(
+                    name=_string(
+                        _required(table, "name", item_path),
+                        f"{item_path}.name",
+                    ),
+                    dataset=_string(
+                        _required(table, "dataset", item_path),
+                        f"{item_path}.dataset",
+                    ),
+                    host_path=_string(
+                        _required(table, "host-path", item_path),
+                        f"{item_path}.host-path",
+                    ),
+                    shared_group=_string(
+                        _required(table, "shared-group", item_path),
+                        f"{item_path}.shared-group",
+                    ),
+                    mode=_string(
+                        _required(table, "mode", item_path),
+                        f"{item_path}.mode",
+                    ),
+                    required_paths=_string_array(
+                        _required(table, "required-paths", item_path),
+                        f"{item_path}.required-paths",
+                    ),
+                )
+            )
+        except ConfigError as error:
+            _reraise_model_error(error, source)
+    names = [item.name for item in result]
+    if len(set(names)) != len(names):
+        _fail(path, "contains duplicate names")
+    return tuple(result)
 
 
 def _construct_directory(

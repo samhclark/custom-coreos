@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from .headers import generated_header
-from .model import Fleet, Service
+from .model import Fleet, MullvadEgress, Service
 
 
-KRUN_DNS_SERVERS = ("100.100.100.100", "75.75.75.75", "75.75.76.76")
+KRUN_DNS_SERVERS = ("100.100.100.100",)
+
+
 def fleet_header(name: str) -> str:
     return generated_header(name)
 
@@ -24,39 +26,123 @@ VNetHeader=yes
 """
 
 
-def networkd_network(service: Service) -> str:
+def networkd_network(service: Service, fleet: Fleet) -> str:
     gateway = service.tap_gateway
-    return f"""{_service_header(service)}
+    lines = [
+        _service_header(service),
+        "[Match]",
+        f"Name={service.tap_name}",
+        "",
+        "[Link]",
+        "RequiredForOnline=no",
+        "",
+        "[Network]",
+        f"Address={gateway}",
+        "DHCPServer=yes",
+        "ConfigureWithoutCarrier=yes",
+        "IPv4RouteLocalnet=yes",
+        "LinkLocalAddressing=no",
+        "IPv6AcceptRA=no",
+        "",
+        "[DHCPServer]",
+        "PoolOffset=2",
+        "PoolSize=1",
+        "PersistLeases=runtime",
+        "RapidCommit=yes",
+        "EmitDNS=yes",
+        f"DNS={' '.join(KRUN_DNS_SERVERS)}",
+        "EmitNTP=no",
+        "EmitSIP=no",
+        "EmitRouter=yes",
+        f"Router={gateway.ip}",
+    ]
+    if getattr(service.krun, "egress", None) == "mullvad":
+        if fleet.egress is None:
+            raise ValueError("Mullvad-selected TAP has no fleet egress")
+        guest = f"{service.tap_guest.ip}/32"
+        for priority, destination in enumerate(
+            ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10"),
+            start=100,
+        ):
+            lines += [
+                "",
+                "[RoutingPolicyRule]",
+                f"From={guest}",
+                f"To={destination}",
+                "Table=main",
+                f"Priority={priority}",
+            ]
+        lines += [
+            "",
+            "[RoutingPolicyRule]",
+            f"From={guest}",
+            f"Table={fleet.egress.route_table}",
+            "Priority=200",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def wireguard_netdev(egress: MullvadEgress) -> str:
+    """Render the host WireGuard device for the fixed fleet egress."""
+    allowed_ips = ", ".join(str(network) for network in egress.allowed_ips)
+    return f"""{fleet_header("_fleet.toml")}
+[NetDev]
+Name={egress.interface}
+Kind=wireguard
+
+[WireGuard]
+PrivateKey=@network.wireguard.private.70-{egress.interface}
+FirewallMark={egress.firewall_mark}
+RouteTable={egress.route_table}
+
+[WireGuardPeer]
+PublicKey={egress.peer_public_key}
+Endpoint={egress.endpoint_address}:{egress.endpoint_port}
+AllowedIPs={allowed_ips}
+"""
+
+
+def wireguard_network(egress: MullvadEgress) -> str:
+    """Render the address-only networkd configuration for wg-arr."""
+    return f"""{fleet_header("_fleet.toml")}
 [Match]
-Name={service.tap_name}
+Name={egress.interface}
 
 [Link]
 RequiredForOnline=no
 
 [Network]
-Address={gateway}
-DHCPServer=yes
-ConfigureWithoutCarrier=yes
-IPv4RouteLocalnet=yes
+Address={egress.address}
 LinkLocalAddressing=no
 IPv6AcceptRA=no
+"""
 
-[DHCPServer]
-PoolOffset=2
-PoolSize=1
-PersistLeases=runtime
-RapidCommit=yes
-EmitDNS=yes
-DNS={' '.join(KRUN_DNS_SERVERS)}
-EmitNTP=no
-EmitSIP=no
-EmitRouter=yes
-Router={gateway.ip}
+
+def networkmanager_policy(fleet: Fleet) -> str:
+    """Keep networkd-owned interfaces unmanaged by NetworkManager."""
+    interfaces = ["krun-*"]
+    if fleet.egress is not None:
+        interfaces.append(fleet.egress.interface)
+    unmanaged = ";".join(f"interface-name:{name}" for name in interfaces)
+    return f"""{fleet_header("network manager unmanaged devices")}
+# The libkrun TAPs and host WireGuard egress are created by systemd-networkd.
+# Keep NetworkManager, which owns the physical CoreOS links, away from them.
+[keyfile]
+unmanaged-devices={unmanaged}
 """
 
 
 def nft_filter(fleet: Fleet) -> str:
     taps = fleet.active_taps
+    selected = tuple(
+        service for service in taps
+        if getattr(service.krun, "egress", None) == "mullvad"
+    )
+    egress_interface = None
+    if selected:
+        if fleet.egress is None:
+            raise ValueError("Mullvad-selected TAP has no fleet egress")
+        egress_interface = fleet.egress.interface
     tap_exclusions = " ".join(
         f'iifname != "{service.tap_name}"' for service in taps
     )
@@ -95,6 +181,38 @@ def nft_filter(fleet: Fleet) -> str:
             f'    oifname "{service.tap_name}" ip daddr != '
             f"{service.tap_guest.ip} drop"
         )
+    # Established traffic must not bypass a selected guest's egress policy.
+    # In particular, if WireGuard disappears, an existing connection may be
+    # rerouted through the physical default route while conntrack still calls
+    # it established. Accept only established directions that remain inside
+    # the selected policy, then drop every other selected established packet
+    # before the fleet-wide return-traffic rule.
+    for service in selected:
+        guest = service.tap_guest.ip
+        lines.append(
+            f'    iifname "{service.tap_name}" ip saddr {guest} '
+            'ip daddr != 100.100.100.100 '
+            f'oifname "{egress_interface}" '
+            "ct state established,related accept"
+        )
+        for protocol in ("tcp", "udp"):
+            lines.append(
+                f'    iifname "{service.tap_name}" ip saddr {guest} '
+                'ip daddr 100.100.100.100 oifname "tailscale0" '
+                f"{protocol} dport 53 ct state established,related accept"
+            )
+        for destination in taps:
+            if destination.info.name == service.info.name:
+                continue
+            lines.append(
+                f'    iifname "{service.tap_name}" ip saddr {guest} '
+                f'oifname "{destination.tap_name}" '
+                "ct state established,related accept"
+            )
+        lines.append(
+            f'    iifname "{service.tap_name}" ip saddr {guest} '
+            "ct state established,related drop"
+        )
     lines.append("    ct state established,related accept")
     for destination in taps:
         ports_by_consumer: dict[str, list[int]] = {}
@@ -121,10 +239,25 @@ def nft_filter(fleet: Fleet) -> str:
                 f"dport {endpoint.port} accept"
             )
     for service in taps:
-        lines.append(
-            f'    iifname "{service.tap_name}" ip saddr '
-            f"{service.tap_guest.ip} {out_exclusions} accept"
-        )
+        guest = service.tap_guest.ip
+        if getattr(service.krun, "egress", None) == "mullvad":
+            lines += [
+                f'    iifname "{service.tap_name}" ip saddr {guest} '
+                'ip daddr 100.100.100.100 oifname "tailscale0" '
+                "tcp dport 53 accept",
+                f'    iifname "{service.tap_name}" ip saddr {guest} '
+                'ip daddr 100.100.100.100 oifname "tailscale0" '
+                "udp dport 53 accept",
+                f'    iifname "{service.tap_name}" ip saddr {guest} '
+                f'ip daddr != 100.100.100.100 oifname "{egress_interface}" '
+                "accept",
+                f'    iifname "{service.tap_name}" ip saddr {guest} drop',
+            ]
+        else:
+            lines.append(
+                f'    iifname "{service.tap_name}" ip saddr '
+                f"{guest} {out_exclusions} accept"
+            )
     lines += ["}", ""]
     return "\n".join(lines)
 
@@ -134,15 +267,31 @@ def networkd_dependencies(fleet: Fleet) -> str:
         f"ensure-nas-{service.host.slug}-account.service"
         for service in fleet.active_taps
     ]
-    return "\n".join(
-        [
-            fleet_header("networkd TAP dependencies"),
-            "[Unit]",
-            f"After={' '.join(account_units)}",
-            "Wants=nas-krun-network-policy.service",
+    after = list(account_units)
+    requires = []
+    if fleet.egress is not None:
+        after.append("sops-distribute-secrets.service")
+        requires.append("sops-distribute-secrets.service")
+    lines = [
+        fleet_header("networkd TAP and WireGuard dependencies"),
+        "[Unit]",
+        f"After={' '.join(after)}",
+    ]
+    if requires:
+        lines.append(f"Requires={' '.join(requires)}")
+    lines += [
+        "Wants=nas-krun-network-policy.service",
+    ]
+    if fleet.egress is not None:
+        lines += [
             "",
+            "[Service]",
+            "LoadCredential="
+            f"network.wireguard.private.70-{fleet.egress.interface}:"
+            f"/run/nas-secrets/mullvad/{fleet.egress.secret_name}",
         ]
-    )
+    lines.append("")
+    return "\n".join(lines)
 
 
 def network_policy_script(fleet: Fleet) -> str:
@@ -273,6 +422,15 @@ def nftables_policy_dropin() -> str:
 
 def nft_nat(fleet: Fleet) -> str:
     taps = fleet.active_taps
+    selected = tuple(
+        service for service in taps
+        if getattr(service.krun, "egress", None) == "mullvad"
+    )
+    egress_interface = None
+    if selected:
+        if fleet.egress is None:
+            raise ValueError("Mullvad-selected TAP has no fleet egress")
+        egress_interface = fleet.egress.interface
     tap_input_exclusions = " ".join(
         f'iifname != "{service.tap_name}"' for service in taps
     )
@@ -335,10 +493,19 @@ def nft_nat(fleet: Fleet) -> str:
                 f"snat to {service.tap_gateway.ip}"
             )
     for service in taps:
-        lines.append(
-            f"        ip saddr {service.tap_guest.ip} "
-            f"{tap_output_exclusions} masquerade"
-        )
+        guest = service.tap_guest.ip
+        if getattr(service.krun, "egress", None) == "mullvad":
+            lines += [
+                f'        ip saddr {guest} ip daddr 100.100.100.100 '
+                'oifname "tailscale0" masquerade',
+                f'        ip saddr {guest} ip daddr != 100.100.100.100 '
+                f'oifname "{egress_interface}" masquerade',
+            ]
+        else:
+            lines.append(
+                f"        ip saddr {guest} "
+                f"{tap_output_exclusions} masquerade"
+            )
     lines += ["    }", "}", ""]
     return "\n".join(lines)
 

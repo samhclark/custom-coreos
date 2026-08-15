@@ -7,10 +7,11 @@ from __future__ import annotations
 import posixpath
 
 from .headers import generated_header
-from .model import SUBID_COUNT, Protocol, Service
+from .model import Fleet, SUBID_COUNT, Protocol, Service
 from .storage_model import (
     DirectoryStorage,
     ExistingZfsStorage,
+    FleetZfsStorage,
     ManagedZfsStorage,
     StorageAccess,
     StorageSpec,
@@ -30,6 +31,25 @@ def storage_volume_lines(service: Service) -> tuple[str, ...]:
                 f"# Declarative {storage.name} storage",
                 f"Volume={source}:{export.container_path}{options}",
             ]
+    return tuple(lines)
+
+
+def shared_storage_volume_lines(
+    service: Service,
+    fleet: Fleet,
+) -> tuple[str, ...]:
+    """Render mounts from named, fleet-owned storage exports."""
+
+    lines: list[str] = []
+    for export in service.shared_storage:
+        resource = fleet.resources_by_name[export.resource]
+        source = _fleet_export_path(resource, export.subpath)
+        options = ":ro" if export.access is StorageAccess.READ_ONLY else ""
+        lines += [
+            "",
+            f"# Shared fleet resource {resource.name}",
+            f"Volume={source}:{export.container_path}{options}",
+        ]
     return tuple(lines)
 
 
@@ -74,11 +94,63 @@ def storage_readiness_line(service: Service) -> str | None:
     )
 
 
-def storage_manifest(service: Service) -> str:
+def shared_storage_readiness_lines(
+    service: Service,
+    fleet: Fleet,
+) -> tuple[str, ...]:
+    """Wait on the single fleet preparation marker for each referenced resource."""
+
+    lines: list[str] = []
+    for resource_name in dict.fromkeys(
+        export.resource for export in service.shared_storage
+    ):
+        resource = fleet.resources_by_name[resource_name]
+        requirements: list[str] = []
+        for export in service.shared_storage:
+            if export.resource != resource_name:
+                continue
+            path = _fleet_export_path(resource, export.subpath)
+            access = "rx" if export.access is StorageAccess.READ_ONLY else "rwx"
+            requirements += [
+                "--path",
+                path,
+                "--source",
+                resource.dataset,
+                "--access",
+                access,
+            ]
+        lines.append(
+            " ".join(
+                [
+                    "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh",
+                    "marker",
+                    f"/run/nas-storage/{resource.name}/ready",
+                    "300",
+                    "2",
+                    *requirements,
+                ]
+            )
+        )
+    return tuple(lines)
+
+
+def storage_manifest(service: Service, fleet: Fleet | None = None) -> str:
     """Render the closed data language consumed by the storage runtime."""
 
     if not service.storage:
         raise ValueError(f"{service.info.name} has no storage to render")
+    if service.identity.supplemental_groups and fleet is None:
+        raise ValueError(
+            f"{service.info.name} storage manifest requires fleet groups"
+        )
+    supplemental_gids = (
+        ",".join(
+            str(fleet.groups_by_name[name].gid)
+            for name in service.identity.supplemental_groups
+        )
+        if fleet is not None
+        else ""
+    ) or "-"
     tcp_ports = ",".join(
         str(endpoint.host_port)
         for endpoint in service.container.endpoints
@@ -86,7 +158,7 @@ def storage_manifest(service: Service) -> str:
         and endpoint.host_port is not None
     ) or "-"
     lines = [
-        "nas-storage-manifest-v2",
+        "nas-storage-manifest-v3",
         generated_header(service.source.name),
         "|".join(
             (
@@ -98,6 +170,7 @@ def storage_manifest(service: Service) -> str:
                 str(service.host.subid_start),
                 str(SUBID_COUNT),
                 tcp_ports,
+                supplemental_gids,
             )
         ),
     ]
@@ -194,6 +267,66 @@ def storage_unit(service: Service) -> str:
 
 
 def _export_path(storage: StorageSpec, subpath: str) -> str:
+    if subpath == ".":
+        return storage.host_path
+    return posixpath.join(storage.host_path, subpath)
+
+
+def shared_storage_manifest(resource: FleetZfsStorage, group_gid: int) -> str:
+    """Render the validation-only manifest for one fleet resource."""
+
+    lines = [
+        "nas-shared-storage-manifest-v1",
+        generated_header("_fleet.toml"),
+        "|".join(
+            (
+                "resource",
+                resource.name,
+                resource.shared_group,
+                str(group_gid),
+                str(resource.mode),
+                resource.dataset,
+                resource.host_path,
+            )
+        ),
+    ]
+    lines.extend(f"required|{path}" for path in resource.required_paths)
+    return "\n".join(lines) + "\n"
+
+
+def shared_storage_unit(resource: FleetZfsStorage) -> str:
+    """Render the one-shot validator shared by all consumers."""
+
+    return "\n".join(
+        [
+            generated_header("_fleet.toml"),
+            "[Unit]",
+            f"Description=Validate fleet storage resource {resource.name}",
+            "Requires=zfs.target",
+            "After=zfs.target local-fs.target",
+            "ConditionPathIsDirectory=/sys/module/zfs",
+            "",
+            "[Service]",
+            "Type=oneshot",
+            "User=root",
+            "ExecStart=/usr/local/bin/nas-prepare-shared-storage.sh "
+            f"/usr/share/custom-coreos/storage/{resource.name}.storage-manifest",
+            "TimeoutStartSec=infinity",
+            "Restart=on-failure",
+            "RestartPreventExitStatus=78",
+            "RestartSec=30",
+            "StandardOutput=journal",
+            "StandardError=journal",
+            "RemainAfterExit=yes",
+            "",
+            "[Install]",
+            "WantedBy=multi-user.target",
+            "",
+        ]
+    )
+
+
+def _fleet_export_path(storage: FleetZfsStorage, subpath: str) -> str:
     if subpath == ".":
         return storage.host_path
     return posixpath.join(storage.host_path, subpath)

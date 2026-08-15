@@ -13,6 +13,16 @@
 	#acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
 }
 
+# Management UIs are reachable from the LAN and Tailscale, but never from the
+# public Internet.  The snippet argument is the service's krun endpoint.
+(private-ingress) {
+	@private remote_ip private_ranges 100.64.0.0/10
+	handle @private {
+		reverse_proxy {args[0]}
+	}
+	respond 403
+}
+
 # Garage S3-compatible object storage
 # Admin API - for garage CLI and metrics
 garage.i.samhclark.com {
@@ -44,4 +54,21 @@ jellyfin.i.samhclark.com {
 # Immich - private photo and video library
 photos.i.samhclark.com {
 	reverse_proxy immich-server.krun:2283
+}
+
+# Arr management interfaces
+sonarr.i.samhclark.com {
+	import private-ingress sonarr.krun:8989
+}
+
+radarr.i.samhclark.com {
+	import private-ingress radarr.krun:7878
+}
+
+prowlarr.i.samhclark.com {
+	import private-ingress prowlarr.krun:9696
+}
+
+sabnzbd.i.samhclark.com {
+	import private-ingress sabnzbd.krun:8080
 }

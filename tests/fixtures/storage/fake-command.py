@@ -126,7 +126,8 @@ def findmnt(state):
         fail(f"unsupported findmnt invocation: {ARGS}")
     requested_path = ARGS[4]
     for name, dataset in state["datasets"].items():
-        if dataset["properties"].get("mountpoint") == requested_path:
+        mountpoint = dataset["properties"].get("mountpoint")
+        if mountpoint == requested_path or requested_path.startswith(f"{mountpoint}/"):
             print(name)
             return
     fail("not mounted")
@@ -153,10 +154,10 @@ def find_command(state):
             for index, argument in enumerate(ARGS[:-1])
             if argument == f"-{kind}"
         ]
-        primary = next(int(item) for item in declarations if item.isdigit())
+        primary = [int(item) for item in declarations if item.isdigit()]
         lower = next(int(item[1:]) + 1 for item in declarations if item.startswith("+"))
         upper = next(int(item[1:]) for item in declarations if item.startswith("-"))
-        return value == primary or lower <= value < upper
+        return value in primary or lower <= value < upper
 
     def mapped_owner(child):
         uid, gid = (

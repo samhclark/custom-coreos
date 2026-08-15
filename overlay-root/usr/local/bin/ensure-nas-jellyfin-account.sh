@@ -16,7 +16,7 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
 
-ensure_subid_entry() {
+ensure_primary_subid_entry() {
     local file="$1"
     local expected="${USER_NAME}:${USER_SUBID_START}:${USER_SUBID_COUNT}"
     local current
@@ -33,8 +33,20 @@ ensure_subid_entry() {
         return
     fi
 
-    if [[ "${current}" != "${expected}" ]]; then
+    if ! grep -Fqx "${expected}" "${file}"; then
         log "Leaving existing ${file} entry for ${USER_NAME}: ${current}"
+    fi
+}
+
+ensure_exact_subid_entry() {
+    local file="$1"
+    local start="$2"
+    local count="$3"
+    local expected="${USER_NAME}:${start}:${count}"
+
+    if ! grep -Fqx "${expected}" "${file}"; then
+        log "Adding ${expected} to ${file}"
+        printf '%s\n' "${expected}" >> "${file}"
     fi
 }
 
@@ -67,8 +79,9 @@ if [[ "${current_shell}" != "${USER_SHELL}" ]]; then
     usermod --shell "${USER_SHELL}" "${USER_NAME}"
 fi
 
-ensure_subid_entry /etc/subuid
-ensure_subid_entry /etc/subgid
+ensure_primary_subid_entry /etc/subuid
+ensure_primary_subid_entry /etc/subgid
+ensure_exact_subid_entry /etc/subgid "52000" "1"
 
 if systemctl is-failed --quiet "user@${USER_UID}.service"; then
     log "Retrying user@${USER_UID}.service after account setup"

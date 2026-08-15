@@ -42,6 +42,24 @@ ExecStartPre=/usr/bin/test -r /run/nas-secrets/<service>/<secret-name>
 The compiler derives the service/secret mapping from `quadlets/*.toml` and
 verifies that every declared name exists as an encrypted top-level key.
 
+## Mullvad WireGuard key
+
+The authored media-automation design declares the encrypted top-level SOPS key
+`mullvad-private-key`. It is distributed to the root-owned runtime path
+`/run/nas-secrets/mullvad/mullvad-private-key` with the same protected file
+boundary as other runtime secrets. A generated systemd-networkd drop-in loads
+that path as the credential named
+`network.wireguard.private.70-wg-arr`; the generated `70-wg-arr.netdev` refers
+to the credential rather than containing private key material.
+
+This is a host-network secret, not a container secret. The Arr containers do
+not receive the Mullvad private key and cannot configure `wg-arr`. Their
+selected egress is authorized only after the host WireGuard interface and its
+generated nftables policy are ready. The initial deployment is not validated;
+in particular, the repository does not yet claim that networkd successfully
+loaded the credential, that Mullvad completed a handshake, or that a guest's
+public traffic reached the provider.
+
 ## Why runtime files instead of rootless Podman secrets
 
 NAS testing established that user-scoped `systemd-creds` can work in a normal

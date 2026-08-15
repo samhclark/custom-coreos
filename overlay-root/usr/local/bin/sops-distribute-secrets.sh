@@ -1,6 +1,6 @@
 #!/bin/bash
-# ABOUTME: Decrypts the image-shipped SOPS secrets file and writes per-service
-# runtime files under /run/nas-secrets for rootless services.
+# ABOUTME: Decrypts the image-shipped SOPS secrets file and writes declared
+# runtime files under /run/nas-secrets for service and host consumers.
 
 set -euo pipefail
 
@@ -42,10 +42,11 @@ secret_value() {
     jq -r --arg name "${secret}" '.[$name]' "${secrets_json_file}"
 }
 
-# Writes /run/nas-secrets/<service>/<secret> as 0400 <user>:<user> under a
-# 0710 root:<user> directory. Consuming quadlets mount the file read-only
-# with a ':Z' relabel (validated on the NAS: rootless podman can relabel
-# tmpfs files under /run to container_file_t).
+# Writes /run/nas-secrets/<consumer>/<secret> as 0400 <user>:<user> under a
+# 0710 root:<user> directory. Root-owned consumers therefore receive root:root
+# files. Rootless quadlets mount their files read-only with a ':Z' relabel
+# (validated on the NAS: rootless podman can relabel tmpfs files under /run to
+# container_file_t).
 write_runtime_secret() {
     local service="$1"
     local user="$2"
@@ -110,10 +111,10 @@ if [[ "${missing_secrets}" -ne 0 ]]; then
     exit 1
 fi
 
-# Rebuild the rootless runtime file tree from scratch on every run: /run is
+# Rebuild the runtime secret file tree from scratch on every run: /run is
 # tmpfs, so never skip these based on saved state. Only directories are
-# managed service dirs; the dotfiles in ${RUNTIME_DIR} are this script's
-# own temp files.
+# managed consumer dirs; the dotfiles in ${RUNTIME_DIR} are this script's own
+# temp files.
 find "${RUNTIME_DIR}" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
 
 while IFS=$'\t' read -r service user secret; do

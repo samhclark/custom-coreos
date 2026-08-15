@@ -116,6 +116,14 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         semanage fcontext -a -t container_file_t -r s0 "${asset}(/.*)?"; \
         restorecon -F -R -- "${asset}"; \
     done; \
+    mapfile -t shared_storage_paths < <( \
+        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/shared-storage-paths.list \
+    ); \
+    for path in "${shared_storage_paths[@]}"; do \
+        # The production dataset is not present in the image layer. Install \
+        # policy now; the reviewed operator migration applies the labels later. \
+        semanage fcontext -a -t container_file_t -r s0 "${path}(/.*)?"; \
+    done; \
     depmod -a "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")"; \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
@@ -125,9 +133,16 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     mapfile -t storage_units < <( \
         awk "!/^#/" /usr/share/custom-coreos/fleet/storage-units.list \
     ); \
+    mapfile -t egress_units < <( \
+        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/egress-units.list \
+    ); \
     systemctl enable \
         "${account_units[@]}" \
-        "${storage_units[@]}" \
+        "${storage_units[@]}"; \
+    if ((${#egress_units[@]})); then \
+        systemctl enable "${egress_units[@]}"; \
+    fi; \
+    systemctl enable \
         bootc-fetch-apply-updates.timer \
         nftables.service \
         nas-krun-network-policy.service \

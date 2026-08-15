@@ -37,8 +37,62 @@ For each active service the compiler emits:
 - stable `*.krun` peer names;
 - nftables anti-spoofing, declared ingress, host publication, and outbound NAT.
 
-NetworkManager ignores `krun-*`; systemd-networkd owns only those generated
-interfaces.
+NetworkManager ignores both `krun-*` and `wg-arr`; systemd-networkd owns those
+generated interfaces. The host-side Mullvad interface is the separate,
+generated `wg-arr` WireGuard device; it is not a TAP and is not placed inside
+any guest.
+
+## Mullvad-selected services
+
+The fleet declaration in `quadlets/_fleet.toml` selects Mullvad egress for the
+four media-automation services:
+
+| Service | TAP guest address | Guest listener |
+| --- | --- | --- |
+| Sonarr | `10.253.14.2/30` | `sonarr.krun:8989` |
+| Radarr | `10.253.15.2/30` | `radarr.krun:7878` |
+| Prowlarr | `10.253.16.2/30` | `prowlarr.krun:9696` |
+| SABnzbd | `10.253.17.2/30` | `sabnzbd.krun:8080` |
+
+The host creates `wg-arr` from the typed `[egress.mullvad]` declaration. Its
+address, peer public key, endpoint, `0.0.0.0/0` AllowedIPs, route table, and
+firewall mark are generated from that declaration. The private key is supplied
+to systemd-networkd through a `LoadCredential=` drop-in from
+`/run/nas-secrets/mullvad/mullvad-private-key`; the encrypted SOPS value is not
+embedded in the network unit or in a container.
+
+Selected guests use policy routing for their public traffic and have explicit
+nftables rules for two destinations:
+
+- DNS to `100.100.100.100` (Tailscale MagicDNS), only when the route exits via
+  `tailscale0` and only for TCP/UDP port 53;
+- all other traffic, only when it exits via `wg-arr`.
+
+Each selected guest has constrained established-traffic rules before the
+fleet-wide conntrack acceptance rule, followed by an explicit final drop for
+new traffic. If the WireGuard route, Tailscale route, interface, NAT rule, or
+required policy chain disappears, neither a new nor an already-established
+guest connection can fall through to the ordinary Comcast/WAN path. The generated
+readiness unit publishes `/run/nas-egress/mullvad/ready` only after the
+interface, routes, nftables chains, and selected-service rules are present.
+That readiness check intentionally does not prove a WireGuard handshake or
+successful Internet egress; those remain deployment checks.
+
+The DNS boundary is deliberate: guests are configured only with the Tailscale
+MagicDNS address `100.100.100.100`. The Tailnet is configured to override
+device DNS defaults and forward public resolution through Quad9's configured
+resolver boundary (including its DoH path where enabled). The guests do not
+query Comcast resolvers directly, and Mullvad's private DNS address is not
+used. The generated selected-service policy also prevents DNS from leaving by
+any interface other than Tailscale.
+
+The four management UIs are not published by the individual Quadlets. Caddy
+is the only ingress path, using `sonarr.i.samhclark.com`,
+`radarr.i.samhclark.com`, `prowlarr.i.samhclark.com`, and
+`sabnzbd.i.samhclark.com`. The reusable Caddy private-ingress handler permits
+LAN private ranges and Tailscale's `100.64.0.0/10`, and returns `403` for
+other clients. This is an application-layer guard in addition to the host
+publication topology; it is not a WAN exposure contract.
 
 ## Fail-closed lifecycle
 

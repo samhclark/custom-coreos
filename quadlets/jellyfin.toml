@@ -1,5 +1,5 @@
 # ABOUTME: Declarative config for Jellyfin's rootless runtime, owned datasets,
-# and preserve-owner read-only media exports.
+# and the shared media resource's read-only export.
 
 [service]
 name = "jellyfin"
@@ -13,6 +13,9 @@ username = "_nas_jellyfin"
 uid = 51120
 subid-start = 511200000
 display-name = "Jellyfin"
+
+[identity]
+supplemental-groups = ["media"]
 
 [container]
 image = "docker.io/jellyfin/jellyfin:10.11.11@sha256:aefb67e6a7ff1debdd154a78a7bbb780fd0c873d8639210a7f6a2016ad2b35db"
@@ -71,20 +74,12 @@ subpath = "."
 container-path = "/cache"
 access = "read-write"
 
-[[storage]]
-name = "media"
-kind = "existing-zfs"
-dataset = "tank/videos"
-host-path = "/var/zfs/tank/videos"
-
-[[storage.exports]]
-subpath = "movies"
-container-path = "/media/movies"
-access = "read-only"
-
-[[storage.exports]]
-subpath = "tv-shows"
-container-path = "/media/tv-shows"
+# The generated image expects the reviewed operator migration to create this
+# layout before Jellyfin starts.
+[[shared-storage]]
+resource = "media"
+subpath = "data/media"
+container-path = "/data/media"
 access = "read-only"
 
 [unit]

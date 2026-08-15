@@ -23,6 +23,7 @@ PORTABLE_RELATIVE_PATH_RE = re.compile(
 )
 DATASET_RE = re.compile(r"^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)+$")
 FILE_MODE_RE = re.compile(r"^0[0-7]{3}$")
+SHARED_FILE_MODE_RE = re.compile(r"^2[0-7]{3}$")
 
 
 class StorageAccess(str, Enum):
@@ -157,7 +158,82 @@ class ExistingZfsStorage:
                 )
 
 
+@dataclass(frozen=True, slots=True)
+class FleetZfsStorage:
+    """A required-existing ZFS resource shared by opted-in services.
+
+    Fleet resources are deliberately validation-only.  They describe an
+    operator-owned dataset and its already-created directory layout; the
+    runtime never creates, relabels, or changes ownership of this resource.
+    """
+
+    name: str
+    dataset: str
+    host_path: str
+    shared_group: str
+    mode: str
+    required_paths: tuple[str, ...]
+    kind: Literal["existing-zfs"] = field(default="existing-zfs", init=False)
+
+    def __post_init__(self) -> None:
+        path = f"fleet-storage[{self.name}]"
+        if not isinstance(name := self.name, str) or not NAME_RE.fullmatch(name):
+            _fail(f"{path}.name", f"must match {NAME_RE.pattern}")
+        _validate_dataset(self.dataset, f"{path}.dataset")
+        _validate_absolute_path(self.host_path, f"{path}.host-path")
+        if not self.host_path.startswith("/var/"):
+            _fail(f"{path}.host-path", "must be below /var")
+        if not isinstance(self.shared_group, str) or not NAME_RE.fullmatch(
+            self.shared_group
+        ):
+            _fail(f"{path}.shared-group", f"must match {NAME_RE.pattern}")
+        if not isinstance(self.mode, str) or not SHARED_FILE_MODE_RE.fullmatch(
+            self.mode
+        ):
+            _fail(f"{path}.mode", "must be a four-digit shared-directory mode")
+        if self.mode != "2775":
+            _fail(f"{path}.mode", 'must be "2775" for shared media storage')
+        if not isinstance(self.required_paths, tuple) or not self.required_paths:
+            _fail(f"{path}.required-paths", "must contain at least one path")
+        for index, required_path in enumerate(self.required_paths, start=1):
+            _validate_subpath(
+                required_path,
+                f"{path}.required-paths[{index}]",
+            )
+            if required_path == ".":
+                _fail(f"{path}.required-paths[{index}]", 'cannot be "."')
+        if len(set(self.required_paths)) != len(self.required_paths):
+            _fail(f"{path}.required-paths", "cannot contain duplicates")
+
+
+@dataclass(frozen=True, slots=True)
+class SharedStorageExport:
+    """One service's named export from a fleet-owned storage resource."""
+
+    resource: str
+    subpath: str
+    container_path: str
+    access: StorageAccess
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.resource, str) or not NAME_RE.fullmatch(
+            self.resource
+        ):
+            _fail("shared-storage.resource", f"must match {NAME_RE.pattern}")
+        _validate_subpath(self.subpath, "shared-storage.subpath")
+        _validate_absolute_path(
+            self.container_path,
+            "shared-storage.container-path",
+        )
+        if not isinstance(self.access, StorageAccess):
+            _fail(
+                "shared-storage.access",
+                'must be "read-only" or "read-write"',
+            )
+
+
 StorageSpec: TypeAlias = DirectoryStorage | ManagedZfsStorage | ExistingZfsStorage
+FleetStorageSpec: TypeAlias = FleetZfsStorage
 
 
 def _fail(path: str, message: str) -> NoReturn:

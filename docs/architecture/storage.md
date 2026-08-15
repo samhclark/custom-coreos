@@ -28,6 +28,46 @@ read-only by construction. The storage runtime may repair its SELinux labels
 after an explicit request, but it never creates the dataset or changes its
 ownership or modes.
 
+The authored media-automation layout is a TRaSH-style single `/data` tree:
+
+```text
+/var/zfs/tank/videos/data/
+├── media/
+│   ├── movies/
+│   └── tv/
+└── usenet/
+    ├── incomplete/
+    └── complete/
+        ├── movies/
+        └── tv/
+```
+
+The fleet resource requires these directories to exist as real directories
+under the `tank/videos` mount, owned by `root:52000`, mode `2775`, and labeled
+`container_file_t:s0`. The `media` group is a stable fleet group with GID
+`52000`. Sonarr, Radarr, SABnzbd, and Jellyfin receive that group; the first
+three receive writable access to the appropriate part of `/data`, while
+Jellyfin receives `/data/media` read-only.
+Prowlarr receives no media mount. The resource preparation unit only verifies
+this existing shared tree; it does not create, move, chown, or relabel it.
+
+The four application configuration datasets are separate managed ZFS state:
+
+| Service | Dataset and host mount | Container path | ZFS policy |
+| --- | --- | --- | --- |
+| Sonarr | `tank/sonarr/config` → `/var/lib/sonarr/config` | `/config` | `recordsize=16K`, `compression=lz4`, `atime=off`, `primarycache=all` |
+| Radarr | `tank/radarr/config` → `/var/lib/radarr/config` | `/config` | same |
+| Prowlarr | `tank/prowlarr/config` → `/var/lib/prowlarr/config` | `/config` | same |
+| SABnzbd | `tank/sabnzbd/config` → `/var/lib/sabnzbd/config` | `/config` | same |
+| Jellyfin | existing `tank/jellyfin/{config,cache}` | `/config`, `/cache` | existing Jellyfin declaration |
+
+The media files themselves are intentionally not backed up. The current
+`tank/videos` snapshot policy has frequent, hourly, daily, and weekly timers
+with retentions of 5, 25, 8, and 5 snapshots respectively. There are no
+monthly or yearly `videos` timers; the five weekly snapshots are the outer
+retention boundary of approximately one month. These snapshots are short-lived
+recovery aids, not a media backup strategy.
+
 Every `[[storage.exports]]` names a relative source, an absolute container
 path, and `read-only` or `read-write` access. Generated Quadlets do not use
 Podman `:z` or `:Z` for these trees.
@@ -56,11 +96,16 @@ Owned storage roots require the service's exact host UID/GID, declared mode,
 and canonical `system_u:object_r:container_file_t:s0` context. The bounded
 descendant sample has a different contract because rootless user namespaces
 can legitimately create files as either the service host UID/GID or an ID in
-that service's generated 65,536-ID subordinate range. Its SELinux user field
-may also differ; readiness enforces the security-relevant
-`object_r:container_file_t:s0` suffix and rejects MCS categories. IDs outside
-the service identity and assigned subordinate range, wrong SELinux types, and
-non-`s0` ranges remain drift.
+that service's generated 65,536-ID subordinate range. A GID declared through
+the service's typed supplemental fleet groups is also valid; this matters when
+an application's primary in-container GID maps to the shared `media` group.
+The versioned storage manifest carries those GIDs into both bounded readiness
+and explicit-repair verification so an app-created config file remains valid
+after reboot. Its SELinux user field may also differ; readiness enforces the
+security-relevant `object_r:container_file_t:s0` suffix and rejects MCS
+categories. IDs outside
+the service identity, declared supplemental GIDs, and assigned subordinate
+range, wrong SELinux types, and non-`s0` ranges remain drift.
 
 ## Repair policy
 
@@ -87,7 +132,9 @@ operator intervention does not become a 30-second retry loop; transient
 failures retain the existing restart policy. Drift logs name the exact sampled
 path and observed ownership, mode, or label before refusing repair.
 
-The current stateful services are Caddy, Alertmanager, Grafana, Garage,
-VictoriaMetrics, Jellyfin, and all four Immich components. Blackbox exporter,
-vmalert, and Jellyfin exporter are intentionally stateless; image assets and
-runtime secrets are separate declaration classes.
+The current authored stateful services are Caddy, Alertmanager, Grafana,
+Garage, VictoriaMetrics, Jellyfin, all four Immich components, and the four
+media-automation services. The media-automation config datasets and shared
+layout are authored but their NAS deployment and migration remain unvalidated.
+Blackbox exporter, vmalert, and Jellyfin exporter are intentionally stateless;
+image assets and runtime secrets are separate declaration classes.

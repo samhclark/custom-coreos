@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-readonly MANIFEST_VERSION="nas-storage-manifest-v2"
+readonly MANIFEST_VERSION="nas-storage-manifest-v3"
 readonly EXPECTED_LABEL="system_u:object_r:container_file_t:s0"
 readonly EXPECTED_LABEL_SUFFIX="object_r:container_file_t:s0"
 readonly REPAIR_REQUIRED_STATUS=78
@@ -20,6 +20,7 @@ declare REPAIR_REQUEST=""
 declare HAS_ZFS=0
 declare MANIFEST_SERVICE=""
 declare -a SERVICE_PORTS=()
+declare -a SERVICE_SUPPLEMENTAL_GIDS=()
 
 declare -a ENTRY_KIND=()
 declare -a ENTRY_DATASET=()
@@ -137,10 +138,14 @@ parse_service_record() {
     shift
     local ports
     local port
+    local supplemental_gids
+    local supplemental_gid
     local -A seen_ports=()
+    local -A seen_supplemental_gids=()
     local -a requested_ports=()
+    local -a requested_supplemental_gids=()
 
-    (($# == 7)) || die "line ${line_number}: service records require 7 fields"
+    (($# == 8)) || die "line ${line_number}: service records require 8 fields"
     [[ -z "${SERVICE_NAME}" ]] || die "line ${line_number}: duplicate service record"
 
     SERVICE_NAME="$1"
@@ -151,6 +156,7 @@ parse_service_record() {
     SERVICE_SUBID_COUNT="$6"
     SERVICE_CONTAINER="${SERVICE_NAME}"
     ports="$7"
+    supplemental_gids="$8"
 
     [[ "${SERVICE_NAME}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || die "line ${line_number}: invalid service name"
     [[ "${SERVICE_USER}" =~ ^_nas_[a-z][a-z0-9]*$ ]] || die "line ${line_number}: invalid service user"
@@ -161,17 +167,32 @@ parse_service_record() {
     ((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT} <= 4294967296)) ||
         die "line ${line_number}: subordinate ID range exceeds uint32"
 
-    if [[ "${ports}" == "-" ]]; then
-        return
+    if [[ "${ports}" != "-" ]]; then
+        IFS=',' read -r -a requested_ports <<< "${ports}"
+        for port in "${requested_ports[@]}"; do
+            [[ "${port}" =~ ^[1-9][0-9]{0,4}$ ]] || die "line ${line_number}: invalid TCP port '${port}'"
+            ((10#${port} <= 65535)) || die "line ${line_number}: invalid TCP port '${port}'"
+            [[ -z "${seen_ports[${port}]+x}" ]] || die "line ${line_number}: duplicate TCP port '${port}'"
+            seen_ports["${port}"]=1
+            SERVICE_PORTS+=("${port}")
+        done
     fi
-    IFS=',' read -r -a requested_ports <<< "${ports}"
-    for port in "${requested_ports[@]}"; do
-        [[ "${port}" =~ ^[1-9][0-9]{0,4}$ ]] || die "line ${line_number}: invalid TCP port '${port}'"
-        ((10#${port} <= 65535)) || die "line ${line_number}: invalid TCP port '${port}'"
-        [[ -z "${seen_ports[${port}]+x}" ]] || die "line ${line_number}: duplicate TCP port '${port}'"
-        seen_ports["${port}"]=1
-        SERVICE_PORTS+=("${port}")
-    done
+
+    if [[ "${supplemental_gids}" != "-" ]]; then
+        IFS=',' read -r -a requested_supplemental_gids <<< "${supplemental_gids}"
+        for supplemental_gid in "${requested_supplemental_gids[@]}"; do
+            [[ "${supplemental_gid}" =~ ^[1-9][0-9]{0,9}$ ]] ||
+                die "line ${line_number}: invalid supplemental GID '${supplemental_gid}'"
+            ((10#${supplemental_gid} <= 4294967295)) ||
+                die "line ${line_number}: invalid supplemental GID '${supplemental_gid}'"
+            [[ "${supplemental_gid}" != "${SERVICE_GID}" ]] ||
+                die "line ${line_number}: supplemental GID repeats the service GID"
+            [[ -z "${seen_supplemental_gids[${supplemental_gid}]+x}" ]] ||
+                die "line ${line_number}: duplicate supplemental GID '${supplemental_gid}'"
+            seen_supplemental_gids["${supplemental_gid}"]=1
+            SERVICE_SUPPLEMENTAL_GIDS+=("${supplemental_gid}")
+        done
+    fi
 }
 
 parse_storage_record() {
@@ -426,12 +447,25 @@ label_has_expected_security() {
         [[ "${label}" != *:*:*:*:* ]]
 }
 
-ownership_id_is_mapped() {
+ownership_uid_is_mapped() {
     local value="$1"
     local range_end=$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT}))
 
     [[ "${value}" =~ ^[0-9]+$ ]] || return 1
     ((10#${value} == 10#${SERVICE_UID})) && return 0
+    ((10#${value} >= 10#${SERVICE_SUBID_START} && 10#${value} < range_end))
+}
+
+ownership_gid_is_mapped() {
+    local value="$1"
+    local supplemental_gid
+    local range_end=$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT}))
+
+    [[ "${value}" =~ ^[0-9]+$ ]] || return 1
+    ((10#${value} == 10#${SERVICE_GID})) && return 0
+    for supplemental_gid in "${SERVICE_SUPPLEMENTAL_GIDS[@]}"; do
+        ((10#${value} == 10#${supplemental_gid})) && return 0
+    done
     ((10#${value} >= 10#${SERVICE_SUBID_START} && 10#${value} < range_end))
 }
 
@@ -441,7 +475,7 @@ ownership_pair_is_mapped() {
     local gid="${pair#*:}"
 
     [[ "${pair}" == *:* && "${gid}" != *:* ]] || return 1
-    ownership_id_is_mapped "${uid}" && ownership_id_is_mapped "${gid}"
+    ownership_uid_is_mapped "${uid}" && ownership_gid_is_mapped "${gid}"
 }
 
 report_label_mismatch() {
@@ -481,7 +515,7 @@ report_owned_state_mismatch() {
     if [[ -n "${sample}" ]]; then
         value="$(stat_value '%u:%g' "${sample}")"
         if ! ownership_pair_is_mapped "${value}"; then
-            log "drift: ${sample} owner is ${value}; expected ${SERVICE_UID}:${SERVICE_GID} or IDs in ${SERVICE_SUBID_START}..$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT} - 1))"
+            log "drift: ${sample} owner is ${value}; expected service IDs, declared supplemental GIDs (${SERVICE_SUPPLEMENTAL_GIDS[*]:--}), or IDs in ${SERVICE_SUBID_START}..$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT} - 1))"
         fi
     fi
 }
@@ -592,13 +626,19 @@ create_managed_dataset() {
 
 repair_descendant_ownership() {
     local path="$1"
+    local supplemental_gid
     local range_end=$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT}))
     local range_lower=$((10#${SERVICE_SUBID_START} - 1))
+    local -a allowed_gids=(-gid "${SERVICE_GID}")
+
+    for supplemental_gid in "${SERVICE_SUPPLEMENTAL_GIDS[@]}"; do
+        allowed_gids+=(-o -gid "${supplemental_gid}")
+    done
 
     find "${path}" -xdev -path "${path}/.zfs" -prune -o -mindepth 1 \
         \( ! \( -uid "${SERVICE_UID}" -o \
                  \( -uid "+${range_lower}" -a -uid "-${range_end}" \) \) \
-           -o ! \( -gid "${SERVICE_GID}" -o \
+           -o ! \( "${allowed_gids[@]}" -o \
                     \( -gid "+${range_lower}" -a -gid "-${range_end}" \) \) \) \
         -exec chown -h "${SERVICE_UID}:${SERVICE_GID}" {} + ||
         die "unable to repair ownership under ${path}"
@@ -606,15 +646,21 @@ repair_descendant_ownership() {
 
 verify_descendant_ownership() {
     local path="$1"
+    local supplemental_gid
     local range_end=$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT}))
     local range_lower=$((10#${SERVICE_SUBID_START} - 1))
     local unexpected
+    local -a allowed_gids=(-gid "${SERVICE_GID}")
+
+    for supplemental_gid in "${SERVICE_SUPPLEMENTAL_GIDS[@]}"; do
+        allowed_gids+=(-o -gid "${supplemental_gid}")
+    done
 
     if ! unexpected="$(find "${path}" -xdev -path "${path}/.zfs" -prune -o \
         -mindepth 1 \
         \( ! \( -uid "${SERVICE_UID}" -o \
                  \( -uid "+${range_lower}" -a -uid "-${range_end}" \) \) \
-           -o ! \( -gid "${SERVICE_GID}" -o \
+           -o ! \( "${allowed_gids[@]}" -o \
                     \( -gid "+${range_lower}" -a -gid "-${range_end}" \) \) \) \
         -print -quit)"; then
         die "unable to verify ownership under ${path}"

@@ -13,3 +13,7 @@ krun-51240	user@51240.service	ensure-nas-alertmanager-account.service
 krun-51250	user@51250.service	ensure-nas-victoriametrics-account.service
 krun-51260	user@51260.service	ensure-nas-jellyfinmetrics-account.service
 krun-51310	user@51310.service	ensure-nas-caddy-account.service
+krun-51410	user@51410.service	ensure-nas-sonarr-account.service
+krun-51420	user@51420.service	ensure-nas-radarr-account.service
+krun-51430	user@51430.service	ensure-nas-prowlarr-account.service
+krun-51440	user@51440.service	ensure-nas-sabnzbd-account.service

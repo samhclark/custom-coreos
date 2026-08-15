@@ -1,0 +1,141 @@
+"""Render host-side egress readiness artifacts."""
+
+from __future__ import annotations
+
+from .headers import generated_header
+from .model import Fleet, MullvadEgress
+
+
+def mullvad_readiness_script(fleet: Fleet) -> str:
+    """Render the current-boot readiness boundary for the Mullvad link."""
+    if fleet.egress is None:
+        raise ValueError("Mullvad readiness requires fleet egress")
+    egress = fleet.egress
+    selected = tuple(
+        service for service in fleet.active_taps
+        if getattr(service.krun, "egress", None) == "mullvad"
+    )
+    selected_taps = " ".join(f'"{service.tap_name}"' for service in selected)
+    selected_guests = " ".join(
+        f'"{service.tap_guest.ip}"' for service in selected
+    )
+    return f'''#!/bin/bash
+{generated_header("_fleet.toml")}
+
+set -euo pipefail
+
+READY_DIR=/run/nas-egress/mullvad
+READY_FILE="${{READY_DIR}}/ready"
+READY_TEMP="${{READY_FILE}}.tmp"
+INTERFACE={egress.interface}
+ADDRESS={egress.address}
+ROUTE_TABLE={egress.route_table}
+MAGICDNS=100.100.100.100
+SELECTED_TAPS=({selected_taps})
+SELECTED_GUESTS=({selected_guests})
+MAX_WAIT_SECONDS=60
+
+clear_readiness() {{
+    rm -f "${{READY_FILE}}" "${{READY_TEMP}}"
+}}
+
+trap 'clear_readiness' ERR
+trap 'clear_readiness; exit 1' HUP INT TERM
+
+interface_policy_ready() {{
+    /usr/bin/ip -4 -o address show dev "${{INTERFACE}}" \\
+        | /usr/bin/awk -v address="${{ADDRESS}}" '$4 == address {{ found=1 }} END {{ exit !found }}'
+
+    /usr/bin/ip -4 route show table "${{ROUTE_TABLE}}" default \\
+        | /usr/bin/awk -v interface="${{INTERFACE}}" \\
+            '$1 == "default" && $0 ~ "(^|[[:space:]])dev " interface "([[:space:]]|$)" {{ found=1 }} END {{ exit !found }}'
+
+    /usr/bin/ip -4 route get "${{MAGICDNS}}" \\
+        | /usr/bin/awk '$0 ~ /(^|[[:space:]])dev tailscale0([[:space:]]|$)/ {{ found=1 }} END {{ exit !found }}'
+
+    /usr/bin/nft list chain inet filter nas_krun_forward >/dev/null
+    /usr/bin/nft list table ip nas_krun_nat >/dev/null
+
+    forward_rules=$(/usr/bin/nft list chain inet filter nas_krun_forward)
+    nat_rules=$(/usr/bin/nft list table ip nas_krun_nat)
+    for index in "${{!SELECTED_TAPS[@]}}"; do
+        tap="${{SELECTED_TAPS[$index]}}"
+        guest="${{SELECTED_GUESTS[$index]}}"
+        grep -Fq "iifname \\\"${{tap}}\\\" ip saddr ${{guest}} ip daddr ${{MAGICDNS}} oifname \\\"tailscale0\\\" tcp dport 53 accept" <<<"${{forward_rules}}"
+        grep -Fq "iifname \\\"${{tap}}\\\" ip saddr ${{guest}} ip daddr ${{MAGICDNS}} oifname \\\"tailscale0\\\" udp dport 53 accept" <<<"${{forward_rules}}"
+        grep -Fq "iifname \\\"${{tap}}\\\" ip saddr ${{guest}} ip daddr != ${{MAGICDNS}} oifname \\\"${{INTERFACE}}\\\" accept" <<<"${{forward_rules}}"
+        grep -Fq "iifname \\\"${{tap}}\\\" ip saddr ${{guest}} drop" <<<"${{forward_rules}}"
+        grep -Fq "ip saddr ${{guest}} ip daddr ${{MAGICDNS}} oifname \\\"tailscale0\\\" masquerade" <<<"${{nat_rules}}"
+        grep -Fq "ip saddr ${{guest}} ip daddr != ${{MAGICDNS}} oifname \\\"${{INTERFACE}}\\\" masquerade" <<<"${{nat_rules}}"
+    done
+}}
+
+publish_readiness() {{
+    install -d -o root -g root -m 0755 "${{READY_DIR}}"
+    # A marker from an earlier boot must never authorize a selected guest.
+    clear_readiness
+    echo "nas-egress-mullvad: waiting up to ${{MAX_WAIT_SECONDS}} seconds for interface/policy readiness (not a WireGuard handshake)"
+
+    deadline=$((SECONDS + MAX_WAIT_SECONDS))
+    while (( SECONDS < deadline )); do
+        if interface_policy_ready; then
+            read -r boot_id < /proc/sys/kernel/random/boot_id
+            printf '%s\\n' "${{boot_id}}" > "${{READY_TEMP}}"
+            chown root:root "${{READY_TEMP}}"
+            chmod 0644 "${{READY_TEMP}}"
+            mv -f "${{READY_TEMP}}" "${{READY_FILE}}"
+            echo "nas-egress-mullvad: interface/policy readiness published for this boot; this proves interface/policy readiness, not a WireGuard handshake"
+            trap - ERR HUP INT TERM
+            exit 0
+        fi
+        sleep 1
+    done
+
+    echo "nas-egress-mullvad: interface/policy readiness was not established within ${{MAX_WAIT_SECONDS}} seconds; this does not test a WireGuard handshake" >&2
+    return 1
+}}
+
+case "${{1:-}}" in
+    publish)
+        publish_readiness
+        ;;
+    clear)
+        clear_readiness
+        ;;
+    *)
+        echo "usage: $0 publish|clear" >&2
+        exit 2
+        ;;
+esac
+'''
+
+
+def mullvad_readiness_unit() -> str:
+    """Render the system-level current-boot egress readiness unit."""
+    dependencies = (
+        "sops-distribute-secrets.service systemd-networkd.service "
+        "nftables.service tailscaled.service"
+    )
+    return "\n".join(
+        [
+            generated_header("_fleet.toml"),
+            "[Unit]",
+            "Description=Publish current-boot readiness for Mullvad egress",
+            f"Requires={dependencies}",
+            f"BindsTo={dependencies}",
+            f"After={dependencies}",
+            "",
+            "[Service]",
+            "Type=oneshot",
+            "ExecStart=/usr/local/bin/nas-egress-mullvad-readiness.sh publish",
+            "ExecStop=/usr/local/bin/nas-egress-mullvad-readiness.sh clear",
+            "RemainAfterExit=yes",
+            # Leave headroom for the helper's bounded 60-second probe loop and
+            # final atomic marker write.
+            "TimeoutStartSec=75",
+            "",
+            "[Install]",
+            "WantedBy=multi-user.target",
+            "",
+        ]
+    )

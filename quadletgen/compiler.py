@@ -10,9 +10,12 @@ from .model import ConfigError, Fleet, SUBID_COUNT
 from .render_network import (
     network_policy_script,
     network_policy_unit,
+    networkmanager_policy,
     networkd_dependencies,
     networkd_netdev,
     networkd_network,
+    wireguard_netdev,
+    wireguard_network,
     nft_filter,
     nft_nat,
     nftables_policy_dropin,
@@ -21,9 +24,12 @@ from .render_manifest import (
     account_units_manifest,
     active_taps_manifest,
     assets_manifest,
+    egress_units_manifest,
     secrets_manifest,
+    shared_storage_paths_manifest,
     storage_units_manifest,
 )
+from .render_fleet import fleet_groups_sysusers_conf
 from .render_service import (
     container_unit,
     ensure_account_script,
@@ -31,7 +37,13 @@ from .render_service import (
     sysusers_conf,
     tmpfiles_conf,
 )
-from .render_storage import storage_manifest, storage_unit
+from .render_storage import (
+    shared_storage_manifest,
+    shared_storage_unit,
+    storage_manifest,
+    storage_unit,
+)
+from .render_egress import mullvad_readiness_script, mullvad_readiness_unit
 
 
 ARTIFACT_PATH_RE = re.compile(
@@ -83,7 +95,7 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
             ),
             Artifact(
                 Path(f"usr/local/bin/ensure-nas-{host.slug}-account.sh"),
-                ensure_account_script(service),
+                ensure_account_script(service, fleet),
                 executable=True,
             ),
             Artifact(
@@ -101,7 +113,7 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
                 ),
                 Artifact(
                     Path(f"usr/lib/systemd/network/80-{service.tap_name}.network"),
-                    networkd_network(service),
+                    networkd_network(service, fleet),
                 ),
             ]
         if service.storage:
@@ -111,7 +123,7 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
                         "usr/share/custom-coreos/storage/"
                         f"{service.info.name}.storage-manifest"
                     ),
-                    storage_manifest(service),
+                    storage_manifest(service, fleet),
                 ),
                 Artifact(
                     Path(
@@ -122,10 +134,38 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
                 ),
             ]
 
-    subids = _subid_file(fleet)
+    if fleet.groups:
+        artifacts.append(
+            Artifact(
+                Path("usr/lib/sysusers.d/nas-fleet-groups.conf"),
+                fleet_groups_sysusers_conf(fleet),
+            )
+        )
+
+    for resource in fleet.resources:
+        group = fleet.groups_by_name[resource.shared_group]
+        artifacts += [
+            Artifact(
+                Path(
+                    "usr/share/custom-coreos/storage/"
+                    f"{resource.name}.storage-manifest"
+                ),
+                shared_storage_manifest(resource, group.gid),
+            ),
+            Artifact(
+                Path(
+                    "etc/systemd/system/"
+                    f"nas-prepare-{resource.name}-storage.service"
+                ),
+                shared_storage_unit(resource),
+            ),
+        ]
+
+    subuid = _subid_file(fleet, include_shared_groups=False)
+    subgid = _subid_file(fleet, include_shared_groups=True)
     artifacts += [
-        Artifact(Path("etc/subuid"), subids),
-        Artifact(Path("etc/subgid"), subids),
+        Artifact(Path("etc/subuid"), subuid),
+        Artifact(Path("etc/subgid"), subgid),
         Artifact(
             Path("usr/local/bin/nas-krun-network-policy.sh"),
             network_policy_script(fleet),
@@ -146,11 +186,19 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
             ),
             networkd_dependencies(fleet),
         ),
+        Artifact(
+            Path("etc/NetworkManager/conf.d/90-nas-krun-taps.conf"),
+            networkmanager_policy(fleet),
+        ),
         Artifact(Path("etc/nftables/nas-krun-filter.nft"), nft_filter(fleet)),
         Artifact(Path("etc/nftables/nas-krun-nat.nft"), nft_nat(fleet)),
         Artifact(
             Path("usr/share/custom-coreos/fleet/account-units.list"),
             account_units_manifest(fleet),
+        ),
+        Artifact(
+            Path("usr/share/custom-coreos/fleet/egress-units.list"),
+            egress_units_manifest(fleet),
         ),
         Artifact(
             Path("usr/share/custom-coreos/fleet/active-taps.tsv"),
@@ -168,7 +216,31 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
             Path("usr/share/custom-coreos/fleet/storage-units.list"),
             storage_units_manifest(fleet),
         ),
+        Artifact(
+            Path("usr/share/custom-coreos/fleet/shared-storage-paths.list"),
+            shared_storage_paths_manifest(fleet),
+        ),
     ]
+    if fleet.egress is not None:
+        artifacts += [
+            Artifact(
+                Path("usr/lib/systemd/network/70-wg-arr.netdev"),
+                wireguard_netdev(fleet.egress),
+            ),
+            Artifact(
+                Path("usr/lib/systemd/network/70-wg-arr.network"),
+                wireguard_network(fleet.egress),
+            ),
+            Artifact(
+                Path("usr/local/bin/nas-egress-mullvad-readiness.sh"),
+                mullvad_readiness_script(fleet),
+                executable=True,
+            ),
+            Artifact(
+                Path("etc/systemd/system/nas-egress-mullvad.service"),
+                mullvad_readiness_unit(),
+            ),
+        ]
     paths = [artifact.path for artifact in artifacts]
     if len(set(paths)) != len(paths):
         duplicates = sorted(path for path in set(paths) if paths.count(path) > 1)
@@ -179,10 +251,16 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
     return tuple(artifacts)
 
 
-def _subid_file(fleet: Fleet) -> str:
+def _subid_file(fleet: Fleet, *, include_shared_groups: bool) -> str:
     # No header comment: shadow-utils does not document comment support in
     # subuid/subgid, so these files stay bare.
-    return "".join(
-        f"{service.host.username}:{service.host.subid_start}:{SUBID_COUNT}\n"
-        for service in fleet.services
-    )
+    lines = []
+    for service in fleet.services:
+        lines.append(
+            f"{service.host.username}:{service.host.subid_start}:{SUBID_COUNT}"
+        )
+        if include_shared_groups:
+            for group_name in service.identity.supplemental_groups:
+                group = fleet.groups_by_name[group_name]
+                lines.append(f"{service.host.username}:{group.gid}:1")
+    return "\n".join(lines) + "\n"

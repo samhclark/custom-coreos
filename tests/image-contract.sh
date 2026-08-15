@@ -20,6 +20,13 @@ grep -aFq 'krun.tap_name' /usr/bin/crun
 test -x /usr/local/bin/nas-diagnose-immich
 test -x \
     /usr/share/custom-coreos/immich-database/immich-database-entrypoint.sh
+for adapter in \
+    /usr/share/custom-coreos/sonarr/sonarr-entrypoint.sh \
+    /usr/share/custom-coreos/radarr/radarr-entrypoint.sh \
+    /usr/share/custom-coreos/prowlarr/prowlarr-entrypoint.sh \
+    /usr/share/custom-coreos/sabnzbd/sabnzbd-entrypoint.sh; do
+    test -x "${adapter}"
+done
 
 semodule -l | grep -Eq '^gssproxy-local[[:space:]]'
 semodule -l | grep -Eq '^nas-krun-tun[[:space:]]'
@@ -41,6 +48,11 @@ while IFS= read -r unit; do
     [[ -z "${unit}" || "${unit}" == \#* ]] && continue
     [[ "$(systemctl is-enabled "${unit}")" == "enabled" ]]
 done < /usr/share/custom-coreos/fleet/storage-units.list
+
+while IFS= read -r unit; do
+    [[ -z "${unit}" || "${unit}" == \#* ]] && continue
+    [[ "$(systemctl is-enabled "${unit}")" == "enabled" ]]
+done < /usr/share/custom-coreos/fleet/egress-units.list
 
 for unit in \
     bootc-fetch-apply-updates.timer \

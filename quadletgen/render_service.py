@@ -14,7 +14,12 @@ from .model import (
     SUBID_COUNT,
     Service,
 )
-from .render_storage import storage_readiness_line, storage_volume_lines
+from .render_storage import (
+    shared_storage_readiness_lines,
+    shared_storage_volume_lines,
+    storage_readiness_line,
+    storage_volume_lines,
+)
 
 
 def header(service: Service) -> str:
@@ -78,6 +83,17 @@ def container_unit(service: Service, fleet: Fleet) -> str:
                 "UserNS=keep-id:"
                 f"uid={container.container_user},gid={container.container_user}"
             )
+    if service.identity.mapped_container_id is not None:
+        mapped_id = service.identity.mapped_container_id
+        mapped_host_gid = (
+            fleet.groups_by_name[service.identity.mapped_group].gid
+            if service.identity.mapped_group is not None
+            else service.host.uid
+        )
+        lines.append(f"UIDMap=+u{mapped_id}:@{service.host.uid}:1")
+        lines.append(f"GIDMap=+g{mapped_id}:@{mapped_host_gid}:1")
+    if service.identity.supplemental_groups:
+        lines.append("GroupAdd=keep-groups")
     if container.health_cmd is not None:
         lines.append(f"HealthCmd={container.health_cmd}")
     if container.no_new_privileges:
@@ -102,6 +118,7 @@ def container_unit(service: Service, fleet: Fleet) -> str:
         lines.append(f"Volume={volume.source}:{volume.target}{options}")
 
     lines += storage_volume_lines(service)
+    lines += shared_storage_volume_lines(service, fleet)
 
     for secret in container.secrets:
         target = secret.target or f"/run/secrets/{secret.name}"
@@ -146,6 +163,11 @@ def container_unit(service: Service, fleet: Fleet) -> str:
             "sleep 1; done; "
             'echo "krun network policy was not ready within 90 seconds" >&2; exit 1'"'"
         )
+        if getattr(krun, "egress", None) == "mullvad":
+            lines.append(
+                "ExecStartPre=/usr/local/bin/nas-wait-for-readiness.sh "
+                "marker /run/nas-egress/mullvad/ready 60 1"
+            )
     lines += [
         f"ExecStartPre=/usr/bin/test -r /run/nas-secrets/"
         f"{info.name}/{secret.name}"
@@ -154,6 +176,7 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     storage_readiness = storage_readiness_line(service)
     if storage_readiness is not None:
         lines.append(storage_readiness)
+    lines += shared_storage_readiness_lines(service, fleet)
     for dependency in service.startup.dependencies:
         target_service = fleet.services_by_name[dependency.service]
         target_endpoint = target_service.endpoints_by_name[dependency.endpoint]
@@ -194,7 +217,7 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     lines.append("Restart=always")
     lines.append(f"RestartSec={service.unit.restart_sec}")
     timeout_start_sec = service.unit.timeout_start_sec
-    if timeout_start_sec is None and service.storage:
+    if timeout_start_sec is None and (service.storage or service.shared_storage):
         timeout_start_sec = 330
     if timeout_start_sec is not None:
         lines.append(f"TimeoutStartSec={timeout_start_sec}")
@@ -247,8 +270,12 @@ def tmpfiles_conf(service: Service) -> str:
     return "\n".join(lines) + "\n"
 
 
-def ensure_account_script(service: Service) -> str:
+def ensure_account_script(service: Service, fleet: Fleet) -> str:
     host = service.host
+    supplemental_subgid_lines = "\n".join(
+        f'ensure_exact_subid_entry /etc/subgid "{fleet.groups_by_name[name].gid}" "1"'
+        for name in service.identity.supplemental_groups
+    )
 
     return f"""#!/bin/bash
 {header(service)}
@@ -268,7 +295,7 @@ log() {{
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }}
 
-ensure_subid_entry() {{
+ensure_primary_subid_entry() {{
     local file="$1"
     local expected="${{USER_NAME}}:${{USER_SUBID_START}}:${{USER_SUBID_COUNT}}"
     local current
@@ -285,8 +312,20 @@ ensure_subid_entry() {{
         return
     fi
 
-    if [[ "${{current}}" != "${{expected}}" ]]; then
+    if ! grep -Fqx "${{expected}}" "${{file}}"; then
         log "Leaving existing ${{file}} entry for ${{USER_NAME}}: ${{current}}"
+    fi
+}}
+
+ensure_exact_subid_entry() {{
+    local file="$1"
+    local start="$2"
+    local count="$3"
+    local expected="${{USER_NAME}}:${{start}}:${{count}}"
+
+    if ! grep -Fqx "${{expected}}" "${{file}}"; then
+        log "Adding ${{expected}} to ${{file}}"
+        printf '%s\\n' "${{expected}}" >> "${{file}}"
     fi
 }}
 
@@ -319,8 +358,9 @@ if [[ "${{current_shell}}" != "${{USER_SHELL}}" ]]; then
     usermod --shell "${{USER_SHELL}}" "${{USER_NAME}}"
 fi
 
-ensure_subid_entry /etc/subuid
-ensure_subid_entry /etc/subgid
+ensure_primary_subid_entry /etc/subuid
+ensure_primary_subid_entry /etc/subgid
+{supplemental_subgid_lines}
 
 if systemctl is-failed --quiet "user@${{USER_UID}}.service"; then
     log "Retrying user@${{USER_UID}}.service after account setup"

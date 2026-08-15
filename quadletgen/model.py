@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import ipaddress
 import posixpath
 import re
@@ -16,7 +18,10 @@ from .errors import ConfigError
 from .storage_model import (
     DirectoryStorage,
     ExistingZfsStorage,
+    FleetStorageSpec,
+    FleetZfsStorage,
     ManagedZfsStorage,
+    SharedStorageExport,
     StorageSpec,
 )
 
@@ -40,6 +45,8 @@ EXEC_RE = re.compile(
     r"^[A-Za-z0-9_./:=,@+-]+(?: [A-Za-z0-9_./:=,@+-]+)*$"
 )
 MAX_SUBID_START = 2**32 - SUBID_COUNT
+MAX_LINUX_ID = 2**32 - 1
+LINUX_INTERFACE_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,15}$")
 
 
 class Protocol(str, Enum):
@@ -72,6 +79,35 @@ class HostIdentity:
     @property
     def slug(self) -> str:
         return self.username.removeprefix("_nas_")
+
+
+@dataclass(frozen=True, slots=True)
+class FleetGroup:
+    name: str
+    gid: int
+
+
+@dataclass(frozen=True, slots=True)
+class MullvadEgress:
+    interface: str
+    address: ipaddress.IPv4Interface
+    peer_public_key: str
+    endpoint_address: ipaddress.IPv4Address
+    endpoint_port: int
+    allowed_ips: tuple[ipaddress.IPv4Network, ...]
+    secret_name: str
+    route_table: int
+    firewall_mark: int
+
+    def __post_init__(self) -> None:
+        _validate_mullvad_egress(self)
+
+
+@dataclass(frozen=True, slots=True)
+class ServiceIdentity:
+    supplemental_groups: tuple[str, ...] = ()
+    mapped_container_id: int | None = None
+    mapped_group: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,6 +182,7 @@ class Dependency:
 class KrunTsi:
     cpus: int
     ram_mib: int
+    egress: Literal["mullvad"] | None = None
     network: Literal[KrunNetwork.TSI] = field(
         default=KrunNetwork.TSI,
         init=False,
@@ -156,6 +193,7 @@ class KrunTsi:
 class KrunPasst:
     cpus: int
     ram_mib: int
+    egress: Literal["mullvad"] | None = None
     network: Literal[KrunNetwork.PASST] = field(
         default=KrunNetwork.PASST,
         init=False,
@@ -170,6 +208,7 @@ class KrunTap:
     probe_endpoint: str
     probe_timeout_sec: int = 30
     host_access: tuple[int, ...] = ()
+    egress: Literal["mullvad"] | None = None
     network: Literal[KrunNetwork.TAP] = field(
         default=KrunNetwork.TAP,
         init=False,
@@ -202,8 +241,10 @@ class Service:
     info: ServiceInfo
     host: HostIdentity
     container: ContainerSpec
+    identity: ServiceIdentity = field(default_factory=ServiceIdentity)
     krun: KrunSpec | None = None
     storage: tuple[StorageSpec, ...] = ()
+    shared_storage: tuple[SharedStorageExport, ...] = ()
     assets: AssetsSpec | None = None
     startup: StartupSpec = field(default_factory=StartupSpec)
     unit: UnitSpec = field(default_factory=UnitSpec)
@@ -251,17 +292,26 @@ class Service:
 @dataclass(frozen=True, slots=True)
 class Fleet:
     services: tuple[Service, ...]
+    groups: tuple[FleetGroup, ...] = ()
+    resources: tuple[FleetStorageSpec, ...] = ()
+    egress: MullvadEgress | None = None
 
     def __post_init__(self) -> None:
         if any(not isinstance(service, Service) for service in self.services):
             _fail("fleet.services", "must contain only Service instances")
         ordered = tuple(sorted(self.services, key=lambda service: service.host.uid))
         object.__setattr__(self, "services", ordered)
-        _validate_fleet(ordered)
+        _validate_fleet(self)
 
     @classmethod
-    def build(cls, services: list[Service] | tuple[Service, ...]) -> Fleet:
-        return cls(tuple(services))
+    def build(
+        cls,
+        services: list[Service] | tuple[Service, ...],
+        groups: list[FleetGroup] | tuple[FleetGroup, ...] = (),
+        resources: list[FleetStorageSpec] | tuple[FleetStorageSpec, ...] = (),
+        egress: MullvadEgress | None = None,
+    ) -> Fleet:
+        return cls(tuple(services), tuple(groups), tuple(resources), egress)
 
     @property
     def active_taps(self) -> tuple[Service, ...]:
@@ -277,6 +327,16 @@ class Fleet:
     def services_by_name(self) -> Mapping[str, Service]:
         return MappingProxyType(
             {service.info.name: service for service in self.services}
+        )
+
+    @property
+    def groups_by_name(self) -> Mapping[str, FleetGroup]:
+        return MappingProxyType({group.name: group for group in self.groups})
+
+    @property
+    def resources_by_name(self) -> Mapping[str, FleetStorageSpec]:
+        return MappingProxyType(
+            {resource.name: resource for resource in self.resources}
         )
 
 
@@ -356,6 +416,77 @@ def _validate_integer(
         _fail(path, f"must be at most {maximum}")
 
 
+def _validate_mullvad_egress(
+    egress: MullvadEgress,
+    path: str = "fleet.egress.mullvad",
+) -> None:
+    if not isinstance(egress, MullvadEgress):
+        _fail(path, "must be a MullvadEgress")
+    _validate_string(egress.interface, f"{path}.interface")
+    if not LINUX_INTERFACE_NAME_RE.fullmatch(egress.interface) or egress.interface in {
+        ".",
+        "..",
+    }:
+        _fail(
+            f"{path}.interface",
+            "must be a valid Linux interface name of at most 15 characters",
+        )
+    if not egress.interface.startswith("wg-"):
+        _fail(
+            f"{path}.interface",
+            'must use the dedicated "wg-" prefix',
+        )
+    if not isinstance(egress.address, ipaddress.IPv4Interface):
+        _fail(f"{path}.address", "must be an IPv4 interface address")
+    if egress.address.network.prefixlen != 32:
+        _fail(f"{path}.address", "must use an IPv4 /32")
+    _validate_string(egress.peer_public_key, f"{path}.peer-public-key")
+    try:
+        decoded_key = base64.b64decode(egress.peer_public_key, validate=True)
+    except (binascii.Error, ValueError):
+        _fail(f"{path}.peer-public-key", "must be valid Base64")
+    if len(decoded_key) != 32:
+        _fail(f"{path}.peer-public-key", "must decode to exactly 32 bytes")
+    if base64.b64encode(decoded_key).decode("ascii") != egress.peer_public_key:
+        _fail(f"{path}.peer-public-key", "must use canonical Base64 encoding")
+    if not isinstance(egress.endpoint_address, ipaddress.IPv4Address):
+        _fail(f"{path}.endpoint", "must use an IPv4 address")
+    _validate_port(egress.endpoint_port, f"{path}.endpoint")
+    if (
+        not isinstance(egress.allowed_ips, tuple)
+        or len(egress.allowed_ips) != 1
+        or not isinstance(egress.allowed_ips[0], ipaddress.IPv4Network)
+        or egress.allowed_ips[0] != ipaddress.IPv4Network("0.0.0.0/0")
+    ):
+        _fail(
+            f"{path}.allowed-ips",
+            "must contain exactly the IPv4 default route 0.0.0.0/0",
+        )
+    _validate_string(egress.secret_name, f"{path}.secret")
+    if not SECRET_NAME_RE.fullmatch(egress.secret_name):
+        _fail(f"{path}.secret", f"must match {SECRET_NAME_RE.pattern}")
+    _validate_integer(
+        egress.route_table,
+        f"{path}.route-table",
+        # Tables 0 and 253-255 have standard kernel meanings. Reserving the
+        # complete low range makes future substitutions fail closed instead
+        # of colliding with a conventional host routing table.
+        minimum=256,
+        maximum=MAX_LINUX_ID,
+    )
+    _validate_integer(
+        egress.firewall_mark,
+        f"{path}.firewall-mark",
+        minimum=1,
+        maximum=MAX_LINUX_ID,
+    )
+    if egress.firewall_mark != egress.route_table:
+        _fail(
+            f"{path}.firewall-mark",
+            "must equal route-table so the WireGuard policy identity is unique",
+        )
+
+
 def _validate_port(value: int, path: str) -> None:
     _validate_integer(value, path, minimum=1, maximum=65535)
 
@@ -400,6 +531,85 @@ def _validate_host(service: Service) -> None:
     _validate_string(host.display_name, f"{path}.display-name")
     if not DISPLAY_NAME_RE.fullmatch(host.display_name):
         _fail(f"{path}.display-name", f"must match {DISPLAY_NAME_RE.pattern}")
+
+
+def _validate_identity(service: Service) -> None:
+    identity = service.identity
+    path = f"{service.source.name}: [identity]"
+    if len(set(identity.supplemental_groups)) != len(identity.supplemental_groups):
+        _fail(f"{path}.supplemental-groups", "contains duplicates")
+    for index, group in enumerate(identity.supplemental_groups, start=1):
+        _validate_string(group, f"{path}.supplemental-groups[{index}]")
+        if not NAME_RE.fullmatch(group):
+            _fail(
+                f"{path}.supplemental-groups[{index}]",
+                f"must match {NAME_RE.pattern}",
+            )
+    if identity.mapped_container_id is not None:
+        _validate_integer(
+            identity.mapped_container_id,
+            f"{path}.mapped-container-id",
+            minimum=1,
+            maximum=MAX_LINUX_ID,
+        )
+        if (
+            service.container.container_user is not None
+            and service.container.container_user > 0
+        ):
+            _fail(
+                path,
+                "mapped identity is incompatible with positive "
+                "container-user/UserNS behavior",
+            )
+    elif identity.mapped_group is not None:
+        _fail(
+            f"{path}.mapped-group",
+            "requires mapped-container-id",
+        )
+    if identity.mapped_group is not None:
+        _validate_string(identity.mapped_group, f"{path}.mapped-group")
+        if not NAME_RE.fullmatch(identity.mapped_group):
+            _fail(
+                f"{path}.mapped-group",
+                f"must match {NAME_RE.pattern}",
+            )
+        if identity.mapped_group not in identity.supplemental_groups:
+            _fail(
+                f"{path}.mapped-group",
+                "must also be listed in supplemental-groups",
+            )
+
+
+def _validate_fleet_groups(fleet: Fleet) -> None:
+    seen_names: dict[str, int] = {}
+    seen_gids: dict[int, int] = {}
+    for index, group in enumerate(fleet.groups, start=1):
+        path = f"fleet.groups[{index}]"
+        if not isinstance(group, FleetGroup):
+            _fail(path, "must contain only FleetGroup instances")
+        _validate_string(group.name, f"{path}.name")
+        if not NAME_RE.fullmatch(group.name):
+            _fail(f"{path}.name", f"must match {NAME_RE.pattern}")
+        _validate_integer(
+            group.gid,
+            f"{path}.gid",
+            minimum=1,
+            maximum=MAX_LINUX_ID,
+        )
+        if group.name in seen_names:
+            _fail(
+                path,
+                f"duplicate group name {group.name!r} (also at "
+                f"fleet.groups[{seen_names[group.name]}])",
+            )
+        if group.gid in seen_gids:
+            _fail(
+                path,
+                f"duplicate group gid {group.gid} (also at "
+                f"fleet.groups[{seen_gids[group.gid]}])",
+            )
+        seen_names[group.name] = index
+        seen_gids[group.gid] = index
 
 
 def _validate_endpoints(service: Service) -> None:
@@ -578,6 +788,15 @@ def _validate_krun(service: Service) -> None:
     if krun is None:
         return
     path = f"{service.source.name}: [krun]"
+    egress = getattr(krun, "egress", None)
+    if egress is not None:
+        if egress != "mullvad":
+            _fail(f"{path}.egress", 'must be "mullvad"')
+        if not service.active_tap:
+            _fail(
+                f"{path}.egress",
+                "requires an active TAP network",
+            )
     _validate_integer(krun.cpus, f"{path}.cpus", minimum=1)
     _validate_integer(krun.ram_mib, f"{path}.ram-mib", minimum=128)
     if service.container.network == "host":
@@ -717,6 +936,14 @@ def _validate_service(service: Service) -> None:
         for storage in service.storage
     ):
         _fail("service.storage", "must contain only supported storage contracts")
+    if not isinstance(service.shared_storage, tuple) or any(
+        not isinstance(export, SharedStorageExport)
+        for export in service.shared_storage
+    ):
+        _fail(
+            "service.shared-storage",
+            "must contain only supported shared-storage exports",
+        )
     if service.assets is not None and not isinstance(service.assets, AssetsSpec):
         _fail("service.assets", "must be AssetsSpec")
     if service.krun is not None and not isinstance(
@@ -725,6 +952,9 @@ def _validate_service(service: Service) -> None:
     ):
         _fail("service.krun", "must be a supported krun specification")
     _validate_service_info(service)
+    container_paths = {
+        volume.target for volume in service.container.volumes
+    }
     for storage in service.storage:
         if isinstance(storage, ManagedZfsStorage):
             expected_prefix = f"tank/{service.info.name}/"
@@ -740,16 +970,24 @@ def _validate_service(service: Service) -> None:
                     "the only allowed shared existing dataset is tank/videos",
                 )
         for export in storage.exports:
-            if any(
-                volume.target == export.container_path
-                for volume in service.container.volumes
-            ):
+            if export.container_path in container_paths:
                 _fail(
                     f"{service.source.name}: storage[{storage.name}].exports",
                     f"container path {export.container_path!r} is also a raw volume",
                 )
+            container_paths.add(export.container_path)
+    for index, export in enumerate(service.shared_storage, start=1):
+        if export.container_path in container_paths:
+            _fail(
+                f"{service.source.name}: shared-storage[{index}]",
+                f"container path {export.container_path!r} is already declared",
+            )
+        container_paths.add(export.container_path)
     _validate_host(service)
     _validate_container(service)
+    if not isinstance(service.identity, ServiceIdentity):
+        _fail("service.identity", "must be ServiceIdentity")
+    _validate_identity(service)
     _validate_krun(service)
     if (
         service.container.endpoints
@@ -765,14 +1003,95 @@ def _validate_service(service: Service) -> None:
     _validate_unit(service)
 
 
-def _validate_fleet(services: tuple[Service, ...]) -> None:
+def _validate_fleet(fleet: Fleet) -> None:
+    services = fleet.services
+    _validate_fleet_groups(fleet)
+    if fleet.egress is not None:
+        _validate_mullvad_egress(fleet.egress)
+    if any(not isinstance(resource, FleetZfsStorage) for resource in fleet.resources):
+        _fail("fleet.resources", "must contain only FleetZfsStorage instances")
+    resource_names: dict[str, str] = {}
+    resource_paths: dict[tuple[str, str], str] = {}
+    for resource in fleet.resources:
+        if resource.name in resource_names:
+            _fail(
+                "fleet.resources",
+                f"duplicate resource name {resource.name!r}",
+            )
+        resource_names[resource.name] = "fleet"
+        if resource.shared_group not in fleet.groups_by_name:
+            _fail(
+                "fleet",
+                f"resource {resource.name!r} references undefined shared group "
+                f"{resource.shared_group!r}",
+            )
+        for kind, value in (
+            ("storage host path", resource.host_path),
+            ("ZFS dataset", resource.dataset),
+        ):
+            key = (kind, value)
+            if key in resource_paths:
+                _fail(
+                    "fleet",
+                    f"duplicate {kind} {value!r}",
+                )
+            resource_paths[key] = resource.name
+
     seen: dict[tuple[str, object], str] = {}
+    for resource in fleet.resources:
+        seen[("storage host path", resource.host_path)] = (
+            f"fleet resource {resource.name}"
+        )
+        seen[("ZFS dataset", resource.dataset)] = (
+            f"fleet resource {resource.name}"
+        )
     ranges: list[tuple[int, int, str]] = []
     tap_networks: dict[ipaddress.IPv4Network, str] = {}
     host_publications: dict[tuple[int, Protocol], str] = {}
     tap_names = {service.info.name for service in services if service.active_tap}
     service_names = {service.info.name for service in services}
     application_roles: dict[tuple[str, str], str] = {}
+    host_uids = {service.host.uid for service in services}
+    main_subid_ranges = [
+        (service.host.subid_start, service.host.subid_start + SUBID_COUNT)
+        for service in services
+    ]
+
+    for service in services:
+        service_egress = getattr(service.krun, "egress", None)
+        if service_egress is not None and fleet.egress is None:
+            _fail(
+                service.source.name,
+                "[krun].egress requires [egress.mullvad] in the fleet config",
+            )
+        for group_name in service.identity.supplemental_groups:
+            if group_name not in fleet.groups_by_name:
+                _fail(
+                    service.source.name,
+                    f"undefined fleet group {group_name!r}",
+                )
+        if service.identity.mapped_group is not None and (
+            service.identity.mapped_group not in fleet.groups_by_name
+        ):
+            _fail(
+                service.source.name,
+                f"undefined mapped fleet group "
+                f"{service.identity.mapped_group!r}",
+            )
+
+    for group in fleet.groups:
+        if group.gid in host_uids:
+            _fail(
+                "fleet",
+                f"fleet group {group.name!r} gid {group.gid} conflicts "
+                "with a service uid",
+            )
+        if any(start <= group.gid < end for start, end in main_subid_ranges):
+            _fail(
+                "fleet",
+                f"fleet group {group.name!r} gid {group.gid} overlaps "
+                "a service subordinate ID range",
+            )
 
     for service in services:
         name = service.source.name
@@ -823,6 +1142,29 @@ def _validate_fleet(services: tuple[Service, ...]) -> None:
                         f"(also in {seen[resource]})",
                     )
                 seen[resource] = name
+        for index, export in enumerate(service.shared_storage, start=1):
+            resource = fleet.resources_by_name.get(export.resource)
+            if resource is None:
+                _fail(
+                    f"{name}: shared-storage[{index}]",
+                    f"unknown fleet resource {export.resource!r}",
+                )
+            allowed_subpaths = {".", *resource.required_paths}
+            if export.subpath not in allowed_subpaths:
+                _fail(
+                    f"{name}: shared-storage[{index}].subpath",
+                    f"is not declared by fleet resource {resource.name!r}",
+                )
+            if (
+                export.access.value == "read-write"
+                and resource.shared_group
+                not in service.identity.supplemental_groups
+            ):
+                _fail(
+                    f"{name}: shared-storage[{index}].access",
+                    f"read-write access requires fleet group "
+                    f"{resource.shared_group!r}",
+                )
         if service.container.enabled:
             for endpoint in service.container.endpoints:
                 if endpoint.host_port is None:

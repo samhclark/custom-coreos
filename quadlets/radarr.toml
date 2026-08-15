@@ -1,0 +1,82 @@
+# ABOUTME: Radarr movie-library automation with Mullvad-only internet egress
+# and shared TRaSH-layout media access.
+
+[service]
+name = "radarr"
+application = "media-automation"
+role = "movies"
+description = "Radarr Movie Library Automation"
+documentation = "https://radarr.video/"
+
+[host]
+username = "_nas_radarr"
+uid = 51420
+subid-start = 514200000
+display-name = "Radarr"
+
+[identity]
+supplemental-groups = ["media"]
+mapped-container-id = 1000
+mapped-group = "media"
+
+[container]
+image = "lscr.io/linuxserver/radarr:6.3.0.10514-ls313@sha256:a45b5ab0f850f39edb4cc9c95bbd967b52ddc3d4574a4dfb45561177db6c88f4"
+network = "host"
+container-user = 0
+entrypoint = "/usr/share/custom-coreos/radarr/radarr-entrypoint.sh"
+health-cmd = "none"
+no-new-privileges = true
+drop-capabilities = ["NET_RAW"]
+dns = ["100.100.100.100"]
+
+[container.environment]
+TZ = "America/Chicago"
+
+[[container.volumes]]
+comment = "Image-controlled libkrun entrypoint adapter (read-only)"
+source = "/usr/share/custom-coreos/radarr"
+target = "/usr/share/custom-coreos/radarr"
+options = "ro"
+
+[krun]
+enabled = true
+cpus = 2
+ram-mib = 1024
+network = "tap"
+ipv4 = "10.253.15.2/30"
+probe-endpoint = "http"
+probe-timeout-sec = 300
+egress = "mullvad"
+
+[[container.endpoints]]
+name = "http"
+port = 7878
+consumers = ["caddy", "prowlarr"]
+
+[assets]
+path = "/usr/share/custom-coreos/radarr"
+
+[[storage]]
+name = "config"
+kind = "managed-zfs"
+dataset = "tank/radarr/config"
+host-path = "/var/lib/radarr/config"
+mode = "0750"
+record-size = "16K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/config"
+access = "read-write"
+
+[[shared-storage]]
+resource = "media"
+subpath = "data"
+container-path = "/data"
+access = "read-write"
+
+[unit]
+timeout-start-sec = 900

@@ -15,21 +15,24 @@ from .model import (
     Dependency,
     DependencyCondition,
     Endpoint,
+    FleetGroup,
     HostIdentity,
     KrunNetwork,
     KrunPasst,
     KrunSpec,
     KrunTap,
     KrunTsi,
+    MullvadEgress,
     Protocol,
     SecretMount,
     Service,
+    ServiceIdentity,
     ServiceInfo,
     StartupSpec,
     UnitSpec,
     VolumeMount,
 )
-from .storage_parser import parse_storage
+from .storage_parser import parse_fleet_storage, parse_shared_storage, parse_storage
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -359,6 +362,31 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
     )
 
 
+def _parse_identity(raw: object, name: str) -> ServiceIdentity:
+    path = f"{name}: [identity]"
+    table = _table(
+        raw,
+        path,
+        {"supplemental-groups", "mapped-container-id", "mapped-group"},
+        required=False,
+    )
+    return ServiceIdentity(
+        supplemental_groups=_string_array(
+            table.get("supplemental-groups", []),
+            f"{path}.supplemental-groups",
+        ),
+        mapped_container_id=(
+            _integer(
+                table["mapped-container-id"],
+                f"{path}.mapped-container-id",
+            )
+            if "mapped-container-id" in table
+            else None
+        ),
+        mapped_group=_optional_string(table, "mapped-group", path),
+    )
+
+
 def _parse_host_access(raw: object, name: str) -> tuple[int, ...]:
     path = f"{name}: [krun].host-access"
     if raw is None:
@@ -388,6 +416,7 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
             "probe-endpoint",
             "probe-timeout-sec",
             "host-access",
+            "egress",
         },
     )
     enabled = _boolean(_required(table, "enabled", path), f"{path}.enabled")
@@ -405,6 +434,11 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
     if network_text not in {item.value for item in KrunNetwork}:
         _fail(f"{path}.network", 'must be "tsi", "passt", or "tap"')
     network = KrunNetwork(network_text)
+    egress = table.get("egress")
+    if egress is not None:
+        egress = _string(egress, f"{path}.egress")
+        if egress != "mullvad":
+            _fail(f"{path}.egress", 'must be "mullvad"')
     tap_only_present = any(
         key in table
         for key in (
@@ -437,12 +471,13 @@ def _parse_krun(raw: object, name: str, container: ContainerSpec) -> KrunSpec | 
                 f"{path}.probe-timeout-sec",
             ),
             host_access=_parse_host_access(table.get("host-access"), name),
+            egress=egress,
         )
     if tap_only_present:
         _fail(path, 'TAP-only fields require network = "tap"')
     if network is KrunNetwork.PASST:
-        return KrunPasst(cpus, ram_mib)
-    return KrunTsi(cpus, ram_mib)
+        return KrunPasst(cpus, ram_mib, egress=egress)
+    return KrunTsi(cpus, ram_mib, egress=egress)
 
 
 def _parse_assets(
@@ -552,6 +587,150 @@ def _parse_startup(
     )
 
 
+def _load_fleet_tables(toml_path: Path) -> dict[str, object]:
+    with toml_path.open("rb") as config_file:
+        raw = tomllib.load(config_file)
+    name = toml_path.name
+    return _table(raw, name, {"groups", "resources", "egress"})
+
+
+def load_fleet_config(toml_path: Path) -> tuple[FleetGroup, ...]:
+    name = toml_path.name
+    top = _load_fleet_tables(toml_path)
+    groups = top.get("groups", [])
+    if not isinstance(groups, list):
+        _fail(f"{name}: [[groups]]", "must be an array of tables")
+    result = []
+    for index, item in enumerate(groups, start=1):
+        path = f"{name}: [[groups]][{index}]"
+        table = _table(item, path, {"name", "gid"})
+        result.append(
+            FleetGroup(
+                name=_string(
+                    _required(table, "name", path),
+                    f"{path}.name",
+                ),
+                gid=_integer(
+                    _required(table, "gid", path),
+                    f"{path}.gid",
+                ),
+            )
+        )
+        if result[-1].gid < 1:
+            _fail(f"{path}.gid", "must be at least 1")
+    return tuple(result)
+
+
+def load_fleet_storage(toml_path: Path):
+    name = toml_path.name
+    top = _load_fleet_tables(toml_path)
+    return parse_fleet_storage(top.get("resources"), name)
+
+
+def _parse_mullvad_endpoint(
+    raw: object,
+    path: str,
+) -> tuple[ipaddress.IPv4Address, int]:
+    text = _string(raw, path)
+    match = re.fullmatch(r"([^:]+):(\d+)", text)
+    if match is None:
+        _fail(path, "must be an IPv4 address and port")
+    try:
+        address = ipaddress.ip_address(match.group(1))
+    except ValueError:
+        _fail(path, "contains an invalid IP address")
+    if not isinstance(address, ipaddress.IPv4Address):
+        _fail(path, "must use an IPv4 address")
+    return address, int(match.group(2))
+
+
+def _parse_mullvad_egress(raw: object, name: str) -> MullvadEgress | None:
+    if raw is None:
+        return None
+    path = f"{name}: [egress.mullvad]"
+    table = _table(
+        raw,
+        path,
+        {
+            "interface",
+            "address",
+            "peer-public-key",
+            "endpoint",
+            "allowed-ips",
+            "secret",
+            "route-table",
+            "firewall-mark",
+        },
+    )
+    address_text = _string(
+        _required(table, "address", path),
+        f"{path}.address",
+    )
+    try:
+        address = ipaddress.ip_interface(address_text)
+    except ValueError:
+        _fail(f"{path}.address", "must be an IPv4 interface address")
+    if not isinstance(address, ipaddress.IPv4Interface):
+        _fail(f"{path}.address", "must be an IPv4 interface address")
+    endpoint_address, endpoint_port = _parse_mullvad_endpoint(
+        _required(table, "endpoint", path),
+        f"{path}.endpoint",
+    )
+    allowed_raw = _required(table, "allowed-ips", path)
+    if not isinstance(allowed_raw, list):
+        _fail(f"{path}.allowed-ips", "must be an array of IPv4 networks")
+    allowed_ips = []
+    for index, item in enumerate(allowed_raw, start=1):
+        item_path = f"{path}.allowed-ips[{index}]"
+        text = _string(item, item_path)
+        try:
+            network = ipaddress.ip_network(text, strict=True)
+        except ValueError:
+            _fail(item_path, "must be an IPv4 network")
+        if not isinstance(network, ipaddress.IPv4Network):
+            _fail(item_path, "must be an IPv4 network")
+        allowed_ips.append(network)
+    return MullvadEgress(
+        interface=_string(
+            _required(table, "interface", path),
+            f"{path}.interface",
+        ),
+        address=address,
+        peer_public_key=_string(
+            _required(table, "peer-public-key", path),
+            f"{path}.peer-public-key",
+        ),
+        endpoint_address=endpoint_address,
+        endpoint_port=endpoint_port,
+        allowed_ips=tuple(allowed_ips),
+        secret_name=_string(
+            _required(table, "secret", path),
+            f"{path}.secret",
+        ),
+        route_table=_integer(
+            _required(table, "route-table", path),
+            f"{path}.route-table",
+        ),
+        firewall_mark=_integer(
+            _required(table, "firewall-mark", path),
+            f"{path}.firewall-mark",
+        ),
+    )
+
+
+def load_fleet_egress(toml_path: Path) -> MullvadEgress | None:
+    top = _load_fleet_tables(toml_path)
+    name = toml_path.name
+    raw = top.get("egress")
+    if raw is None:
+        return None
+    table = _table(raw, f"{name}: [egress]", {"mullvad"})
+    return _parse_mullvad_egress(
+        _required(table, "mullvad", f"{name}: [egress]"),
+        name,
+    )
+
+
 def load_service(toml_path: Path) -> Service:
     with toml_path.open("rb") as config_file:
         raw = tomllib.load(config_file)
@@ -563,8 +742,10 @@ def load_service(toml_path: Path) -> Service:
             "service",
             "host",
             "container",
+            "identity",
             "krun",
             "storage",
+            "shared-storage",
             "assets",
             "startup",
             "unit",
@@ -582,8 +763,10 @@ def load_service(toml_path: Path) -> Service:
         info=info,
         host=host,
         container=container,
+        identity=_parse_identity(top.get("identity"), name),
         krun=krun,
         storage=parse_storage(top.get("storage"), name),
+        shared_storage=parse_shared_storage(top.get("shared-storage"), name),
         assets=_parse_assets(top.get("assets"), name),
         startup=_parse_startup(top.get("startup"), name),
         unit=_parse_unit(top.get("unit"), name),

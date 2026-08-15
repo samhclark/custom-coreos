@@ -1,0 +1,38 @@
+# Authored fleet-level identity declarations.
+#
+# Service files opt into these groups through their [identity] table. Keep
+# this file separate from service TOML files: the compiler discovers services
+# with the [!_]*.toml glob.
+
+[[groups]]
+name = "media"
+gid = 52000
+
+[egress.mullvad]
+interface = "wg-arr"
+address = "10.72.38.9/32"
+peer-public-key = "xpZ3ZDEukbqKQvdHwaqKMUhsYhcYD3uLPUh1ACsVr1s="
+endpoint = "23.144.160.86:3094"
+allowed-ips = ["0.0.0.0/0"]
+secret = "mullvad-private-key"
+route-table = 51820
+firewall-mark = 51820
+
+[[resources]]
+name = "media"
+kind = "existing-zfs"
+dataset = "tank/videos"
+host-path = "/var/zfs/tank/videos"
+shared-group = "media"
+mode = "2775"
+required-paths = [
+  "data",
+  "data/usenet",
+  "data/usenet/incomplete",
+  "data/usenet/complete",
+  "data/usenet/complete/movies",
+  "data/usenet/complete/tv",
+  "data/media",
+  "data/media/movies",
+  "data/media/tv",
+]

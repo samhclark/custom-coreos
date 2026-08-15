@@ -18,9 +18,9 @@ display-name = "Caddy"
 image = "ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:fc548596b7bbc0ec5aa82a495e74652cecb4602fad3bb63b2d707ca4e6e1e555"
 network = "host"
 # Avoid the host's loopback-only systemd-resolved stub inside the nested guest.
-# MagicDNS preserves tailnet resolution; Comcast resolvers provide fallbacks
-# for ACME and Cloudflare DNS API access.
-dns = ["100.100.100.100", "75.75.75.75", "75.75.76.76"]
+# MagicDNS preserves tailnet resolution and forwards public lookups to the
+# tailnet-wide Quad9 resolver over Tailscale's encrypted DNS path.
+dns = ["100.100.100.100"]
 container-user = 0
 
 [krun]

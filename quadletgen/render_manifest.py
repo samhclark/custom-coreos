@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import posixpath
+
 from .headers import generated_header
 from .model import ConfigError, Fleet
 
@@ -50,6 +52,18 @@ def secrets_manifest(fleet: Fleet) -> str:
                     secret.name,
                 )
             )
+    if fleet.egress is not None:
+        lines.append(_row("mullvad", "root", fleet.egress.secret_name))
+    return "\n".join(lines) + "\n"
+
+
+def egress_units_manifest(fleet: Fleet) -> str:
+    lines = [
+        generated_header("fleet egress units"),
+        "# systemd unit",
+    ]
+    if fleet.egress is not None:
+        lines.append("nas-egress-mullvad.service")
     return "\n".join(lines) + "\n"
 
 
@@ -76,10 +90,28 @@ def storage_units_manifest(fleet: Fleet) -> str:
         "# systemd unit",
     ]
     lines.extend(
+        f"nas-prepare-{resource.name}-storage.service"
+        for resource in sorted(fleet.resources, key=lambda item: item.name)
+    )
+    lines.extend(
         f"nas-prepare-{service.info.name}-storage.service"
         for service in sorted(fleet.services, key=lambda item: item.info.name)
         if service.storage
     )
+    return "\n".join(lines) + "\n"
+
+
+def shared_storage_paths_manifest(fleet: Fleet) -> str:
+    lines = [
+        generated_header("fleet shared storage paths"),
+        "# host path; image build installs policy but does not restore labels",
+    ]
+    for resource in sorted(fleet.resources, key=lambda item: item.name):
+        lines.append(resource.host_path)
+        lines.extend(
+            posixpath.join(resource.host_path, required_path)
+            for required_path in resource.required_paths
+        )
     return "\n".join(lines) + "\n"
 
 

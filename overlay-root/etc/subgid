@@ -1,5 +1,6 @@
 _nas_garage:511100000:65536
 _nas_jellyfin:511200000:65536
+_nas_jellyfin:52000:1
 _nas_immichserver:511300000:65536
 _nas_immichdatabase:511400000:65536
 _nas_immichvalkey:511500000:65536
@@ -11,3 +12,10 @@ _nas_alertmanager:512400000:65536
 _nas_victoriametrics:512500000:65536
 _nas_jellyfinmetrics:512600000:65536
 _nas_caddy:513100000:65536
+_nas_sonarr:514100000:65536
+_nas_sonarr:52000:1
+_nas_radarr:514200000:65536
+_nas_radarr:52000:1
+_nas_prowlarr:514300000:65536
+_nas_sabnzbd:514400000:65536
+_nas_sabnzbd:52000:1

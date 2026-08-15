@@ -23,7 +23,7 @@ class CaddyStatePreparationTests(unittest.TestCase):
     def test_manifest_owns_both_persistent_state_trees(self):
         self.assertIn(
             "service|caddy|_nas_caddy|51310|51310|513100000|65536|"
-            "80,443,2019",
+            "80,443,2019|-",
             MANIFEST,
         )
         self.assertIn("directory|/var/lib/caddy|0750", MANIFEST)
@@ -76,8 +76,8 @@ class CaddyStatePreparationTests(unittest.TestCase):
         self.assertNotIn("Annotation=krun.use_passt", QUADLET)
         self.assertNotIn("Sysctl=net.ipv4.ip_unprivileged_port_start", QUADLET)
         self.assertIn("DNS=100.100.100.100", QUADLET)
-        self.assertIn("DNS=75.75.75.75", QUADLET)
-        self.assertIn("DNS=75.75.76.76", QUADLET)
+        self.assertNotIn("DNS=75.75.75.75", QUADLET)
+        self.assertNotIn("DNS=75.75.76.76", QUADLET)
         self.assertNotIn("DNS=127.", QUADLET)
 
     def test_caddyfile_uses_tap_service_names_and_allows_http3(self):
