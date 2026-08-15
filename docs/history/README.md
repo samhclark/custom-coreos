@@ -20,3 +20,8 @@ work, and never execute its commands against the NAS.
   platform migrations
 - `deployments/` — one-time preflight and rollout checklists for completed
   service deployments
+
+Recent deployment retrospectives:
+
+- [`deployments/immich.md`](deployments/immich.md) — Immich rollout churn,
+  reboot evidence, storage-readiness findings, and sequencing recommendation

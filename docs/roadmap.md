@@ -44,10 +44,12 @@ architecture or operating instructions.
    investigating safe Intel media-device exposure. Software processing is the
    production configuration until that evidence is complete. See
    `docs/investigations/jellyfin-hardware-transcoding.md`.
-2. **Service expansion.** Immich is production-configured and awaiting its
-   first NAS validation. Audiobookshelf and the selected media automation
-   services remain candidates. Add them only when storage, exposure, secrets,
-   backup, and monitoring contracts are explicit.
+2. **Service expansion.** Immich first use, uploads, and cross-device viewing
+   are validated; confirm one clean reboot after the mapped-ownership storage
+   readiness fix, then use the selected media automation services as the next
+   application-group proving case. Add candidates only when storage, exposure,
+   secrets, monitoring, and the explicit backup-or-no-backup disposition are
+   understood.
 3. **Jellyfin operational validation.** Continue representative playback,
    monitoring, and recovery checks without weakening the VM boundary or
    privacy-limited exporter contract.

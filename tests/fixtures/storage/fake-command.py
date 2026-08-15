@@ -147,6 +147,23 @@ def find_command(state):
     root = ARGS[0]
     children = descendants(state, root)
 
+    def mapped_id(value, kind):
+        declarations = [
+            ARGS[index + 1]
+            for index, argument in enumerate(ARGS[:-1])
+            if argument == f"-{kind}"
+        ]
+        primary = next(int(item) for item in declarations if item.isdigit())
+        lower = next(int(item[1:]) + 1 for item in declarations if item.startswith("+"))
+        upper = next(int(item[1:]) for item in declarations if item.startswith("-"))
+        return value == primary or lower <= value < upper
+
+    def mapped_owner(child):
+        uid, gid = (
+            int(value) for value in path_state(state, child)["owner"].split(":", 1)
+        )
+        return mapped_id(uid, "uid") and mapped_id(gid, "gid")
+
     if "-maxdepth" in ARGS:
         if children:
             print(children[0])
@@ -155,15 +172,14 @@ def find_command(state):
     if "-exec" in ARGS:
         owner_arg = ARGS[ARGS.index("chown") + 2]
         for child in children:
-            path_state(state, child)["owner"] = owner_arg
+            if not mapped_owner(child):
+                path_state(state, child)["owner"] = owner_arg
         save_state(state)
         return
 
     if "-uid" in ARGS and "-gid" in ARGS:
-        uid = ARGS[ARGS.index("-uid") + 1]
-        gid = ARGS[ARGS.index("-gid") + 1]
         for child in children:
-            if path_state(state, child)["owner"] != f"{uid}:{gid}":
+            if not mapped_owner(child):
                 print(child)
                 return
         return

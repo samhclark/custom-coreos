@@ -52,6 +52,16 @@ dataset destruction, rollback, property mutation, and snapshot retention are
 outside this engine. Snapshot expiry remains a separate, narrowly reviewed
 unit because it intentionally destroys only expired snapshots.
 
+Owned storage roots require the service's exact host UID/GID, declared mode,
+and canonical `system_u:object_r:container_file_t:s0` context. The bounded
+descendant sample has a different contract because rootless user namespaces
+can legitimately create files as either the service host UID/GID or an ID in
+that service's generated 65,536-ID subordinate range. Its SELinux user field
+may also differ; readiness enforces the security-relevant
+`object_r:container_file_t:s0` suffix and rejects MCS categories. IDs outside
+the service identity and assigned subordinate range, wrong SELinux types, and
+non-`s0` ranges remain drift.
+
 ## Repair policy
 
 Normal boot performs root and one-descendant checks, not unbounded scans.
@@ -71,7 +81,13 @@ recursive work, removes the explicit request only after the whole group
 passes, and publishes readiness last. Recursive traversals stay on one
 filesystem, prune `.zfs`, and use `restorecon -F -R -x`.
 
+An explicit-repair-required refusal exits with status 78. Generated storage
+units declare that status in `RestartPreventExitStatus`, so deterministic
+operator intervention does not become a 30-second retry loop; transient
+failures retain the existing restart policy. Drift logs name the exact sampled
+path and observed ownership, mode, or label before refusing repair.
+
 The current stateful services are Caddy, Alertmanager, Grafana, Garage,
-VictoriaMetrics, and Jellyfin. Blackbox exporter, vmalert, and Jellyfin
-exporter are intentionally stateless; image assets and runtime secrets are
-separate declaration classes.
+VictoriaMetrics, Jellyfin, and all four Immich components. Blackbox exporter,
+vmalert, and Jellyfin exporter are intentionally stateless; image assets and
+runtime secrets are separate declaration classes.

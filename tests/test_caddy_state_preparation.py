@@ -21,7 +21,11 @@ CADDYFILE = (
 
 class CaddyStatePreparationTests(unittest.TestCase):
     def test_manifest_owns_both_persistent_state_trees(self):
-        self.assertIn("service|caddy|_nas_caddy|51310|51310|80,443,2019", MANIFEST)
+        self.assertIn(
+            "service|caddy|_nas_caddy|51310|51310|513100000|65536|"
+            "80,443,2019",
+            MANIFEST,
+        )
         self.assertIn("directory|/var/lib/caddy|0750", MANIFEST)
         self.assertIn("directory|/var/lib/caddy-config|0750", MANIFEST)
         self.assertNotIn("managed-zfs", MANIFEST)

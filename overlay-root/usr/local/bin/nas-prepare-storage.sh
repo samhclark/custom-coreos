@@ -4,13 +4,17 @@
 
 set -euo pipefail
 
-readonly MANIFEST_VERSION="nas-storage-manifest-v1"
+readonly MANIFEST_VERSION="nas-storage-manifest-v2"
 readonly EXPECTED_LABEL="system_u:object_r:container_file_t:s0"
+readonly EXPECTED_LABEL_SUFFIX="object_r:container_file_t:s0"
+readonly REPAIR_REQUIRED_STATUS=78
 
 declare SERVICE_NAME=""
 declare SERVICE_USER=""
 declare SERVICE_UID=""
 declare SERVICE_GID=""
+declare SERVICE_SUBID_START=""
+declare SERVICE_SUBID_COUNT=""
 declare SERVICE_CONTAINER=""
 declare REPAIR_REQUEST=""
 declare HAS_ZFS=0
@@ -29,6 +33,11 @@ declare -A SEEN_PATHS=()
 die() {
     printf 'nas-prepare-storage: ERROR: %s\n' "$*" >&2
     exit 1
+}
+
+repair_required() {
+    printf 'nas-prepare-storage: ERROR: %s\n' "$*" >&2
+    exit "${REPAIR_REQUIRED_STATUS}"
 }
 
 log() {
@@ -131,20 +140,26 @@ parse_service_record() {
     local -A seen_ports=()
     local -a requested_ports=()
 
-    (($# == 5)) || die "line ${line_number}: service records require 5 fields"
+    (($# == 7)) || die "line ${line_number}: service records require 7 fields"
     [[ -z "${SERVICE_NAME}" ]] || die "line ${line_number}: duplicate service record"
 
     SERVICE_NAME="$1"
     SERVICE_USER="$2"
     SERVICE_UID="$3"
     SERVICE_GID="$4"
+    SERVICE_SUBID_START="$5"
+    SERVICE_SUBID_COUNT="$6"
     SERVICE_CONTAINER="${SERVICE_NAME}"
-    ports="$5"
+    ports="$7"
 
     [[ "${SERVICE_NAME}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || die "line ${line_number}: invalid service name"
     [[ "${SERVICE_USER}" =~ ^_nas_[a-z][a-z0-9]*$ ]] || die "line ${line_number}: invalid service user"
     [[ "${SERVICE_UID}" =~ ^51[0-9]{3}$ ]] || die "line ${line_number}: service UID is outside 51000-51999"
     [[ "${SERVICE_GID}" == "${SERVICE_UID}" ]] || die "line ${line_number}: service UID and GID must match"
+    [[ "${SERVICE_SUBID_START}" =~ ^[1-9][0-9]{8}$ ]] || die "line ${line_number}: invalid subordinate ID start"
+    [[ "${SERVICE_SUBID_COUNT}" == "65536" ]] || die "line ${line_number}: subordinate ID count must be 65536"
+    ((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT} <= 4294967296)) ||
+        die "line ${line_number}: subordinate ID range exceeds uint32"
 
     if [[ "${ports}" == "-" ]]; then
         return
@@ -401,7 +416,74 @@ labels_are_ready() {
 
     [[ "$(stat_value '%C' "${path}")" == "${EXPECTED_LABEL}" ]] || return 1
     sample="$(bounded_sample "${path}")"
-    [[ -z "${sample}" || "$(stat_value '%C' "${sample}")" == "${EXPECTED_LABEL}" ]]
+    [[ -z "${sample}" ]] || label_has_expected_security "$(stat_value '%C' "${sample}")"
+}
+
+label_has_expected_security() {
+    local label="$1"
+
+    [[ "${label}" == *:"${EXPECTED_LABEL_SUFFIX}" ]] &&
+        [[ "${label}" != *:*:*:*:* ]]
+}
+
+ownership_id_is_mapped() {
+    local value="$1"
+    local range_end=$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT}))
+
+    [[ "${value}" =~ ^[0-9]+$ ]] || return 1
+    ((10#${value} == 10#${SERVICE_UID})) && return 0
+    ((10#${value} >= 10#${SERVICE_SUBID_START} && 10#${value} < range_end))
+}
+
+ownership_pair_is_mapped() {
+    local pair="$1"
+    local uid="${pair%%:*}"
+    local gid="${pair#*:}"
+
+    [[ "${pair}" == *:* && "${gid}" != *:* ]] || return 1
+    ownership_id_is_mapped "${uid}" && ownership_id_is_mapped "${gid}"
+}
+
+report_label_mismatch() {
+    local path="$1"
+    local sample
+    local value
+
+    value="$(stat_value '%C' "${path}")"
+    if [[ "${value}" != "${EXPECTED_LABEL}" ]]; then
+        log "drift: ${path} label is ${value}; expected ${EXPECTED_LABEL}"
+    fi
+    sample="$(bounded_sample "${path}")"
+    if [[ -n "${sample}" ]]; then
+        value="$(stat_value '%C' "${sample}")"
+        if ! label_has_expected_security "${value}"; then
+            log "drift: ${sample} label is ${value}; expected any SELinux user with ${EXPECTED_LABEL_SUFFIX} and no MCS categories"
+        fi
+    fi
+}
+
+report_owned_state_mismatch() {
+    local path="$1"
+    local mode="$2"
+    local sample
+    local value
+
+    value="$(stat_value '%u:%g' "${path}")"
+    if [[ "${value}" != "${SERVICE_UID}:${SERVICE_GID}" ]]; then
+        log "drift: ${path} owner is ${value}; expected ${SERVICE_UID}:${SERVICE_GID}"
+    fi
+    value="$(stat_value '%a' "${path}")"
+    if [[ "${value}" != "${mode#0}" ]]; then
+        log "drift: ${path} mode is ${value}; expected ${mode#0}"
+    fi
+    report_label_mismatch "${path}"
+    sample="$(bounded_sample "${path}")"
+    if [[ -n "${sample}" ]]; then
+        value="$(stat_value '%u:%g' "${sample}")"
+        if ! ownership_pair_is_mapped "${value}"; then
+            log "drift: ${sample} owner is ${value}; expected ${SERVICE_UID}:${SERVICE_GID} or IDs in ${SERVICE_SUBID_START}..$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT} - 1))"
+        fi
+    fi
 }
 
 owned_state_is_ready() {
@@ -413,7 +495,7 @@ owned_state_is_ready() {
     [[ "$(stat_value '%a' "${path}")" == "${mode#0}" ]] || return 1
     labels_are_ready "${path}" || return 1
     sample="$(bounded_sample "${path}")"
-    [[ -z "${sample}" || "$(stat_value '%u:%g' "${sample}")" == "${SERVICE_UID}:${SERVICE_GID}" ]]
+    [[ -z "${sample}" ]] || ownership_pair_is_mapped "$(stat_value '%u:%g' "${sample}")"
 }
 
 fcontext_is_ready() {
@@ -510,18 +592,30 @@ create_managed_dataset() {
 
 repair_descendant_ownership() {
     local path="$1"
+    local range_end=$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT}))
+    local range_lower=$((10#${SERVICE_SUBID_START} - 1))
 
-    find "${path}" -xdev -path "${path}/.zfs" -prune -o \
-        -mindepth 1 -exec chown -h "${SERVICE_UID}:${SERVICE_GID}" {} + ||
+    find "${path}" -xdev -path "${path}/.zfs" -prune -o -mindepth 1 \
+        \( ! \( -uid "${SERVICE_UID}" -o \
+                 \( -uid "+${range_lower}" -a -uid "-${range_end}" \) \) \
+           -o ! \( -gid "${SERVICE_GID}" -o \
+                    \( -gid "+${range_lower}" -a -gid "-${range_end}" \) \) \) \
+        -exec chown -h "${SERVICE_UID}:${SERVICE_GID}" {} + ||
         die "unable to repair ownership under ${path}"
 }
 
 verify_descendant_ownership() {
     local path="$1"
+    local range_end=$((10#${SERVICE_SUBID_START} + 10#${SERVICE_SUBID_COUNT}))
+    local range_lower=$((10#${SERVICE_SUBID_START} - 1))
     local unexpected
 
     if ! unexpected="$(find "${path}" -xdev -path "${path}/.zfs" -prune -o \
-        -mindepth 1 \( ! -uid "${SERVICE_UID}" -o ! -gid "${SERVICE_GID}" \) \
+        -mindepth 1 \
+        \( ! \( -uid "${SERVICE_UID}" -o \
+                 \( -uid "+${range_lower}" -a -uid "-${range_end}" \) \) \
+           -o ! \( -gid "${SERVICE_GID}" -o \
+                    \( -gid "+${range_lower}" -a -gid "-${range_end}" \) \) \) \
         -print -quit)"; then
         die "unable to verify ownership under ${path}"
     fi
@@ -635,15 +729,17 @@ for index in "${!ENTRY_KIND[@]}"; do
     if [[ "${kind}" == "existing-zfs" ]]; then
         if ! labels_are_ready "${path}"; then
             repair_needed=1
-            [[ "${requested_repair}" -eq 1 ]] || die "${path} needs an explicit repair request at ${REPAIR_REQUEST}"
+            report_label_mismatch "${path}"
+            [[ "${requested_repair}" -eq 1 ]] || repair_required "${path} needs an explicit repair request at ${REPAIR_REQUEST}"
         fi
     elif [[ "$(stat_value '%u:%g' "${path}")" == "0:0" ]]; then
         repair_needed=1
         log "detected interrupted repair marker on ${path}"
     elif ! owned_state_is_ready "${path}" "${ENTRY_MODE[index]}"; then
         repair_needed=1
+        report_owned_state_mismatch "${path}" "${ENTRY_MODE[index]}"
         if [[ "${HAS_ZFS}" -eq 1 && "${requested_repair}" -ne 1 ]]; then
-            die "${path} needs an explicit repair request at ${REPAIR_REQUEST}"
+            repair_required "${path} needs an explicit repair request at ${REPAIR_REQUEST}"
         fi
     fi
 done

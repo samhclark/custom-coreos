@@ -11,6 +11,7 @@ User=root
 ExecStart=/usr/local/bin/nas-prepare-storage.sh /usr/share/custom-coreos/storage/jellyfin.storage-manifest
 TimeoutStartSec=infinity
 Restart=on-failure
+RestartPreventExitStatus=78
 RestartSec=30
 StandardOutput=journal
 StandardError=journal

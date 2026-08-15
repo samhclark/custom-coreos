@@ -100,8 +100,17 @@ storage_path_metadata() {
         /var/lib/immich/valkey \
         /var/lib/immich/machine-learning; do
         run "metadata for ${path}" root_cmd stat \
-            --format='%A mode=%a owner=%U:%G size=%s path=%n' "${path}"
+            --format='%A mode=%a owner=%U:%G label=%C size=%s path=%n' "${path}"
     done
+
+    run 'Immich library bounded readiness sample' root_cmd bash -c '
+        path=/var/lib/immich/library
+        sample="$(find "${path}" -xdev -mindepth 1 -maxdepth 1 \
+            ! -path "${path}/.zfs" -print -quit)"
+        [[ -z "${sample}" ]] || stat \
+            --format="%A mode=%a owner=%u:%g label=%C size=%s path=%n" \
+            "${sample}"
+    '
 }
 
 podman_service_diagnostics() {

@@ -7,7 +7,7 @@ from __future__ import annotations
 import posixpath
 
 from .headers import generated_header
-from .model import Protocol, Service
+from .model import SUBID_COUNT, Protocol, Service
 from .storage_model import (
     DirectoryStorage,
     ExistingZfsStorage,
@@ -86,7 +86,7 @@ def storage_manifest(service: Service) -> str:
         and endpoint.host_port is not None
     ) or "-"
     lines = [
-        "nas-storage-manifest-v1",
+        "nas-storage-manifest-v2",
         generated_header(service.source.name),
         "|".join(
             (
@@ -95,6 +95,8 @@ def storage_manifest(service: Service) -> str:
                 service.host.username,
                 str(service.host.uid),
                 str(service.host.uid),
+                str(service.host.subid_start),
+                str(SUBID_COUNT),
                 tcp_ports,
             )
         ),
@@ -179,6 +181,7 @@ def storage_unit(service: Service) -> str:
         f"/usr/share/custom-coreos/storage/{service.info.name}.storage-manifest",
         "TimeoutStartSec=infinity",
         "Restart=on-failure",
+        "RestartPreventExitStatus=78",
         "RestartSec=30",
         "StandardOutput=journal",
         "StandardError=journal",

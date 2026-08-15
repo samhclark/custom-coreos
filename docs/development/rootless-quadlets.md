@@ -66,14 +66,18 @@ shell syntax in TOML.
 Rootless refers to the host account running Podman. `container-user = 0` is
 still unprivileged on the host through the rootless user namespace and is valid
 only when the image expects container root **and its entrypoint leaves the
-effective service process as container root**. An entrypoint that starts as root
-and drops to an internal account instead hands writable files to a subordinate
-host ID, which conflicts with the storage runtime's service-account ownership
-contract.
+effective service process as container root**. An entrypoint that starts as
+root and drops to an internal account can create writable descendants owned by
+an ID in the service's subordinate range. The storage root remains owned by the
+service host UID/GID, while the runtime accepts descendant ownership only from
+that primary identity or the service's generated non-overlapping subordinate
+range.
 
 A positive `container-user` generates `User=UID:GID` and a matching `keep-id`
 user namespace, so the requested container UID/GID appears inside the
-container and the service host UID/GID remains the owner of declared storage.
+container and normally leaves the service host UID/GID as the owner of files
+written by that process. Container-root-created mount anchors or image helper
+files may still use the assigned subordinate range and are valid descendants.
 Prefer this when the image supports a fixed non-root UID. Treat the effective
 UID/GID after entrypoint processing, writable paths, signals, and required
 entrypoint behavior as a versioned image interface; test those properties
