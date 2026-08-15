@@ -41,6 +41,7 @@ NoNewPrivileges=true
 DropCapability=NET_RAW
 
 Environment=TZ=America/Chicago
+Environment=TMPDIR=/tmp
 
 # Image-controlled libkrun entrypoint adapter (read-only)
 Volume=/usr/share/custom-coreos/prowlarr:/usr/share/custom-coreos/prowlarr:ro

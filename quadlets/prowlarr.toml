@@ -29,6 +29,7 @@ dns = ["100.100.100.100"]
 
 [container.environment]
 TZ = "America/Chicago"
+TMPDIR = "/tmp"
 
 [[container.volumes]]
 comment = "Image-controlled libkrun entrypoint adapter (read-only)"

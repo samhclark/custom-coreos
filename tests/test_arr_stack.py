@@ -69,6 +69,28 @@ class ArrStackTests(unittest.TestCase):
                 self.assertIn("DNS=100.100.100.100", quadlet)
                 self.assertIn("HealthCmd=none", quadlet)
 
+    def test_dotnet_arr_quadlets_use_writable_guest_tmp(self):
+        for name, uid in (
+            ("sonarr", 51410),
+            ("radarr", 51420),
+            ("prowlarr", 51430),
+        ):
+            with self.subTest(service=name):
+                quadlet = self.artifacts[
+                    Path(f"etc/containers/systemd/users/{uid}/{name}.container")
+                ]
+                self.assertIn("Environment=TMPDIR=/tmp", quadlet)
+
+    def test_sabnzbd_quadlet_propagates_exact_allowed_hostnames(self):
+        quadlet = self.artifacts[
+            Path("etc/containers/systemd/users/51440/sabnzbd.container")
+        ]
+        self.assertIn(
+            "Environment=CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES="
+            "sabnzbd.i.samhclark.com,sabnzbd.krun",
+            quadlet,
+        )
+
     def test_shared_layout_is_writable_only_where_required(self):
         sonarr = self.artifacts[
             Path("etc/containers/systemd/users/51410/sonarr.container")

@@ -31,6 +31,7 @@ dns = ["100.100.100.100"]
 
 [container.environment]
 TZ = "America/Chicago"
+CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES = "sabnzbd.i.samhclark.com,sabnzbd.krun"
 
 [[container.volumes]]
 comment = "Image-controlled libkrun entrypoint adapter (read-only)"

@@ -42,6 +42,7 @@ NoNewPrivileges=true
 DropCapability=NET_RAW
 
 Environment=TZ=America/Chicago
+Environment=TMPDIR=/tmp
 
 # Image-controlled libkrun entrypoint adapter (read-only)
 Volume=/usr/share/custom-coreos/radarr:/usr/share/custom-coreos/radarr:ro
