@@ -25,6 +25,9 @@ here rather than reading rollout plans or evidence logs.
   playback monitoring setup and interpretation
 - [`operations/immich.md`](operations/immich.md) — production topology,
   recovery classification, first use, and operator verification
+- [`operations/media-automation.md`](operations/media-automation.md) — the
+  authored Sonarr, Radarr, Prowlarr, and SABnzbd design, initial configuration,
+  and the staged operator migration runbook
 - [`investigations/jellyfin-hardware-transcoding.md`](investigations/jellyfin-hardware-transcoding.md)
   — the one active investigation
 
