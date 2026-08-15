@@ -124,6 +124,15 @@ test: ## Run unit tests
 smoke-immich-images: ## Run Podman-only smoke tests for pinned Immich companion images
 	@CONTAINER_CLI="$(PODMAN)" $(UV_RUN) python scripts/smoke-immich-images.py
 
+ARR_SMOKE_STARTUP_TIMEOUT_SECONDS ?= 60
+ARR_SMOKE_OBSERVE_SECONDS ?= 10
+.PHONY: smoke-arr-images
+smoke-arr-images: ## Run opt-in startup smoke tests for the four authored *arr images
+	@CONTAINER_CLI="$(PODMAN)" \
+		ARR_SMOKE_STARTUP_TIMEOUT_SECONDS="$(ARR_SMOKE_STARTUP_TIMEOUT_SECONDS)" \
+		ARR_SMOKE_OBSERVE_SECONDS="$(ARR_SMOKE_OBSERVE_SECONDS)" \
+		$(UV_RUN) python scripts/smoke-arr-images.py
+
 .PHONY: probe-krun-user
 probe-krun-user: ## Probe the pinned Immich database image's effective krun user
 	@CONTAINER_CLI="$(PODMAN)" $(UV_RUN) python scripts/probe-krun-user.py
