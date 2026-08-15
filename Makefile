@@ -68,9 +68,11 @@ kernel-version: ## Get the current kernel version from Fedora CoreOS stable
 
 .PHONY: versions
 versions: ## Show all relevant versions and verify ZFS kmod availability
-	@set -- $$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
+	@set -e; \
+	BUILD_INPUTS="$$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
 		CONTAINER_CLI="$(PODMAN)" \
-		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
+		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)")"; \
+	set -- $$BUILD_INPUTS; \
 	ZFS_VERSION="$$1"; \
 	KERNEL_VERSION="$$2"; \
 	IMAGE="$$3"; \
@@ -140,9 +142,10 @@ typecheck: ## Run strict static Python type checks
 .PHONY: build
 build: ## Build the container image
 	@set -e; \
-	set -- $$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
+	BUILD_INPUTS="$$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
 		CONTAINER_CLI="$(PODMAN)" \
-		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)"); \
+		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)")"; \
+	set -- $$BUILD_INPUTS; \
 	ZFS_VERSION="$$1"; \
 	KERNEL_VERSION="$$2"; \
 	printf "$(COLOR_BLUE)Building $(IMAGE_NAME):$(TAG) with ZFS=$$ZFS_VERSION kernel=$$KERNEL_VERSION$(COLOR_RESET)\n"; \

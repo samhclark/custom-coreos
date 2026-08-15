@@ -90,6 +90,37 @@ class BuildInputTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn("No prebuilt ZFS kmods", result.stderr)
 
+    def test_make_build_stops_before_podman_when_resolution_fails(self):
+        marker = self.directory / "podman-called"
+        podman = self.executable(
+            "podman",
+            'printf called > "${FAKE_PODMAN_MARKER}"\nexit 99',
+        )
+        environment = self.environment | {
+            "FAKE_SKOPEO_STATUS": "1",
+            "FAKE_PODMAN_MARKER": str(marker),
+        }
+
+        result = subprocess.run(
+            [
+                "make",
+                "--no-print-directory",
+                "build",
+                f"PODMAN={podman}",
+                f"SKOPEO={self.skopeo}",
+            ],
+            cwd=REPO,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("No prebuilt ZFS kmods", result.stderr)
+        self.assertNotIn("Building custom-coreos", result.stdout)
+        self.assertFalse(marker.exists())
+
     def test_untrusted_resolver_output_cannot_inject_github_fields(self):
         bad_zfs = self.executable("bad-zfs", "printf '2.4.3\\nevil=value\\n'")
         environment = self.environment | {"RESOLVE_ZFS_BIN": str(bad_zfs)}
