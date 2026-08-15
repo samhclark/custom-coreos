@@ -32,7 +32,6 @@ SERVICES = {
     },
 }
 
-
 class ArrEntrypointContractTests(unittest.TestCase):
     def test_dotnet_adapters_have_the_required_identity_and_command_contract(self):
         for service, contract in SERVICES.items():
@@ -43,14 +42,14 @@ class ArrEntrypointContractTests(unittest.TestCase):
                 self.assertTrue(mode & stat.S_IXUSR)
                 self.assertIn("set -euo pipefail", script)
                 self.assertIn("umask 002", script)
-                self.assertIn("groupmod -o -g 1000 abc", script)
-                self.assertIn("usermod -o -u 1000 -g 1000 abc", script)
-                self.assertIn("exec s6-setuidgid abc", script)
+                self.assertNotIn("groupmod", script)
+                self.assertNotIn("usermod", script)
+                self.assertIn("exec s6-setuidgid 1000:1000", script)
                 self.assertIn("expected root or 1000:1000", script)
                 self.assertIn(contract["command"], script)
                 self.assertIn('"$@"', script)
                 self.assertIn('mkdir -p "${temp_dir}"', script)
-                self.assertIn('chown abc:abc "${temp_dir}"', script)
+                self.assertIn('chown 1000:1000 "${temp_dir}"', script)
                 self.assertNotIn("chown -R", script)
 
     def test_sabnzbd_has_the_family_selection_and_no_temp_directory(self):
@@ -69,7 +68,7 @@ class ArrEntrypointContractTests(unittest.TestCase):
         self.assertNotIn("mkdir", script)
         self.assertNotIn("chown", script)
 
-    def test_root_mode_remaps_abc_prepares_temp_and_handoffs(self):
+    def test_root_mode_prepares_temp_and_handoffs_numerically(self):
         for service, contract in SERVICES.items():
             with self.subTest(service=service):
                 log, result = self._run_with_fake_root_commands(
@@ -79,12 +78,12 @@ class ArrEntrypointContractTests(unittest.TestCase):
                 )
 
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn("groupmod -o -g 1000 abc", log)
-                self.assertIn("usermod -o -u 1000 -g 1000 abc", log)
+                self.assertNotIn("groupmod", log)
+                self.assertNotIn("usermod", log)
                 self.assertIn(f'mkdir -p {contract["temp_dir"]}', log)
-                self.assertIn(f'chown abc:abc {contract["temp_dir"]}', log)
+                self.assertIn(f'chown 1000:1000 {contract["temp_dir"]}', log)
                 self.assertIn(
-                    f"s6-setuidgid abc {contract['command']} --test-flag value",
+                    f"s6-setuidgid 1000:1000 {contract['command']} --test-flag value",
                     log,
                 )
                 self.assertNotIn("chown -R", log)
@@ -102,7 +101,7 @@ class ArrEntrypointContractTests(unittest.TestCase):
             "::" if Path("/proc/net/if_inet6").exists() else "0.0.0.0"
         )
         self.assertIn(
-            "s6-setuidgid abc python3 /app/sabnzbd/SABnzbd.py "
+            "s6-setuidgid 1000:1000 python3 /app/sabnzbd/SABnzbd.py "
             f"--config-file /config --server {expected_family} --test-flag value",
             log,
         )
@@ -150,14 +149,6 @@ class ArrEntrypointContractTests(unittest.TestCase):
                 f'    -u) printf "%s\\n" "{uid}" ;;\n'
                 f'    -g) printf "%s\\n" "{gid}" ;;\n'
                 "esac\n"
-            )
-            (fake_bin / "groupmod").write_text(
-                "#!/usr/bin/env bash\n"
-                f'printf "groupmod %s\\n" "$*" >> "{log_path}"\n'
-            )
-            (fake_bin / "usermod").write_text(
-                "#!/usr/bin/env bash\n"
-                f'printf "usermod %s\\n" "$*" >> "{log_path}"\n'
             )
             (fake_bin / "mkdir").write_text(
                 "#!/usr/bin/env bash\n"

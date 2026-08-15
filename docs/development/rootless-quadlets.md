@@ -143,6 +143,15 @@ or 1000:1000 and expose other relevant runtime differences. Keep these probes
 outside canonical offline `make check` and `make test` because they depend on
 the local runtime and networked image availability.
 
+Known deferred gap (2026-08-15): the current media-automation image smoke
+requests 1000:1000 and does not faithfully exercise libkrun's guest-root branch
+against an image root filesystem that the mapped VMM process cannot modify.
+The focused adapter tests use fake identity-transition commands, so they are
+source-contract checks rather than evidence for that runtime boundary. Do not
+treat either test as covering guest-root startup. A future test design should
+exercise the real filesystem and credential behavior without depending on the
+production NAS.
+
 When a service has populated its storage, repeat the storage preparation and
 readiness check against realistic descendants created by the service. The
 rerun must accept valid subordinate-range ownership and labels without repair

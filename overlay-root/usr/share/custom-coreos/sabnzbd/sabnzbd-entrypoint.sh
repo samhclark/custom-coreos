@@ -17,9 +17,7 @@ fi
 
 case "${effective_uid}" in
     0)
-        groupmod -o -g 1000 abc
-        usermod -o -u 1000 -g 1000 abc
-        exec s6-setuidgid abc \
+        exec s6-setuidgid 1000:1000 \
             python3 /app/sabnzbd/SABnzbd.py --config-file /config \
             --server "${family}" "$@"
         ;;

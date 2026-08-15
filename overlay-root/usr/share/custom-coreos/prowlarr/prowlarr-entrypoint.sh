@@ -12,15 +12,13 @@ readonly temp_dir="/run/prowlarr-temp"
 
 prepare_temp_dir() {
     mkdir -p "${temp_dir}"
-    chown abc:abc "${temp_dir}"
+    chown 1000:1000 "${temp_dir}"
 }
 
 case "${effective_uid}" in
     0)
-        groupmod -o -g 1000 abc
-        usermod -o -u 1000 -g 1000 abc
         prepare_temp_dir
-        exec s6-setuidgid abc \
+        exec s6-setuidgid 1000:1000 \
             /app/prowlarr/bin/Prowlarr -nobrowser -data=/config "$@"
         ;;
     1000)

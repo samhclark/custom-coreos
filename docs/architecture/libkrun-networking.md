@@ -108,6 +108,13 @@ also verifies its declared guest TCP listener after startup so a lost one-shot
 DHCP exchange forces a bounded restart instead of leaving a false-positive
 running state.
 
+Known deferred lifecycle gap (2026-08-15): if the container exits while that
+post-start listener probe is running, the probe can consume its full timeout
+and leave the unit in `activating` before systemd restarts it. A generic
+early-exit check needs a disposable systemd-user test of the tracked main PID
+across Podman, conmon, and libkrun; do not infer that relationship in the
+renderer without that evidence.
+
 Stopping networkd or nftables first removes readiness and stops the service
 user managers. The nftables shutdown drop-in refuses to flush policy while a
 guest manager remains active.
