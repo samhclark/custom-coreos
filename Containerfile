@@ -154,8 +154,6 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         zfs-snapshots-hourly@videos.timer \
         zfs-snapshots-daily@videos.timer \
         zfs-snapshots-weekly@videos.timer \
-        zfs-snapshots-monthly@videos.timer \
-        zfs-snapshots-yearly@videos.timer \
         disk-health-metrics.timer \
         node_exporter.service; \
     systemctl disable systemd-networkd-wait-online.service; \

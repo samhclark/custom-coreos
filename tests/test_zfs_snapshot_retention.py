@@ -68,6 +68,20 @@ printf '%s\n' "${FAKE_TIMESTAMP}"
 
 
 class SnapshotRetentionTests(unittest.TestCase):
+    def test_videos_retention_stops_after_the_one_month_window(self):
+        containerfile = (REPO / "Containerfile").read_text()
+
+        for cadence in ("frequently", "hourly", "daily", "weekly"):
+            self.assertIn(
+                f"zfs-snapshots-{cadence}@videos.timer",
+                containerfile,
+            )
+        for cadence in ("monthly", "yearly"):
+            self.assertNotIn(
+                f"zfs-snapshots-{cadence}@videos.timer",
+                containerfile,
+            )
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(dir=REPO)
         self.directory = Path(self.temporary.name)
