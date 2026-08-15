@@ -11,13 +11,15 @@ container stays running for the bounded observation window.  Failure output
 includes the Podman state and logs; cleanup is attempted for every name that
 was started.
 
-The ordinary path exercises the declared in-container 1000:1000 identity. The
-krun path exercises guest root, matching the production handoff through the
-adapter, while retaining rootless ``keep-id`` ownership for disposable mounts.
-It cannot safely recreate the NAS's allocated 514xx host UIDs, subordinate
-ranges, or media GID 52000, and it does not recreate the production
-TAP/Mullvad network. Network access is disabled here. The krun path uses only
-inspect/logs for observation and never uses ``podman exec``.
+Both runtime paths request each service's declared mapped in-container
+identity, while retaining rootless ``keep-id`` ownership for disposable
+mounts. libkrun may still supply guest root to the adapter despite that OCI
+request; the image-controlled adapters' guest-root branch is covered by the
+entrypoint contract tests. This smoke cannot safely recreate the NAS's
+allocated 514xx host UIDs, subordinate ranges, or media GID 52000, and it does
+not recreate the production TAP/Mullvad network. Network access is disabled
+here. The krun path uses only inspect/logs for observation and never uses
+``podman exec``.
 """
 
 from __future__ import annotations
@@ -211,7 +213,7 @@ def container_arguments(
             f"{spec.info.name} has no positive mapped smoke identity"
         )
     asset_source, asset_target = _copy_asset(spec, temporary)
-    process_identity = "0:0" if mode.runtime is not None else "1000:1000"
+    process_identity = f"{mapped_id}:{mapped_id}"
 
     arguments = [] if mode.runtime is None else [f"--runtime={mode.runtime}"]
     arguments += [
@@ -222,7 +224,7 @@ def container_arguments(
         "--pull=missing",
         "--network=none",
         f"--user={process_identity}",
-        "--userns=keep-id:uid=1000,gid=1000",
+        f"--userns=keep-id:uid={mapped_id},gid={mapped_id}",
         "--stop-timeout=10",
         f"--entrypoint={spec.container.entrypoint}",
     ]
@@ -455,11 +457,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         for resource in load_fleet_storage(FLEET_PATH)
     }
     print(
-        "limitation: local smoke uses rootless keep-id ownership with declared "
-        "1000:1000 in ordinary Podman and guest root in krun, disposable "
-        "storage, and network=none; it does not reproduce NAS service IDs, "
-        "media GID 52000, TAP/Mullvad routing, or DNS. krun observation uses "
-        "no podman exec.",
+        "limitation: local smoke uses rootless keep-id ownership with the "
+        "declared mapped process identity in both ordinary Podman and "
+        "krun, disposable storage, and network=none; libkrun may still expose "
+        "guest root to the adapter, whose root branch is covered separately. "
+        "It does not reproduce NAS service IDs, media GID 52000, TAP/Mullvad "
+        "routing, or DNS. krun observation uses no podman exec.",
         flush=True,
     )
     with tempfile.TemporaryDirectory(

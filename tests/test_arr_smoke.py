@@ -124,9 +124,34 @@ class ArrSmokeUnitTests(unittest.TestCase):
             )
             self.assertEqual(arguments[0], "--runtime=krun")
             self.assertEqual(arguments[1], "run")
-            self.assertIn("--user=0:0", arguments)
+            self.assertIn("--user=1000:1000", arguments)
             self.assertNotIn("exec", arguments)
             self.assertIn("--entrypoint=/usr/share/custom-coreos/sabnzbd/sabnzbd-entrypoint.sh", arguments)
+
+    def test_both_runtime_modes_request_each_service_mapped_identity(self):
+        with tempfile.TemporaryDirectory(dir="/var/tmp") as root:
+            temporary = Path(root)
+            resources = {
+                resource.name: resource
+                for resource in SMOKE.load_fleet_storage(SMOKE.FLEET_PATH)
+            }
+            for mode in (SMOKE.PODMAN_MODE, SMOKE.KRUN_MODE):
+                for service_name in SMOKE.SERVICE_NAMES:
+                    with self.subTest(mode=mode.name, service=service_name):
+                        spec = SMOKE.service(service_name)
+                        mapped_id = spec.identity.mapped_container_id
+                        self.assertIsNotNone(mapped_id)
+                        arguments = SMOKE.container_arguments(
+                            spec,
+                            mode,
+                            f"arr-smoke-{service_name}-{mode.name}-test",
+                            temporary,
+                            resources,
+                        )
+                        self.assertIn(
+                            f"--user={mapped_id}:{mapped_id}",
+                            arguments,
+                        )
 
     def test_cleanup_names_are_narrow_and_forceful(self):
         name = SMOKE.container_name("radarr", SMOKE.KRUN_MODE)

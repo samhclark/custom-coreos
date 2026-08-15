@@ -60,9 +60,11 @@ class ArrStackTests(unittest.TestCase):
                     "marker /run/nas-egress/mullvad/ready 60 1",
                     quadlet,
                 )
+                self.assertIn("User=1000:1000", quadlet)
                 self.assertIn(f"UIDMap=+u1000:@{uid}:1", quadlet)
                 expected_gid = 51430 if name == "prowlarr" else 52000
                 self.assertIn(f"GIDMap=+g1000:@{expected_gid}:1", quadlet)
+                self.assertNotIn("UserNS=", quadlet)
                 self.assertNotIn("PublishPort=", quadlet)
                 self.assertIn("DNS=100.100.100.100", quadlet)
                 self.assertIn("HealthCmd=none", quadlet)

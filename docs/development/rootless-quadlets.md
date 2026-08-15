@@ -92,15 +92,18 @@ service host UID/GID, while the runtime accepts descendant ownership only from
 that primary identity or the service's generated non-overlapping subordinate
 range.
 
-A positive `container-user` generates `User=UID:GID` and a matching `keep-id`
-user namespace, so the requested container UID/GID appears inside the
-container and normally leaves the service host UID/GID as the owner of files
-written by that process. Container-root-created mount anchors or image helper
-files may still use the assigned subordinate range and are valid descendants.
-Prefer this when the image supports a fixed non-root UID. Treat the effective
-UID/GID after entrypoint processing, writable paths, signals, and required
-entrypoint behavior as a versioned image interface; test those properties
-again whenever the image digest changes.
+A positive `container-user` generates `User=UID:GID`. It normally also uses a
+matching `keep-id` user namespace. When `[identity].mapped-container-id` is
+declared, the explicit `UIDMap=`/`GIDMap=` entries define that namespace
+instead; Podman does not permit combining those maps with `keep-id`. In either
+case, the requested container UID/GID appears inside the container and normally
+leaves the mapped service host UID/GID as the owner of files written by that
+process. Container-root-created mount anchors or image helper files may still
+use the assigned subordinate range and are valid descendants. Prefer this when
+the image supports a fixed non-root UID. Treat the effective UID/GID after
+entrypoint processing, writable paths, signals, and required entrypoint
+behavior as a versioned image interface; test those properties again whenever
+the image digest changes.
 
 The OCI `User=` request is a contract, not evidence about what every virtual
 machine-backed runtime actually supplies to the entrypoint. In particular,
@@ -112,6 +115,13 @@ narrow image-controlled adapter as a read-only asset and keep the normal
 UID/GID path intact. The adapter should explicitly handle only the observed
 guest-root and intended non-root branches, then delegate to the upstream
 entrypoint.
+
+For a TAP-backed service, libkrun attaches the TAP before entrypoint code runs.
+The Quadlet must therefore request the declared mapped non-root OCI identity so
+the VMM can open the TAP with the service's mapped credentials. An adapter may
+still observe guest root after that request and must retain its explicit
+guest-root handoff, but selecting container root in the Quadlet or smoke command
+cannot test or repair the TAP attachment boundary.
 
 Immich PostgreSQL is the current example. Its database Quadlet requests
 `User=1000:1000` and mounts the image-controlled

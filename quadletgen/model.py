@@ -553,13 +553,14 @@ def _validate_identity(service: Service) -> None:
             maximum=MAX_LINUX_ID,
         )
         if (
-            service.container.container_user is not None
-            and service.container.container_user > 0
+            service.active_tap
+            and service.container.container_user
+            != identity.mapped_container_id
         ):
             _fail(
                 path,
-                "mapped identity is incompatible with positive "
-                "container-user/UserNS behavior",
+                "active TAP with mapped identity requires container-user "
+                "to equal mapped-container-id",
             )
     elif identity.mapped_group is not None:
         _fail(

@@ -78,7 +78,10 @@ def container_unit(service: Service, fleet: Fleet) -> str:
             else str(container.container_user)
         )
         lines.append(f"User={user}")
-        if container.container_user > 0:
+        if (
+            container.container_user > 0
+            and service.identity.mapped_container_id is None
+        ):
             lines.append(
                 "UserNS=keep-id:"
                 f"uid={container.container_user},gid={container.container_user}"

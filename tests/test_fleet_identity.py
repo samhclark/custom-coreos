@@ -60,6 +60,9 @@ class FleetIdentityTests(unittest.TestCase):
                         "mapped-container-id = 1000\n"
                         'mapped-group = "media"\n'
                     )
+                ).replace(
+                    "[container]\n",
+                    "[container]\ncontainer-user = 1000\n",
                 ),
             )
 
@@ -80,6 +83,9 @@ class FleetIdentityTests(unittest.TestCase):
                         "mapped-container-id = 1000\n"
                         'mapped-group = "media"\n'
                     )
+                ).replace(
+                    "[container]\n",
+                    "[container]\ncontainer-user = 1000\n",
                 ),
             )
             groups = self.write_groups(
@@ -96,6 +102,7 @@ class FleetIdentityTests(unittest.TestCase):
         ]
         self.assertIn("UIDMap=+u1000:@51999:1", unit)
         self.assertIn("GIDMap=+g1000:@52000:1", unit)
+        self.assertIn("User=1000:1000\n", unit)
         self.assertIn("GroupAdd=keep-groups", unit)
         self.assertNotIn("UserNS=", unit)
 
@@ -150,22 +157,35 @@ class FleetIdentityTests(unittest.TestCase):
             with self.assertRaisesRegex(ConfigError, "duplicate group gid"):
                 Fleet.build([undefined], duplicate_gid)
 
-    def test_rejects_invalid_mapping_and_positive_container_user_combination(self):
+    def test_requires_mapped_container_user_for_active_tap(self):
         with tempfile.TemporaryDirectory(dir=REPO) as directory_name:
             directory = Path(directory_name)
-            with self.assertRaisesRegex(
-                ConfigError,
-                "incompatible with positive container-user/UserNS",
-            ):
-                self.write_service(
-                    directory,
-                    self.valid_service(
+            for container_user in (None, 999):
+                with self.subTest(container_user=container_user):
+                    source = self.valid_service(
                         identity="\n[identity]\nmapped-container-id = 1000\n"
-                    ).replace(
-                        "[container]\n",
-                        "[container]\ncontainer-user = 1000\n",
-                    ),
-                )
+                    )
+                    if container_user is not None:
+                        source = source.replace(
+                            "[container]\n",
+                            f"[container]\ncontainer-user = {container_user}\n",
+                        )
+                    with self.assertRaisesRegex(
+                        ConfigError,
+                        "active TAP.*container-user.*mapped-container-id",
+                    ):
+                        self.write_service(directory, source)
+
+            valid = self.write_service(
+                directory,
+                self.valid_service(
+                    identity="\n[identity]\nmapped-container-id = 1000\n"
+                ).replace(
+                    "[container]\n",
+                    "[container]\ncontainer-user = 1000\n",
+                ),
+            )
+            self.assertEqual(valid.container.container_user, 1000)
 
             with self.assertRaisesRegex(ConfigError, "mapped-container-id"):
                 self.write_service(
