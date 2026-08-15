@@ -74,33 +74,33 @@ unacceptable provenance gap, or forces repeated image-specific patches. At
 that point the project would also need to own a separate digest/update policy,
 extension compatibility checks, and security-update release train.
 
-After changing either image digest or its user/entrypoint settings, run the
-networked, opt-in compatibility smoke before deployment:
+After changing an Immich image digest, image entrypoint, declared or runtime
+user, or writable-path/volume contract, run the complete networked, opt-in
+preflight before deployment:
 
 ```bash
-make smoke-immich-images
+make preflight-immich-images
 ```
 
-This initializes disposable PostgreSQL state with checksums and requires both
-PostgreSQL and Valkey to answer under their declared users. PostgreSQL is
-started twice: once as 1000:1000 and once with a 0:0 process identity that
-emulates libkrun guest-root entry. Both runs exercise the adapter's respective
-branch, require readiness and enabled checksums, and verify that host ownership
-does not change. It deliberately tests the external image boundary outside
-canonical offline `make check` and `make test`.
+The combined target runs the Podman startup smoke first and the libkrun user
+probe second. Either stage failing blocks rollout. The preflight deliberately
+remains outside canonical offline `make check` and `make test`.
 
-The Podman smoke is not a substitute for observing the deployed runtime. When
-libkrun is available, run the separate opt-in probe:
+The first stage, `make smoke-immich-images`, initializes disposable PostgreSQL
+state with checksums and requires both PostgreSQL and Valkey to answer under
+their declared users. PostgreSQL is started twice: once as 1000:1000 and once
+with a 0:0 process identity that emulates libkrun guest-root entry. Both runs
+exercise the adapter's respective branch, require readiness and enabled
+checksums, and verify that host ownership does not change. It does not prove
+that the image behaves the same under libkrun.
 
-```bash
-make probe-krun-user
-```
-
-The probe runs the pinned image under libkrun and classifies the observed
-entrypoint identity as either guest root or 1000:1000. Either result is
-supported by the adapter; any other identity is a compatibility failure that
-must be investigated before deployment. The probe remains opt-in because it
-depends on the local libkrun runtime and networked image access.
+The second stage, `make probe-krun-user`, runs the pinned image under libkrun
+and classifies the observed entrypoint identity as either guest root or
+1000:1000. Either result is supported by the adapter; any other identity is a
+compatibility failure that must be investigated before deployment. It does not
+exercise PostgreSQL or Valkey readiness, checksums, writable paths, or data
+continuity. The probe remains opt-in because it depends on the local libkrun
+runtime and networked image access.
 
 ## First use
 

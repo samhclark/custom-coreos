@@ -17,12 +17,25 @@ must never repair the working tree.
 
 ## Testing ladder
 
-The testing layers are:
+The testing and rollout layers increase in scope:
 
-1. Source contracts and behavioral tests with no host mutation.
+1. Local source contracts, schema validation, generated-contract parity,
+   behavioral tests, and ordinary-container image startup smokes without
+   production-state mutation. Image smokes exercise the full entrypoint,
+   writable-volume behavior, and real readiness; add a libkrun-specific
+   identity or runtime probe when that runtime can change the contract.
 2. Exact built-image contract validation without booting it.
 3. An explicit local QCOW2/QEMU boot smoke test with no guest network, host
-   block device, production secret, or ZFS pool.
+   block device, production secret, storage preparation, or ZFS pool.
+4. Operator-run production validation: first use, service restart, clean host
+   reboot, external health observation, and data continuity.
+
+For stateful services, include a post-population lifecycle check before the
+production gate: prepare empty state, let or simulate the service creating
+realistic descendants, then rerun preparation and readiness. The rerun must
+publish current-boot readiness without repair and without storage mutations.
+This is separate from an empty-state preparation test because container-root
+or subordinate-ID descendants may only appear after first use.
 
 Layers 1 and 2 are active. Every `make build` runs the exact-image contract
 against the tag it just produced; `make verify-image` can repeat that read-only
@@ -49,6 +62,12 @@ logs are retained under `build/vm-smoke/`; there is intentionally no cleanup
 routine. The strict build-context allowlist and exact-image contract separately
 prove that `tests/`, this fixture, and the host runner are not shipped.
 
+This VM smoke is evidence for host boot contracts only. It is intentionally
+storage-free and networkless, so it is not evidence for ZFS behavior,
+service-created descendants, service readiness, or the full application
+lifecycle. A production NAS reboot remains the final integration gate for
+those properties.
+
 The runner has passed behavioral fake-tool safety tests, strict Butane
 validation, and a local QEMU capability probe, but an end-to-end guest pass is
 not claimed yet because no fresh QCOW2 was available during implementation.
@@ -66,6 +85,22 @@ requiring an explicit QCOW2 input. The older `bootc-image-builder` path is
 A scratch ZFS-pool acceptance VM is deliberately deferred. No pool fixture or
 teardown helper may be shipped in the image, and no test is allowed to target
 the production NAS.
+
+## Rollout evidence and closeout
+
+Keep evidence proportional to the boundary being tested. Local gates establish
+source, generated, image, and schema contracts; the storage-free/networkless VM
+smoke establishes host boot contracts; only the operator-run NAS sequence
+establishes the integrated stateful-service behavior. For each rollout, record
+the image/source identity and the observed results for first use, restart,
+clean reboot, external health, and data continuity. Archive the production
+evidence in the history area when the rollout closes, then update the active
+status and roadmap so they no longer describe the work as pending.
+
+Service-specific operation documents remain the authority for exact commands
+and recovery procedures. This document defines the evidence boundary and
+ordering; it does not duplicate those commands or link active guidance to
+archived history.
 
 ## Publishing decision
 

@@ -126,6 +126,11 @@ smoke-immich-images: ## Run Podman-only smoke tests for pinned Immich companion 
 probe-krun-user: ## Probe the pinned Immich database image's effective krun user
 	@CONTAINER_CLI="$(PODMAN)" $(UV_RUN) python scripts/probe-krun-user.py
 
+.PHONY: preflight-immich-images
+preflight-immich-images: ## Run the complete opt-in Immich image preflight
+	@$(MAKE) --no-print-directory smoke-immich-images
+	@$(MAKE) --no-print-directory probe-krun-user
+
 .PHONY: typecheck
 typecheck: ## Run strict static Python type checks
 	@$(UV_RUN) ty check

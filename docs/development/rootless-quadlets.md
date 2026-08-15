@@ -30,6 +30,25 @@ Useful current examples:
 
 ## Add a service
 
+### Before adding an application group
+
+Treat application membership as a planning aid, not as a storage or backup
+boundary. Before implementing the group, inventory every persistent storage
+path and classify it as one of:
+
+- **authoritative**: required to recover the application's meaningful state;
+- **regenerable**: derived data that can be recreated from authoritative state;
+- **required-existing/shared**: pre-existing or shared data whose lifecycle is
+  owned elsewhere.
+
+Record an explicit backup-or-no-backup disposition for every path in that
+inventory. State whether it is backed up here, backed up through the owner of a
+shared path, or intentionally excluded, and why. Do not infer backup policy
+from `[service].application`, and do not make all mounted paths authoritative
+by default. Reflect the resulting storage kind and repair policy in each
+service's `[[storage]]` declaration; keep broader backup automation out of the
+service schema until a concrete requirement justifies it.
+
 ### 1. Allocate identity once
 
 Choose a namespaced username such as `_nas_example`, an unused UID in the
@@ -102,14 +121,23 @@ invoking the upstream wrapper; when the runtime already supplies 1000:1000, it
 delegates without a transition. This makes the image boundary explicit while
 avoiding a locally rebuilt database image.
 
-Validate image identity in two layers. The networked, opt-in Podman smoke must
-exercise both the normal 1000:1000 process branch and a 0:0 guest-root
-emulation, checking readiness, data-directory initialization, and host
-ownership in each case. The separate opt-in `make probe-krun-user` command
-should run the pinned image under libkrun and report whether the runtime
-supplied guest root or 1000:1000. Keep that probe outside canonical offline
-`make check` and `make test` because it depends on the local runtime and
-networked image availability.
+Treat the image entrypoint, declared and effective user, writable paths and
+volume ownership, and real startup/readiness behavior as compatibility
+contracts. Validate image identity in two layers. The networked, opt-in
+ordinary-container startup smoke must exercise the full entrypoint and
+writable-volume behavior, including both the normal 1000:1000 process branch
+and a 0:0 guest-root emulation, checking readiness, data-directory
+initialization, and host ownership in each case. A separate opt-in
+libkrun-specific probe should report whether that runtime supplies guest root
+or 1000:1000 and expose other relevant runtime differences. Keep these probes
+outside canonical offline `make check` and `make test` because they depend on
+the local runtime and networked image availability.
+
+When a service has populated its storage, repeat the storage preparation and
+readiness check against realistic descendants created by the service. The
+rerun must accept valid subordinate-range ownership and labels without repair
+and without mutating storage. This catches lifecycle bugs that an empty-tree
+startup test cannot expose.
 
 Use digest-pinned upstream or application-supported images while they satisfy
 that interface. A locally maintained image is justified when it adds a required
@@ -259,6 +287,12 @@ make build
 Review both the TOML and generated diff. Commit them together. CI repeats
 strict ty checks, all behavioral tests, regeneration, artifact parity, and the
 container build before publication.
+
+Generated-contract parity and existing schema validation are fast local gates,
+not release paperwork. Run them before any runtime smoke or operator test, and
+do not bypass them to validate a generated artifact directly. A service change
+is ready for broader testing only when the source declaration, generated
+contract, and schema checks agree.
 
 ## What the compiler owns
 

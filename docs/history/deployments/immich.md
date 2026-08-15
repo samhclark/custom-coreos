@@ -1,7 +1,7 @@
 # Immich rollout retrospective
 
 > Archived evidence — not authoritative. This records the rollout
-> through commit `82b5705` and the reboot evidence collected on 2026-08-15; it
+> through commit `58aa5b0` and the reboot evidence collected on 2026-08-15; it
 > contains no current operational procedure.
 
 ## Outcome
@@ -10,14 +10,17 @@ The rollout established a four-part Immich application on rootless libkrun:
 server, PostgreSQL/VectorChord, Valkey, and CPU-only machine learning. The
 application model, generated Quadlets, routed TAP networking, declarative ZFS
 storage, SOPS runtime secrets, image smoke tests, and diagnostics were all
-added between `9e26898` and `82b5705` (2026-08-11 through 2026-08-14).
+added between `9e26898` and `58aa5b0` (2026-08-11 through 2026-08-14).
 
-The deployment was usable before the reboot, but reboot recovery was not
-validated successfully. In the collected boot evidence, the database, Valkey,
-and machine-learning services became ready; the server repeatedly restarted
-behind `nas-prepare-immich-server-storage.service`, so host port 2283 was not
-available. This is a storage-readiness failure, not evidence of a database,
-network-policy, or all-components startup failure.
+The deployment was usable before the first reboot, but that reboot exposed a
+storage-readiness failure. The database, Valkey, and machine-learning services
+became ready; the server repeatedly restarted behind
+`nas-prepare-immich-server-storage.service`, so host port 2283 was not
+available. After `58aa5b0` was deployed, a clean server reboot required no
+manual repair or service intervention: Immich returned automatically, and
+previously uploaded data remained intact and viewable. The earlier reboot
+therefore identified the mapped descendant ownership and SELinux readiness
+defects, while the later reboot validated their fix.
 
 ## What churn was avoidable
 
@@ -84,23 +87,18 @@ observations are valid rootless runtime state, not ownership or label drift.
 Their rejection prevented the readiness marker and server startup.
 
 The report also shows a cleanup defect: the explicit-repair refusal was retried
-indefinitely, producing dozens of identical failures. That behavior needs a
-bounded/fail-stopped policy and a precise mismatch report before another
-deployment is considered reboot-safe.
+indefinitely, producing dozens of identical failures. `58aa5b0` made that
+failure bounded and diagnostic, and the subsequent clean reboot validated the
+resulting readiness behavior.
 
-## Cleanup and follow-ups
+## Resulting lessons and follow-ups
 
-- Correct the storage contract to accept descendant IDs only from the service
-  identity or its assigned subordinate range, and validate the security-
+- Keep the storage contract explicit: exact service ownership for managed roots,
+  service or assigned subordinate IDs for descendants, and the security-
   relevant label type and level (`container_file_t:s0`) without rejecting an
-  acceptable SELinux user component. Preserve exact ownership and mode on the
-  storage root plus strict mount-source and dataset checks.
-- Make deterministic explicit-repair failures stop or back off instead of
-  retrying forever, and include the exact path, observed value, and expected
-  value in the failure evidence.
-- Validate the fix with the affected mapped child and with the other Immich
-  storage declarations, then perform a clean reboot and confirm server,
-  database, Valkey, ML, TAP policy, and the external health path recover.
+  acceptable SELinux user component.
+- Keep deterministic explicit-repair failures bounded and diagnostic, with the
+  exact path, observed value, and expected value in the failure evidence.
 - Retain and maintain the database entrypoint adapter, image compatibility
   probe, smoke coverage, and diagnostics; these are valuable compatibility
   boundaries, not cleanup targets.
@@ -111,8 +109,8 @@ deployment is considered reboot-safe.
 
 ## Recommended sequence
 
-1. Fix and validate reboot recovery, including the storage-readiness bug and
-   retry behavior.
+1. Preserve the validated reboot-recovery and storage-readiness contracts,
+   including bounded failure behavior.
 2. Add the *arr stack after Immich reboot recovery is boring; use it to expose
    the distinct shared-media, download-handoff, VPN, and application-group
    lifecycle shape.

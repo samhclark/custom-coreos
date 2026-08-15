@@ -280,6 +280,44 @@ class StorageRuntimeTests(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(self.mutations(), [])
 
+    def test_populated_managed_zfs_storage_survives_reboot_validation(self):
+        data_path = self.root / "data"
+        manifest, repair_marker = self.manifest(
+            "managed-zfs|tank/sample|none|-|-",
+            f"managed-zfs|tank/sample/data|{data_path}|0750|compression=lz4",
+        )
+
+        first = self.run_runtime(manifest)
+
+        self.assertEqual(first.returncode, 0, first.stderr)
+        ready = self.root / "run" / "sample" / "ready"
+        self.assertTrue(ready.exists())
+        self.assertFalse(repair_marker.exists())
+
+        self.state = self.read_state()
+        child = data_path / "encoded-video"
+        child.mkdir()
+        self.state["paths"][str(child)] = {
+            "label": "unconfined_u:object_r:container_file_t:s0",
+            "mode": "1755",
+            "owner": "511100000:511100000",
+        }
+        self.state["samples"][str(data_path)].append(str(child))
+        self.write_state()
+
+        ready.unlink()
+        self.log_path.write_text("")
+
+        second = self.run_runtime(manifest)
+
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertFalse(repair_marker.exists())
+        self.assertEqual(self.mutations(), [])
+        self.assertEqual(
+            ready.read_text().strip(),
+            Path("/proc/sys/kernel/random/boot_id").read_text().strip(),
+        )
+
     def test_subid_owned_top_level_child_is_accepted_without_mutation(self):
         directory = self.root / "directory"
         child = directory / "encoded-video"
