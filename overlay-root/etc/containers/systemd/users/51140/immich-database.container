@@ -5,7 +5,7 @@ Documentation=https://docs.immich.app/install/docker-compose/
 
 [Container]
 ContainerName=immich-database
-Image=ghcr.io/immich-app/postgres:14-vectorchord0.5.3-pgvector0.8.1@sha256:89817026d570de0dd4fdd29486a417bcdff31ce4010f8ddc8e8790f42eca710f
+Image=ghcr.io/immich-app/postgres:14-vectorchord1.1.1-pgvector0.8.5@sha256:abbecf4840d4877ee0802272581de7e189a08fd6034de1ae1ee223c063daf894
 Entrypoint=/usr/share/custom-coreos/immich-database/immich-database-entrypoint.sh
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
