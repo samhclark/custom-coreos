@@ -50,7 +50,7 @@ Environment=DB_SKIP_MIGRATIONS=true
 Volume=/usr/share/custom-coreos/immich-database:/usr/share/custom-coreos/immich-database:ro
 
 # Declarative data storage
-Volume=/var/lib/immich/database:/var/lib/postgresql/data
+Volume=/var/lib/immich/database:/var/lib/postgresql
 
 # Runtime secret written at boot by sops-distribute-secrets.service
 Volume=/run/nas-secrets/immich-database/immich-db-password:/run/secrets/immich-db-password:ro,Z

@@ -72,7 +72,7 @@ primary-cache = "all"
 
 [[storage.exports]]
 subpath = "."
-container-path = "/var/lib/postgresql/data"
+container-path = "/var/lib/postgresql"
 access = "read-write"
 
 [unit]
