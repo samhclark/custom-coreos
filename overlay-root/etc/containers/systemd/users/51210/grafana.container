@@ -5,7 +5,7 @@ Documentation=https://grafana.com/docs/grafana/latest/
 
 [Container]
 ContainerName=grafana
-Image=docker.io/grafana/grafana:13.1.2@sha256:d177053ab62253815f130d81504f77063baf5fd4ca93299d6048453bd31e047a
+Image=docker.io/grafana/grafana:13.1.3@sha256:ab5cb380e3ff3172d6c8bd2e7cfd31cce977d2881b260e1f5bc089bf0b759b43
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=2048
