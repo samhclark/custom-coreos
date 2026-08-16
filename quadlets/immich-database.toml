@@ -14,7 +14,7 @@ subid-start = 511400000
 display-name = "Immich database"
 
 [container]
-image = "ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvector0.8.1-pgvectors0.3.0@sha256:87c050465fb969a68c7ac23e375e21f4c95cfacd0edce5fa1bc31e63b7891891"
+image = "ghcr.io/immich-app/postgres:14-vectorchord0.5.3-pgvector0.8.1@sha256:89817026d570de0dd4fdd29486a417bcdff31ce4010f8ddc8e8790f42eca710f"
 network = "host"
 container-user = 1000
 entrypoint = "/usr/share/custom-coreos/immich-database/immich-database-entrypoint.sh"
