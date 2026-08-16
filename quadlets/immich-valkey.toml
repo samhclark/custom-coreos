@@ -22,6 +22,9 @@ container-user = 1000
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
 
+[container.environment]
+DB_SKIP_MIGRATIONS = "true"
+
 [krun]
 enabled = true
 cpus = 1

@@ -37,6 +37,8 @@ UserNS=keep-id:uid=1000,gid=1000
 NoNewPrivileges=true
 DropCapability=NET_RAW
 
+Environment=DB_SKIP_MIGRATIONS=true
+
 # Declarative cache storage
 Volume=/var/lib/immich/machine-learning/models:/cache
 
