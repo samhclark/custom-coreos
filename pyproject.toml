@@ -1,7 +1,7 @@
 [project]
 name = "custom-coreos-dev"
 version = "0.0.0"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = []
 
 [dependency-groups]
@@ -14,7 +14,7 @@ package = false
 required-version = "==0.12.3"
 
 [tool.ty.environment]
-python-version = "3.11"
+python-version = "3.14"
 
 [tool.ty.src]
 include = ["generate-quadlets.py", "quadletgen", "scripts/plan-image-cleanup.py"]

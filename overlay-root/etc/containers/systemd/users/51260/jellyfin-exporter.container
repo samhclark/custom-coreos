@@ -5,7 +5,7 @@ Documentation=https://jellyfin.org/docs/general/networking/monitoring/
 
 [Container]
 ContainerName=jellyfin-exporter
-Image=docker.io/library/python:3.13.7-slim@sha256:5f55cdf0c5d9dc1a415637a5ccc4a9e18663ad203673173b8cda8f8dcacef689
+Image=docker.io/library/python:3.14.7-slim@sha256:ce40764625a4ff50df3548277632e7f96c4e77fe75fa848aae9885476e7df5a4
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=1
 Annotation=krun.ram_mib=128
