@@ -15,7 +15,7 @@ subid-start = 513100000
 display-name = "Caddy"
 
 [container]
-image = "ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:fc548596b7bbc0ec5aa82a495e74652cecb4602fad3bb63b2d707ca4e6e1e555"
+image = "ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:142f36c7664fa519a8597f07e71079e0d4945b47833d52b8c99abc2b6da7a094"
 network = "host"
 # Avoid the host's loopback-only systemd-resolved stub inside the nested guest.
 # MagicDNS preserves tailnet resolution and forwards public lookups to the
