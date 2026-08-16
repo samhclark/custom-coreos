@@ -14,6 +14,7 @@ from .render_network import (
     networkd_dependencies,
     networkd_netdev,
     networkd_network,
+    tailscale_network,
     wireguard_netdev,
     wireguard_network,
     nft_filter,
@@ -223,6 +224,10 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
     ]
     if fleet.egress is not None:
         artifacts += [
+            Artifact(
+                Path("usr/lib/systemd/network/60-tailscale0.network"),
+                tailscale_network(),
+            ),
             Artifact(
                 Path("usr/lib/systemd/network/70-wg-arr.netdev"),
                 wireguard_netdev(fleet.egress),

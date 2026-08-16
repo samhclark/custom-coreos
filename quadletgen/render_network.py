@@ -118,6 +118,18 @@ IPv6AcceptRA=no
 """
 
 
+def tailscale_network() -> str:
+    """Keep the Tailscale MagicDNS resolver on the Tailscale interface."""
+    return f"""{fleet_header("tailscale0")}
+[Match]
+Name=tailscale0
+
+[Route]
+Destination={KRUN_DNS_SERVERS[0]}/32
+Scope=link
+"""
+
+
 def networkmanager_policy(fleet: Fleet) -> str:
     """Keep networkd-owned interfaces unmanaged by NetworkManager."""
     interfaces = ["krun-*"]
