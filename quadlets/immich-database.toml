@@ -29,6 +29,8 @@ POSTGRES_USER = "postgres"
 POSTGRES_DB = "immich"
 POSTGRES_INITDB_ARGS = "--data-checksums"
 DB_STORAGE_TYPE = "HDD"
+IGNORE_DATABASE_FSTYPE = "true" # ignoring this warning from Immich for now
+# I want to evaluate passing a block device into krun, but that's for later
 
 [[container.volumes]]
 comment = "Image-controlled PostgreSQL entrypoint adapter (read-only)"

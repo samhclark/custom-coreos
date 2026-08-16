@@ -43,6 +43,7 @@ Environment=POSTGRES_USER=postgres
 Environment=POSTGRES_DB=immich
 Environment=POSTGRES_INITDB_ARGS=--data-checksums
 Environment=DB_STORAGE_TYPE=HDD
+Environment=IGNORE_DATABASE_FSTYPE=true
 
 # Image-controlled PostgreSQL entrypoint adapter (read-only)
 Volume=/usr/share/custom-coreos/immich-database:/usr/share/custom-coreos/immich-database:ro
