@@ -15,7 +15,7 @@ class DevelopmentToolchainTests(unittest.TestCase):
     def test_uv_is_the_only_python_dependency_boundary(self):
         project = tomllib.loads((REPO / "pyproject.toml").read_text())
 
-        self.assertEqual(project["project"]["requires-python"], ">=3.11")
+        self.assertEqual(project["project"]["requires-python"], ">=3.14")
         self.assertEqual(project["dependency-groups"]["dev"], ["ty==0.0.69"])
         self.assertFalse(project["tool"]["uv"]["package"])
         self.assertEqual(project["tool"]["uv"]["required-version"], "==0.12.3")
