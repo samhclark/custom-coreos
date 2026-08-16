@@ -22,9 +22,6 @@ no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
 dns = ["100.100.100.100"]
 
-[container.environment]
-DB_SKIP_MIGRATIONS = "true"
-
 [krun]
 enabled = true
 cpus = 4

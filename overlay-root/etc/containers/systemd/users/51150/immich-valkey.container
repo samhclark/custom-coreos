@@ -37,8 +37,6 @@ UserNS=keep-id:uid=1000,gid=1000
 NoNewPrivileges=true
 DropCapability=NET_RAW
 
-Environment=DB_SKIP_MIGRATIONS=true
-
 # Declarative data storage
 Volume=/var/lib/immich/valkey:/data
 
