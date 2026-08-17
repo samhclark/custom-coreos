@@ -42,7 +42,7 @@ options = "ro"
 [krun]
 enabled = true
 cpus = 2
-ram-mib = 1024
+ram-mib = 4096
 network = "tap"
 ipv4 = "10.253.15.2/30"
 probe-endpoint = "http"

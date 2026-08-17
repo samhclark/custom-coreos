@@ -9,7 +9,7 @@ Image=lscr.io/linuxserver/radarr:6.3.0.10514-ls313@sha256:a45b5ab0f850f39edb4cc9
 Entrypoint=/usr/share/custom-coreos/radarr/radarr-entrypoint.sh
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
-Annotation=krun.ram_mib=1024
+Annotation=krun.ram_mib=4096
 Annotation=krun.tap_name=krun-51420
 StopSignal=SIGINT
 Network=host
