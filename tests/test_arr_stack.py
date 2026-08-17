@@ -174,6 +174,8 @@ class ArrStackTests(unittest.TestCase):
             ("krun-51430", "krun-51420", 7878),
             ("krun-51410", "krun-51430", 9696),
             ("krun-51420", "krun-51430", 9696),
+            ("krun-51410", "krun-51440", 8080),
+            ("krun-51420", "krun-51440", 8080),
             ("krun-51430", "krun-51440", 8080),
         )
         for source, target, port in expected:

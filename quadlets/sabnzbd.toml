@@ -52,7 +52,7 @@ egress = "mullvad"
 [[container.endpoints]]
 name = "http"
 port = 8080
-consumers = ["caddy", "prowlarr"]
+consumers = ["caddy", "radarr", "sonarr", "prowlarr"]
 
 [assets]
 path = "/usr/share/custom-coreos/sabnzbd"
