@@ -3,7 +3,7 @@
 
 set -euo pipefail
 
-umask 002
+umask 022
 
 effective_uid="$(id -u)"
 effective_gid="$(id -g)"
