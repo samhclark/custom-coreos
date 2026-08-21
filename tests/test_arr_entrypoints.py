@@ -151,7 +151,9 @@ class ArrEntrypointContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(
             content,
-            "[misc]\nhost_whitelist = sabnzbd.i.samhclark.com, sabnzbd.krun\n",
+            "[misc]\n"
+            "host_whitelist = sabnzbd.i.samhclark.com, sabnzbd.krun\n"
+            "permissions = 2770\n",
         )
         self.assertEqual(mode, 0o600)
 
@@ -170,6 +172,7 @@ class ArrEntrypointContractTests(unittest.TestCase):
         self.assertIn(
             "host_whitelist = nas, sabnzbd.i.samhclark.com, sabnzbd.krun", content
         )
+        self.assertIn("permissions = 2770", content)
         self.assertIn("description = '''line one", content)
         self.assertIn("line two", content)
         self.assertIn("# keep this comment", content)
@@ -196,10 +199,21 @@ class ArrEntrypointContractTests(unittest.TestCase):
                 "host_whitelist = nas, sabnzbd.krun, sabnzbd.i.samhclark.com",
                 config.read_text(),
             )
+            self.assertIn("permissions = 2770", config.read_text())
             self.assertIn("__version__ = 16", config.read_text())
             self.assertIn("[[provider]]", config.read_text())
             self.assertEqual(stat.S_IMODE(config.stat().st_mode), 0o640)
             self.assertEqual(config.stat().st_mtime_ns, first_mtime)
+
+    def test_sabnzbd_helper_replaces_restrictive_completed_permissions(self):
+        result, content, _ = self._run_sab_helper(
+            "[misc]\nhost_whitelist = nas\npermissions = 0700\n"
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("host_whitelist = nas, sabnzbd.i.samhclark.com, sabnzbd.krun", content)
+        self.assertIn("permissions = 2770", content)
+        self.assertNotIn("permissions = 0700", content)
 
     def test_sabnzbd_helper_rejects_malformed_config_without_replacing_it(self):
         result, content, _ = self._run_sab_helper(

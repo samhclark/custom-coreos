@@ -32,6 +32,11 @@ dns = ["100.100.100.100"]
 [container.environment]
 TZ = "America/Chicago"
 CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES = "sabnzbd.i.samhclark.com,sabnzbd.krun"
+# SABnzbd applies this mode recursively after unpacking, including archives
+# whose entries carry restrictive Unix mode bits. The setgid directory mode
+# keeps the fleet media group on descendants; regular files lose x bits and
+# become 0660.
+CUSTOM_COREOS_SABNZBD_COMPLETED_PERMISSIONS = "2770"
 
 [[container.volumes]]
 comment = "Image-controlled libkrun entrypoint adapter (read-only)"

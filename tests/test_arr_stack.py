@@ -90,6 +90,10 @@ class ArrStackTests(unittest.TestCase):
             "sabnzbd.i.samhclark.com,sabnzbd.krun",
             quadlet,
         )
+        self.assertIn(
+            "Environment=CUSTOM_COREOS_SABNZBD_COMPLETED_PERMISSIONS=2770",
+            quadlet,
+        )
 
     def test_shared_layout_is_writable_only_where_required(self):
         sonarr = self.artifacts[

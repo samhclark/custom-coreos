@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Safely maintain SABnzbd's reverse-proxy hostname allowlist."""
+"""Safely maintain SABnzbd's startup and shared-download settings."""
 
 from __future__ import annotations
 
@@ -15,8 +15,11 @@ from configobj import ConfigObj, ConfigObjError
 
 
 ENVIRONMENT_NAME = "CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES"
+PERMISSIONS_ENVIRONMENT_NAME = "CUSTOM_COREOS_SABNZBD_COMPLETED_PERMISSIONS"
 SECTION_NAME = "misc"
 KEY_NAME = "host_whitelist"
+PERMISSIONS_KEY_NAME = "permissions"
+DEFAULT_COMPLETED_PERMISSIONS = "2770"
 
 
 class ConfigError(RuntimeError):
@@ -49,6 +52,21 @@ def _allowed_hostnames() -> list[str]:
     if len({name.casefold() for name in names}) != len(names):
         raise ConfigError(f"duplicate names in {ENVIRONMENT_NAME}")
     return names
+
+
+def _completed_permissions() -> str:
+    permissions = os.environ.get(
+        PERMISSIONS_ENVIRONMENT_NAME, DEFAULT_COMPLETED_PERMISSIONS
+    )
+    if not re.fullmatch(r"[0-7]{4}", permissions):
+        raise ConfigError(
+            f"invalid {PERMISSIONS_ENVIRONMENT_NAME} value"
+        )
+    if permissions[-3:] != "770":
+        raise ConfigError(
+            f"{PERMISSIONS_ENVIRONMENT_NAME} must grant owner/group rwx"
+        )
+    return permissions
 
 
 def _read_config(path: Path) -> tuple[bytes, bool, int | None]:
@@ -113,7 +131,12 @@ def _serialize(config: ConfigObj) -> bytes:
     return output.getvalue()
 
 
-def _updated_config(content: bytes, path: Path, required: list[str]) -> bytes:
+def _updated_config(
+    content: bytes,
+    path: Path,
+    required: list[str],
+    completed_permissions: str,
+) -> bytes:
     config = _parse(content, path)
     if SECTION_NAME not in config:
         config[SECTION_NAME] = {}
@@ -130,6 +153,9 @@ def _updated_config(content: bytes, path: Path, required: list[str]) -> bytes:
             combined.append(name)
             seen.add(folded)
     section[KEY_NAME] = combined
+    # SABnzbd applies this mode recursively after unpacking. In particular,
+    # this repairs restrictive mode bits preserved from Unix-aware archives.
+    section[PERMISSIONS_KEY_NAME] = completed_permissions
     serialized = _serialize(config)
     # Validate the exact bytes that will be atomically installed. This keeps a
     # future ConfigObj/API change from replacing a valid file with output that
@@ -195,6 +221,7 @@ def ensure_host_whitelist(path: Path) -> bool:
     if os.geteuid() != 1000 or os.getegid() != 1000:
         raise ConfigError("helper must run as UID:GID 1000:1000")
     required = _allowed_hostnames()
+    completed_permissions = _completed_permissions()
 
     main_content, main_exists, main_mode = _read_config(path)
     target = path
@@ -209,7 +236,9 @@ def ensure_host_whitelist(path: Path) -> bool:
             content = backup_content
             mode = backup_mode
 
-    updated = _updated_config(content, target, required)
+    updated = _updated_config(
+        content, target, required, completed_permissions
+    )
     target_mode = _safe_mode(mode)
     try:
         current_stat = os.lstat(target)
@@ -234,7 +263,7 @@ def main() -> int:
     try:
         ensure_host_whitelist(Path(sys.argv[1]))
     except (ConfigError, OSError) as error:
-        print(f"sabnzbd host whitelist: {error}", file=sys.stderr)
+        print(f"sabnzbd config: {error}", file=sys.stderr)
         return 1
     return 0
 

@@ -43,6 +43,7 @@ DropCapability=NET_RAW
 
 Environment=TZ=America/Chicago
 Environment=CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES=sabnzbd.i.samhclark.com,sabnzbd.krun
+Environment=CUSTOM_COREOS_SABNZBD_COMPLETED_PERMISSIONS=2770
 
 # Image-controlled libkrun entrypoint adapter (read-only)
 Volume=/usr/share/custom-coreos/sabnzbd:/usr/share/custom-coreos/sabnzbd:ro
