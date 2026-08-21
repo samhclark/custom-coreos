@@ -3,7 +3,9 @@
 
 set -euo pipefail
 
-umask 022
+# SABnzbd writes into the fleet-shared media tree. Keep newly created
+# directories and files writable by Radarr/Sonarr through group 52000.
+umask 002
 
 effective_uid="$(id -u)"
 effective_gid="$(id -g)"

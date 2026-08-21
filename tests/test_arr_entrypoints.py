@@ -105,6 +105,8 @@ class ArrEntrypointContractTests(unittest.TestCase):
             script,
         )
         self.assertIn('--server "${family}" "$@"', script)
+        self.assertIn("umask 002", script)
+        self.assertNotIn("umask 022", script)
         self.assertIn("ensure-host-whitelist.py", script)
         self.assertNotIn("mkdir", script)
         self.assertNotIn("chown", script)
