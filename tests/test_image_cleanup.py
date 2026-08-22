@@ -113,8 +113,10 @@ class ImageCleanupTests(unittest.TestCase):
             directory = Path(directory_name)
             fake_gh = directory / "gh"
             fake_date = directory / "date"
+            gh_arguments = directory / "gh-arguments"
             fake_gh.write_text(
                 "#!/bin/bash\nset -euo pipefail\n"
+                "printf '%s\\n' \"$*\" > \"${FAKE_GH_ARGUMENTS}\"\n"
                 "printf '%s\\n' \"${FAKE_GH_RESPONSE}\"\n"
             )
             fake_date.write_text(
@@ -126,6 +128,7 @@ class ImageCleanupTests(unittest.TestCase):
             environment = os.environ | {
                 "GH_BIN": str(fake_gh),
                 "DATE_BIN": str(fake_date),
+                "FAKE_GH_ARGUMENTS": str(gh_arguments),
                 "FAKE_GH_RESPONSE": response,
             }
 
@@ -136,6 +139,17 @@ class ImageCleanupTests(unittest.TestCase):
                 text=True,
                 timeout=3,
             )
+            success_args = gh_arguments.read_text()
+
+            legacy = subprocess.run(
+                [SELECTOR, "90"],
+                env=environment | {"CONTAINER_PACKAGE_NAME": "custom-coreos"},
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            legacy_args = gh_arguments.read_text()
+
             fake_gh.write_text("#!/bin/bash\nexit 7\n")
             failure = subprocess.run(
                 [SELECTOR, "90"],
@@ -147,6 +161,16 @@ class ImageCleanupTests(unittest.TestCase):
 
         self.assertEqual(success.returncode, 0, success.stderr)
         self.assertIn("Total package versions: 1", success.stdout)
+        self.assertIn(
+            "/user/packages/container/nas%2Fbootc/versions --paginate",
+            success_args,
+        )
+        self.assertEqual(legacy.returncode, 0, legacy.stderr)
+        self.assertIn(
+            "/user/packages/container/custom-coreos/versions --paginate",
+            legacy_args,
+        )
+
         self.assertEqual(failure.returncode, 7)
         self.assertNotIn("paginated API response", failure.stderr)
 

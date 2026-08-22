@@ -30,20 +30,39 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Plan package-version cleanup
-        id: versions
+        id: bootc_versions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           ./scripts/select-expired-images.sh "${RETENTION_DAYS}"
           --github-output "${GITHUB_OUTPUT}"
 
-      - name: Delete old package versions
+      - name: Plan legacy package-version cleanup
+        id: legacy_versions
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONTAINER_PACKAGE_NAME: custom-coreos
+        run: >-
+          ./scripts/select-expired-images.sh "${RETENTION_DAYS}"
+          --github-output "${GITHUB_OUTPUT}"
+
+      - name: Delete old bootc package versions
         uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5
-        if: steps.versions.outputs.delete_versions != '' && env.DRY_RUN != 'true'
+        if: steps.bootc_versions.outputs.delete_versions != '' && env.DRY_RUN != 'true'
+        with:
+          package-name: 'nas/bootc'
+          package-type: 'container'
+          package-version-ids: ${{ steps.bootc_versions.outputs.delete_versions }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete old legacy package versions
+        uses: actions/delete-package-versions@e5bc658cc4c965c472efe991f8beea3981499c55 # v5
+        if: steps.legacy_versions.outputs.delete_versions != '' && env.DRY_RUN != 'true'
         with:
           package-name: 'custom-coreos'
           package-type: 'container'
-          package-version-ids: ${{ steps.versions.outputs.delete_versions }}
+          package-version-ids: ${{ steps.legacy_versions.outputs.delete_versions }}
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Dry run summary
@@ -52,18 +71,25 @@ jobs:
           echo "🧪 DRY RUN COMPLETE"
           echo "This was a dry run - no versions were actually deleted."
           echo ""
-          if [[ -n "${{ steps.versions.outputs.delete_versions }}" ]]; then
-            echo "📋 Would delete these versions:"
-            echo "${{ steps.versions.outputs.delete_versions }}" | tr ',' '\n' | nl -w2 -s'. ID: '
+          if [[ -n "${{ steps.bootc_versions.outputs.delete_versions }}" ]]; then
+            echo "📋 Would delete these nas/bootc versions:"
+            echo "${{ steps.bootc_versions.outputs.delete_versions }}" | tr ',' '\n' | nl -w2 -s'. ID: '
             echo ""
-            echo "To perform actual cleanup, run this workflow with dry_run=false"
           else
-            echo "✅ No versions were eligible for deletion"
-            echo "All versions are within the ${{ env.RETENTION_DAYS }}-day retention window"
+            echo "✅ No nas/bootc versions were eligible for deletion"
           fi
+          if [[ -n "${{ steps.legacy_versions.outputs.delete_versions }}" ]]; then
+            echo "📋 Would delete these custom-coreos versions:"
+            echo "${{ steps.legacy_versions.outputs.delete_versions }}" | tr ',' '\n' | nl -w2 -s'. ID: '
+            echo ""
+          else
+            echo "✅ No custom-coreos versions were eligible for deletion"
+          fi
+          echo "All versions are within the ${{ env.RETENTION_DAYS }}-day retention window"
+          echo "To perform actual cleanup, run this workflow with dry_run=false"
 
       - name: Cleanup completion summary
-        if: env.DRY_RUN != 'true' && steps.versions.outputs.delete_versions != ''
+        if: env.DRY_RUN != 'true' && (steps.bootc_versions.outputs.delete_versions != '' || steps.legacy_versions.outputs.delete_versions != '')
         run: |
           echo "✅ CLEANUP COMPLETED"
           echo "Successfully deleted older container versions"

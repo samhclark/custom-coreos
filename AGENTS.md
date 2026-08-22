@@ -4,12 +4,12 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Overview
 
-This repository creates a custom CoreOS container image with ZFS, Tailscale, and encrypted storage support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
+This repository creates a NAS container image with ZFS, Tailscale, and encrypted storage support. The project has been **successfully overhauled** from a build-from-source approach to using prebuilt ZFS kernel modules with full CI/CD automation.
 
 **Status**: In production for one personal NAS
 **Build Time**: ~2-3 minutes (down from 10+ minutes)
-**Container Registry**: `ghcr.io/samhclark/custom-coreos:stable`
-**Ignition File**: `https://samhclark.github.io/custom-coreos/ignition.json`
+**Container Registry**: `ghcr.io/samhclark/nas/bootc:stable`
+**Ignition File**: `https://samhclark.github.io/nas/ignition.json`
 
 This is an open source reference project, not a general-purpose appliance. The intended deployment is one machine for one user.
 
@@ -30,7 +30,7 @@ If you need to understand real behavior, prioritize `Containerfile`, `overlay-ro
 
 ## Runtime Topology
 
-This repo is not just "CoreOS with ZFS". It currently defines a full single-node NAS host profile.
+This repo is not just a bootc image with ZFS. It currently defines a full single-node NAS host profile.
 
 ### Active Quadlet Containers
 
@@ -87,7 +87,7 @@ Important non-container units:
 
 ### Secrets Model
 
-- Secret material is encrypted in the repo with SOPS at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`
+- Secret material is encrypted in the repo with SOPS at `/usr/share/nas/secrets/secrets.sops.yaml`
 - The SOPS age private key is expected on the NAS as a `systemd-creds` file at `/var/lib/nas-secrets/age-key.cred`
 - `sops-distribute-secrets.service` is the boot-time source of truth for Garage, Caddy, VictoriaMetrics, Alertmanager, Jellyfin exporter, and Immich database secrets
 - The root-owned distributor writes per-service runtime files under `/run/nas-secrets/<service>/`; consuming rootless services mount those files read-only instead of using Podman `Secret=`
@@ -188,22 +188,23 @@ the authoritative package and unit lists — do not duplicate them here.
 ### Main Build (`.github/workflows/build.yaml`)
 - **Trigger**: Daily at 9:18 AM UTC + manual
 - **Jobs**: repository validation, SOPS verification, and version resolution → build
-- **Output**: `ghcr.io/samhclark/custom-coreos:stable`
+- **Output**: `ghcr.io/samhclark/nas/bootc:stable`
 - **Features**: Version discovery, compatibility checking, build attestations
 
 ### Ignition Files (`.github/workflows/pages.yaml`)
 - **Trigger**: Push to main (Butane config, Makefile generation logic, or Pages template changes) + manual
-- **Output**: `https://samhclark.github.io/custom-coreos/ignition.json`
+- **Output**: `https://samhclark.github.io/nas/ignition.json`
 - **Features**: Butane→Ignition conversion, GitHub Pages deployment
 
 ### Container Cleanup (`.github/workflows/cleanup-images.yaml`)
 - **Trigger**: Weekly Sundays 2 AM UTC + manual
 - **Retention**: 90 days
+- **Targets**: Both the current `nas/bootc` package and legacy `custom-coreos` versions
 - **Safety**: Manual triggers default to dry-run
 
 ## Configuration Strategy
 
-**This is a bootc-centric CoreOS system requiring careful separation of configuration approaches.**
+**This is a bootc-centric NAS system requiring careful separation of configuration approaches.**
 
 ### Containerfile Configuration (System Capabilities)
 Use the `Containerfile` for configuration that adds **capabilities** to the system:
@@ -227,10 +228,10 @@ Use `butane.yaml` for configuration that is **personal** or **cannot be describe
 
 ### Installation URL
 ```
-https://samhclark.github.io/custom-coreos/ignition.json
+https://samhclark.github.io/nas/ignition.json
 ```
 
-Use this URL during CoreOS installation to configure encrypted storage, SSH access, and system settings.
+Use this URL during Fedora CoreOS installation to configure encrypted storage, SSH access, and system settings.
 
 ## Version Compatibility Strategy
 
@@ -244,8 +245,8 @@ This eliminates duplicate compatibility tracking and provides automatic compatib
 ## Container Labels
 
 Images include labels for future deduplication:
-- `custom-coreos.zfs-version` - ZFS version used
-- `custom-coreos.kernel-version` - Kernel version used
+- `nas.bootc.zfs-version` - ZFS version used
+- `nas.bootc.kernel-version` - Kernel version used
 
 ## Key Files
 
@@ -308,7 +309,7 @@ Images include labels for future deduplication:
 Current state:
 - Thirteen image-defined services are deployed as rootless admin-managed user Quadlets: the existing ingress, observability, Garage, and Jellyfin services plus the four-component Immich application. Four additional media-automation services are configured but await the reviewed media migration and production validation. Immich first use and a clean post-fix reboot are validated; the earlier reboot exposed and motivated the mapped-ownership storage-readiness fix. Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work.
 - All seventeen configured services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
-- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `make generate-quadlets`, and commit both. Each service declares an application, a unique role within that application, named endpoints with allowed consumers, and any bounded startup dependencies. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, storage-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` for declared secrets.
+- Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `make generate-quadlets`, and commit both. Each service declares an application, a unique role within that application, named endpoints with allowed consumers, and any bounded startup dependencies. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, storage-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/nas/secrets/secrets.sops.yaml` for declared secrets.
 
 Useful reference points for future rootless work:
 - The vendored `podman-systemd.unit.5.md` in this repo documents the rootless admin-managed Quadlet search paths under `/etc/containers/systemd/users/$(UID)` and `/etc/containers/systemd/users/`
@@ -319,9 +320,9 @@ Useful reference points for future rootless work:
 - Do not use Podman `Secret=` for rootless services. Use per-service runtime files written by the root-owned SOPS distributor under `/run/nas-secrets/<service>/`, mounted read-only with `:ro,Z` (validated on the NAS 2026-07-03: rootless Podman can relabel `/run` tmpfs files to `container_file_t`; unrelabeled `var_run_t` files are blocked by SELinux).
 - linger state lives under `/var/lib/systemd/linger`; generated tmpfiles provisioning creates each service marker before logind starts
 - Rootless user services should not depend directly on system units like `victoria-metrics.service`; cross-manager ordering is fragile, so prefer services that can tolerate starting independently, or use a bounded `ExecStartPre=` readiness loop when startup requires a local dependency to answer first
-- Grafana's shipped provisioning and dashboards now live under `/usr/share/custom-coreos/grafana/` so they remain image-controlled rather than service-owned
-- vmalert's shipped rules now live under `/usr/share/custom-coreos/vmalert/` so they remain image-controlled rather than service-owned
-- Alertmanager's static config lives under `/usr/share/custom-coreos/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
+- Grafana's shipped provisioning and dashboards now live under `/usr/share/nas/grafana/` so they remain image-controlled rather than service-owned
+- vmalert's shipped rules now live under `/usr/share/nas/vmalert/` so they remain image-controlled rather than service-owned
+- Alertmanager's static config lives under `/usr/share/nas/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
 - Stateful service storage is declared under `[[storage]]`. Generated preparation units create only missing managed resources, verify exact mounts/properties, maintain persistent SELinux policy, and publish `/run/nas-storage/<service>/ready`; see `docs/architecture/storage.md`.
 - Owned storage roots require the exact service UID/GID. Descendants may use that identity, a declared supplemental fleet GID, or IDs inside the service's generated subordinate range; container-root-created mount anchors and app files using the typed shared group are not ownership drift. The versioned storage manifest must carry this identity contract so it survives reboot checks. For descendant labels, enforce `object_r:container_file_t:s0` with no MCS categories rather than requiring a particular SELinux user field.
 - Caddy, Alertmanager, Grafana, Immich Valkey, and Immich machine learning use small directory storage with guarded automatic repair. Garage, VictoriaMetrics, Jellyfin, the Immich server, and the Immich database use explicit-repair ZFS storage; create `/var/lib/nas-repairs/<service>/repair-required` and restart `nas-prepare-<service>-storage.service` only after reviewing why the bounded check failed.
@@ -379,7 +380,7 @@ SELinux labels are stored as xattrs on files. ZFS snapshots capture xattrs. Roll
 - **Build the container image**: `make build`
 - **Update the Ignition file** (after editing `butane.yaml`): `make generate-ignition`
 - **Trigger CI build**: `make run-workflow`
-- **Install CoreOS**: Use `https://samhclark.github.io/custom-coreos/ignition.json`
+- **Install Fedora CoreOS**: Use `https://samhclark.github.io/nas/ignition.json`
 
 ## Troubleshooting
 

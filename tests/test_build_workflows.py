@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 
@@ -35,6 +36,10 @@ class BuildWorkflowTests(unittest.TestCase):
                 self.assertIn("needs: preflight", workflow)
                 self.assertIn("needs.preflight.outputs.zfs-version", workflow)
                 self.assertIn("needs.preflight.outputs.kernel-version", workflow)
+                self.assertIn(
+                    "IMAGE_NAME: ${{ github.repository }}/bootc",
+                    workflow,
+                )
                 self.assertNotIn("make check", workflow)
                 self.assertNotIn("make test", workflow)
                 self.assertNotIn("Verify SOPS image signature", workflow)
@@ -67,8 +72,27 @@ class BuildWorkflowTests(unittest.TestCase):
     def test_production_publisher_is_serialized_without_cancellation(self):
         workflow = (WORKFLOWS / "build.yaml").read_text()
 
-        self.assertIn("group: custom-coreos-publisher", workflow)
+        self.assertIn("group: nas-publisher", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
+
+    def test_cleanup_covers_current_and_legacy_packages(self):
+        workflow = (WORKFLOWS / "cleanup-images.yaml").read_text()
+
+        self.assertIn("package-name: 'nas/bootc'", workflow)
+        self.assertIn("package-name: 'custom-coreos'", workflow)
+        self.assertIn("CONTAINER_PACKAGE_NAME: custom-coreos", workflow)
+        self.assertIn("id: bootc_versions", workflow)
+        self.assertIn("id: legacy_versions", workflow)
+
+    def test_bootc_signature_policy_is_not_a_nas_namespace_wildcard(self):
+        policy = json.loads(
+            (REPO / "overlay-root/etc/containers/policy.json").read_text()
+        )
+        docker_policy = policy["transports"]["docker"]
+
+        self.assertIn("ghcr.io/samhclark/nas/bootc", docker_policy)
+        self.assertNotIn("ghcr.io/samhclark/nas", docker_policy)
+        self.assertNotIn("ghcr.io/samhclark/nas/*", docker_policy)
 
 
 if __name__ == "__main__":

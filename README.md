@@ -1,10 +1,10 @@
-# custom-coreos
+# nas
 
-A custom CoreOS container image for my personal NAS, open sourced as a reference project rather than a general-purpose distribution.
+A NAS container image for my personal NAS, open sourced as a reference project rather than a general-purpose distribution.
 
 ## Overview
 
-This project builds a CoreOS image with:
+This project builds a bootc image with:
 - **ZFS filesystem support** via prebuilt kernel modules
 - **Tailscale VPN** for secure networking
 - **LUKS encryption** with TPM2-based unlock
@@ -17,10 +17,10 @@ This repository is primarily a record of one working system design. It is useful
 
 ### Installation
 
-Use the pre-generated Ignition file during CoreOS installation:
+Use the pre-generated Ignition file during Fedora CoreOS installation:
 
 ```
-https://samhclark.github.io/custom-coreos/ignition.json
+https://samhclark.github.io/nas/ignition.json
 ```
 
 This configures:
@@ -37,17 +37,17 @@ configuration for one machine, not a generic installer profile.
 The latest build is available at:
 
 ```
-ghcr.io/samhclark/custom-coreos:stable
+ghcr.io/samhclark/nas/bootc:stable
 ```
 
-Updated daily with the latest CoreOS and ZFS versions.
+Updated daily with the latest Fedora CoreOS and ZFS versions.
 
 ### Overall steps to install
 
-1. Install CoreOS on the machine (using the above Ignition file if you're me)
-2. Switch to Custom CoreOS: `sudo bootc switch ghcr.io/samhclark/custom-coreos:stable`
+1. Install Fedora CoreOS on the machine (using the above Ignition file if you're me)
+2. Switch to NAS: `sudo bootc switch ghcr.io/samhclark/nas/bootc:stable`
 3. Reboot
-4. Switch to _signed_ Custom CoreOS: `sudo bootc switch --enforce-container-sigpolicy ghcr.io/samhclark/custom-coreos:stable`
+4. Switch to _signed_ NAS: `sudo bootc switch --enforce-container-sigpolicy ghcr.io/samhclark/nas/bootc:stable`
 5. Reboot
 6. Log in to Tailscale, set up SSH access: `sudo tailscale login` and `sudo tailscale set --ssh`
 7. Configure auto unlocking for the attached data drives
@@ -130,7 +130,7 @@ make cleanup-dry-run RETENTION_DAYS=90
    image whose signature CI verifies.
 3. **Prebuilt ZFS modules**: Pull the matching ZFS RPM image from the
    `fedora-zfs-kmods` registry.
-4. **Final CoreOS assembly**: Install the host packages and ZFS RPMs, copy the
+4. **Final image assembly**: Install the host packages and ZFS RPMs, copy the
    runtime overlay, enable units, install SELinux policy, and run bootc lint.
 
 ### Dependencies
@@ -149,7 +149,7 @@ The resulting container images are signed by Cosign.
 The keys were generated with the following command:
 
 ```
-$ GITHUB_TOKEN="$(gh auth token)" COSIGN_PASSWORD="$(head -c 33 /dev/urandom | base64)" cosign generate-key-pair github://samhclark/custom-coreos --output-file cosign.pub
+$ GITHUB_TOKEN="$(gh auth token)" COSIGN_PASSWORD="$(head -c 33 /dev/urandom | base64)" cosign generate-key-pair github://samhclark/nas --output-file cosign.pub
 Password written to COSIGN_PASSWORD github actions secret
 Private key written to COSIGN_PRIVATE_KEY github actions secret
 Public key written to COSIGN_PUBLIC_KEY github actions secret
@@ -160,7 +160,7 @@ The key is included in the image at `/etc/pki/cosign/cosign.pub`.
 You can also download the key with:
 
 ```
-wget https://raw.githubusercontent.com/samhclark/custom-coreos/refs/heads/main/overlay-root/etc/pki/cosign/cosign.pub
+wget https://raw.githubusercontent.com/samhclark/nas/refs/heads/main/overlay-root/etc/pki/cosign/cosign.pub
 ```
 
 The SHA-256 checksum of the key that I originally created on August 16, 2025 is
@@ -170,27 +170,35 @@ $ sha256sum cosign.pub
 7fdb3c2b8159178046596fb49a4e95d42538bb6864595f7a6d789d9bd8837d38  cosign.pub
 ```
 
+During the repository rename, `/etc/containers/policy.json` retains signed
+image rules for both `ghcr.io/samhclark/custom-coreos` and
+`ghcr.io/samhclark/nas/bootc`. The existing empty-repository fallback permits the
+initial transition pull; once the NAS image is running, pulls from the new
+repository match its explicit signed-image rule. Keep the old rule while
+rollback to the previous deployment remains necessary.
+
 ### Main Build (`build.yaml`)
 - **Schedule**: Daily at 9:18 AM UTC
 - **Trigger**: Manual via `make run-workflow`
-- **Output**: `ghcr.io/samhclark/custom-coreos:stable`
+- **Output**: `ghcr.io/samhclark/nas/bootc:stable`
 - **Features**: Automatic version discovery, compatibility checking, build attestations
 
 ### Ignition Files (`pages.yaml`)
 - **Trigger**: Changes to `butane.yaml`, its Make target, or the Pages template + manual
-- **Output**: `https://samhclark.github.io/custom-coreos/ignition.json`
+- **Output**: `https://samhclark.github.io/nas/ignition.json`
 - **Features**: Butane→Ignition conversion, GitHub Pages deployment
 
 ### Container Cleanup (`cleanup-images.yaml`)
 - **Schedule**: Weekly on Sundays at 2 AM UTC
 - **Retention**: 90 days
+- **Targets**: `nas/bootc` and the legacy `custom-coreos` package
 - **Safety**: Manual triggers default to dry-run mode
 
 ## Configuration
 
 ### Butane Configuration (`butane.yaml`)
 
-The CoreOS configuration keeps host-specific settings and install-time storage setup. Service configuration is baked into the container image.
+The Butane configuration keeps host-specific settings and install-time storage setup. Service configuration is baked into the container image.
 
 ```yaml
 variant: fcos
@@ -227,7 +235,7 @@ Root unlock is TPM-backed but deliberately not bound to PCR values. Binding only
 Some parts of the system are still intentionally bootstrapped by hand after installation:
 - Additional encrypted data volumes are enrolled with TPM manually.
 - The SOPS age private key credential is installed manually on the NAS at `/var/lib/nas-secrets/age-key.cred`.
-- Per-service runtime secret files are distributed at boot from the repo-managed SOPS file at `/usr/share/custom-coreos/secrets/secrets.sops.yaml`.
+- Per-service runtime secret files are distributed at boot from the repo-managed SOPS file at `/usr/share/nas/secrets/secrets.sops.yaml`.
 
 ### Host Service UIDs
 
@@ -246,8 +254,8 @@ That bootstrap path is not especially elegant, but it is acceptable for a single
 ### Container Labels
 
 Built images include labels for version tracking:
-- `custom-coreos.zfs-version` - ZFS version used
-- `custom-coreos.kernel-version` - Kernel version used
+- `nas.bootc.zfs-version` - ZFS version used
+- `nas.bootc.kernel-version` - Kernel version used
 
 ## Performance
 
@@ -264,14 +272,14 @@ Built images include labels for version tracking:
 
 ## Installation Guide
 
-### CoreOS Installation
+### Fedora CoreOS Installation
 
-1. **Download CoreOS ISO** from [Fedora CoreOS](https://fedoraproject.org/coreos/)
+1. **Download the Fedora CoreOS ISO** from [Fedora CoreOS](https://fedoraproject.org/coreos/)
 2. **Boot from ISO**
 3. **Run installer** with Ignition URL:
    ```bash
    sudo coreos-installer install /dev/sda \
-     --ignition-url https://samhclark.github.io/custom-coreos/ignition.json
+     --ignition-url https://samhclark.github.io/nas/ignition.json
    ```
 4. **Reboot** - System will automatically configure encryption and services
 
@@ -319,7 +327,7 @@ Fedora CoreOS normally points `/usr/local` at `/var/usrlocal`, but this image in
 
 ### Installation Issues
 
-**Problem**: CoreOS won't boot after installation
+**Problem**: The NAS image won't boot after installation
 **Solution**: Verify TPM2 is enabled in BIOS/UEFI settings
 
 **Problem**: Can't SSH to system
@@ -357,7 +365,7 @@ Apply fix declaratively:
 
 ```
 ├── Containerfile              # Four-stage bootc image build
-├── butane.yaml               # CoreOS configuration
+├── butane.yaml               # Fedora CoreOS configuration
 ├── Makefile                  # Development commands
 ├── ignition.json            # Locally generated and gitignored
 ├── quadlets/                # Declarative service sources
@@ -372,7 +380,7 @@ Apply fix declaratively:
 
 ## Links
 
-- **Container Registry**: https://github.com/samhclark/custom-coreos/pkgs/container/custom-coreos
-- **Ignition File**: https://samhclark.github.io/custom-coreos/ignition.json
-- **GitHub Actions**: https://github.com/samhclark/custom-coreos/actions
+- **Container Registry**: https://github.com/samhclark/nas/pkgs/container/bootc
+- **Ignition File**: https://samhclark.github.io/nas/ignition.json
+- **GitHub Actions**: https://github.com/samhclark/nas/actions
 - **ZFS Kernel Modules**: https://github.com/samhclark/fedora-zfs-kmods
