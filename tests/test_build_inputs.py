@@ -90,15 +90,15 @@ class BuildInputTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn("No prebuilt ZFS kmods", result.stderr)
 
-    def test_make_build_stops_before_podman_when_resolution_fails(self):
-        marker = self.directory / "podman-called"
-        podman = self.executable(
-            "podman",
-            'printf called > "${FAKE_PODMAN_MARKER}"\nexit 99',
+    def test_make_build_stops_before_buildx_when_resolution_fails(self):
+        marker = self.directory / "docker-called"
+        docker = self.executable(
+            "docker",
+            'printf called > "${FAKE_DOCKER_MARKER}"\nexit 99',
         )
         environment = self.environment | {
             "FAKE_SKOPEO_STATUS": "1",
-            "FAKE_PODMAN_MARKER": str(marker),
+            "FAKE_DOCKER_MARKER": str(marker),
         }
 
         result = subprocess.run(
@@ -106,7 +106,7 @@ class BuildInputTests(unittest.TestCase):
                 "make",
                 "--no-print-directory",
                 "build",
-                f"PODMAN={podman}",
+                f"DOCKER={docker}",
                 f"SKOPEO={self.skopeo}",
             ],
             cwd=REPO,

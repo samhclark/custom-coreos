@@ -31,6 +31,16 @@ class DevelopmentToolchainTests(unittest.TestCase):
         self.assertIn("$(UV_RUN) python generate-quadlets.py", makefile)
         self.assertNotIn("$(PYTHON)", makefile)
 
+    def test_make_build_uses_buildx_and_the_named_containerfile(self):
+        makefile = (REPO / "Makefile").read_text()
+
+        self.assertIn(
+            "$(DOCKER) buildx build --file Containerfile --load --pull",
+            makefile,
+        )
+        self.assertIn('CONTAINER_CLI="$(DOCKER)"', makefile)
+        self.assertNotIn("$(PODMAN) build", makefile)
+
     def test_immich_image_preflight_runs_smoke_before_krun_probe(self):
         makefile = (REPO / "Makefile").read_text()
         lines = makefile.splitlines()

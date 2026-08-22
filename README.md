@@ -66,7 +66,8 @@ This is not intended to be a polished appliance for other people. It is my own N
 ### Prerequisites
 
 - `make` (GNU Make, standard on Linux)
-- `podman`
+- Docker Engine with Buildx (image builds)
+- `podman` (repository checks and runtime-oriented tests)
 - `gh` (GitHub CLI)
 - `skopeo`
 - `jq`
@@ -101,6 +102,14 @@ make run-cleanup        # Container cleanup (dry run)
 # Check workflow status
 make workflow-status    # Main build workflow
 make all-workflows      # All workflows
+```
+
+`make build` uses the currently selected Buildx builder and loads the result
+into Docker for exact-image verification. For the same `docker-container`
+driver used by CI, create and select a local builder once:
+
+```bash
+docker buildx create --name nas --driver docker-container --use --bootstrap
 ```
 
 ### Local Development
