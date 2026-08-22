@@ -41,7 +41,7 @@ RUN /bin/bash -c 'set -euo pipefail; \
 #  Stage 2: Pull SOPS binary
 #
 #####
-FROM ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea as sops
+FROM ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e4d106b38e74191f3bac9d58ea AS sops
 
 
 #####
@@ -49,7 +49,7 @@ FROM ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e
 #  Stage 3: Pull prebuilt ZFS kmods
 #
 #####
-FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} as zfs-rpms
+FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} AS zfs-rpms
 ARG KERNEL_VERSION
 ARG ZFS_VERSION
 
@@ -69,6 +69,10 @@ LABEL org.opencontainers.image.description="NAS bootc image with prebuilt ZFS ke
 LABEL nas.bootc.zfs-version="${ZFS_VERSION}"
 LABEL nas.bootc.kernel-version="${KERNEL_VERSION}"
 
+# Fedora CoreOS points /usr/local into mutable /var by default. This image
+# intentionally owns immutable files there, so replace the symlink before
+# BuildKit copies the image overlay.
+RUN rm /usr/local
 COPY overlay-root/ /
 COPY --from=sops /usr/local/bin/sops /usr/local/bin/sops
 
