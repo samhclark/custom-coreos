@@ -12,7 +12,8 @@ TAG        ?= stable
 ## ZFS stream to track (prefix of release tag, e.g. zfs-2.4)
 ZFS_STREAM ?= zfs-2.4
 
-## Tool variables (override on the command line, e.g. make build PODMAN=docker)
+## Tool variables (override on the command line when needed)
+DOCKER       ?= docker
 PODMAN       ?= podman
 GH           ?= gh
 SKOPEO       ?= skopeo
@@ -70,7 +71,7 @@ kernel-version: ## Get the current kernel version from Fedora CoreOS stable
 versions: ## Show all relevant versions and verify ZFS kmod availability
 	@set -e; \
 	BUILD_INPUTS="$$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
-		CONTAINER_CLI="$(PODMAN)" \
+		CONTAINER_CLI="$(DOCKER)" \
 		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)")"; \
 	set -- $$BUILD_INPUTS; \
 	ZFS_VERSION="$$1"; \
@@ -112,7 +113,7 @@ check-vm-ignition: ## Validate the storage-free VM smoke Ignition fixture
 .PHONY: check-zfs-available
 check-zfs-available: ## Verify prebuilt ZFS kmods exist for the current versions
 	@GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
-		CONTAINER_CLI="$(PODMAN)" \
+		CONTAINER_CLI="$(DOCKER)" \
 		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)" >/dev/null
 	@printf "$(COLOR_GREEN)ZFS kmods available$(COLOR_RESET)\n"
 
@@ -152,24 +153,24 @@ typecheck: ## Run strict static Python type checks
 build: ## Build the container image
 	@set -e; \
 	BUILD_INPUTS="$$(GH_BIN="$(GH)" JQ_BIN="$(JQ)" SKOPEO_BIN="$(SKOPEO)" \
-		CONTAINER_CLI="$(PODMAN)" \
+		CONTAINER_CLI="$(DOCKER)" \
 		./scripts/resolve-build-inputs.sh "$(ZFS_STREAM)")"; \
 	set -- $$BUILD_INPUTS; \
 	ZFS_VERSION="$$1"; \
 	KERNEL_VERSION="$$2"; \
 	printf "$(COLOR_BLUE)Building $(IMAGE_NAME):$(TAG) with ZFS=$$ZFS_VERSION kernel=$$KERNEL_VERSION$(COLOR_RESET)\n"; \
-	$(PODMAN) build --rm \
+	$(DOCKER) buildx build --file Containerfile --load --pull \
 		--build-arg ZFS_VERSION="$$ZFS_VERSION" \
 		--build-arg KERNEL_VERSION="$$KERNEL_VERSION" \
 		-t "$(IMAGE_NAME):$(TAG)" \
 		.; \
-	CONTAINER_CLI="$(PODMAN)" \
+	CONTAINER_CLI="$(DOCKER)" \
 		./scripts/verify-built-image.sh "$(IMAGE_NAME):$(TAG)"; \
 	printf "$(COLOR_GREEN)build succeeded: $(IMAGE_NAME):$(TAG)$(COLOR_RESET)\n"
 
 .PHONY: verify-image
 verify-image: ## Verify the exact locally built image without network or host mounts
-	@CONTAINER_CLI="$(PODMAN)" \
+	@CONTAINER_CLI="$(DOCKER)" \
 		./scripts/verify-built-image.sh "$(IMAGE_NAME):$(TAG)"
 
 .PHONY: test-vm
@@ -246,7 +247,7 @@ cleanup-dry-run: ## Plan cleanup locally; set RETENTION_DAYS=N to configure (def
 ##@ Dependencies
 
 .PHONY: deps
-deps: deps-check-podman deps-check-gh deps-check-skopeo deps-check-jq deps-check-uv ## Check tools and sync the Python environment
+deps: deps-check-docker deps-check-podman deps-check-gh deps-check-skopeo deps-check-jq deps-check-uv ## Check tools and sync the Python environment
 	@printf "$(COLOR_GREEN)All deps present!$(COLOR_RESET)\n"
 
 .PHONY: deps-vm
@@ -270,6 +271,17 @@ deps-check-podman: ## Check that podman is available
 	@command -v $(PODMAN) > /dev/null || \
 		(printf "$(COLOR_RED)$(PODMAN) not found. Install via your system package manager.$(COLOR_RESET)\n" && false)
 	@printf "$(COLOR_BLUE)podman: $$($(PODMAN) --version)$(COLOR_RESET)\n"
+
+.PHONY: deps-check-docker
+deps-check-docker: ## Check that Docker Engine and Buildx are available
+	@command -v $(DOCKER) > /dev/null || \
+		(printf "$(COLOR_RED)$(DOCKER) not found. Install Docker Engine with Buildx.$(COLOR_RESET)\n" && false)
+	@$(DOCKER) info > /dev/null || \
+		(printf "$(COLOR_RED)Docker Engine is not available.$(COLOR_RESET)\n" && false)
+	@$(DOCKER) buildx version > /dev/null || \
+		(printf "$(COLOR_RED)Docker Buildx is not available.$(COLOR_RESET)\n" && false)
+	@printf "$(COLOR_BLUE)docker: $$($(DOCKER) --version)$(COLOR_RESET)\n"
+	@printf "$(COLOR_BLUE)buildx: $$($(DOCKER) buildx version)$(COLOR_RESET)\n"
 
 .PHONY: deps-check-gh
 deps-check-gh: ## Check that the GitHub CLI is available

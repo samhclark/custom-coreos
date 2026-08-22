@@ -131,7 +131,7 @@ publish or deployment step by default.
 
 ### Building
 - `make build` - Build image locally with automatic version discovery
-- `make deps` - Verify required tools are present (podman, gh, skopeo)
+- `make deps` - Verify required tools are present (Docker with Buildx, Podman, gh, skopeo, jq, uv)
 
 ### Ignition File Management
 - `make generate-ignition` - Generate Ignition JSON from butane.yaml
