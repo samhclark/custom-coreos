@@ -1,6 +1,6 @@
 # nas
 
-A NAS container image for my personal NAS, open sourced as a reference project rather than a general-purpose distribution.
+A bootc container image for my personal NAS, open sourced as a reference project rather than a general-purpose distribution.
 
 ## Overview
 
