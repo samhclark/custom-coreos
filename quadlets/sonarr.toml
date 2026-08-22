@@ -23,7 +23,7 @@ mapped-group = "media"
 image = "lscr.io/linuxserver/sonarr:4.0.19.2979-ls321@sha256:373159ba768e23a3a1c497d9f2b936addf8fd5b1fdce7dd6a14080ac928bfda0"
 network = "host"
 container-user = 1000
-entrypoint = "/usr/share/custom-coreos/sonarr/sonarr-entrypoint.sh"
+entrypoint = "/usr/share/nas/sonarr/sonarr-entrypoint.sh"
 health-cmd = "none"
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
@@ -35,8 +35,8 @@ TMPDIR = "/tmp"
 
 [[container.volumes]]
 comment = "Image-controlled libkrun entrypoint adapter (read-only)"
-source = "/usr/share/custom-coreos/sonarr"
-target = "/usr/share/custom-coreos/sonarr"
+source = "/usr/share/nas/sonarr"
+target = "/usr/share/nas/sonarr"
 options = "ro"
 
 [krun]
@@ -55,7 +55,7 @@ port = 8989
 consumers = ["caddy", "prowlarr"]
 
 [assets]
-path = "/usr/share/custom-coreos/sonarr"
+path = "/usr/share/nas/sonarr"
 
 [[storage]]
 name = "config"

@@ -9,7 +9,7 @@ SERVICE = (
     REPO / "overlay-root/etc/systemd/system/nas-prepare-jellyfin-storage.service"
 ).read_text()
 MANIFEST = (
-    REPO / "overlay-root/usr/share/custom-coreos/storage/jellyfin.storage-manifest"
+    REPO / "overlay-root/usr/share/nas/storage/jellyfin.storage-manifest"
 ).read_text()
 QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51120/jellyfin.container"
@@ -32,7 +32,7 @@ class JellyfinStoragePreparationTests(unittest.TestCase):
             "resource|media|media|52000|2775|tank/videos|/var/zfs/tank/videos",
             (
                 REPO
-                / "overlay-root/usr/share/custom-coreos/storage/media.storage-manifest"
+                / "overlay-root/usr/share/nas/storage/media.storage-manifest"
             ).read_text(),
         )
         self.assertNotIn("managed-zfs|tank/videos", MANIFEST)

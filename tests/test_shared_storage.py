@@ -93,7 +93,7 @@ class SharedStorageTests(unittest.TestCase):
         self.assertIn("resource|media|media|52000|2775|tank/videos", shared_storage_manifest(resource, 52000))
         self.assertIn("nas-prepare-shared-storage.sh", shared_storage_unit(resource))
         paths = artifacts[
-            Path("usr/share/custom-coreos/fleet/shared-storage-paths.list")
+            Path("usr/share/nas/fleet/shared-storage-paths.list")
         ]
         self.assertIn("/var/zfs/tank/videos/data/media\n", paths)
 

@@ -91,7 +91,7 @@ Immich PostgreSQL needs one additional, image-specific compatibility boundary.
 The upstream wrapper alone does not prove the production UID contract: under
 libkrun, the guest can enter the wrapper as guest root even when the generated
 unit requests `User=1000:1000`. The database service consequently mounts the
-small image-controlled `/usr/share/custom-coreos/immich-database/` adapter
+small image-controlled `/usr/share/nas/immich-database/` adapter
 tree read-only and invokes it as its entrypoint. The adapter has two supported
 branches:
 

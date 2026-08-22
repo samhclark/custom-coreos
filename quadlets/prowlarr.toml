@@ -21,7 +21,7 @@ mapped-container-id = 1000
 image = "lscr.io/linuxserver/prowlarr:2.5.2.5491-ls156@sha256:1295cff29d10b486c0d8324d1559a552140a5932bf8b3d87e398654414f63f92"
 network = "host"
 container-user = 1000
-entrypoint = "/usr/share/custom-coreos/prowlarr/prowlarr-entrypoint.sh"
+entrypoint = "/usr/share/nas/prowlarr/prowlarr-entrypoint.sh"
 health-cmd = "none"
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
@@ -33,8 +33,8 @@ TMPDIR = "/tmp"
 
 [[container.volumes]]
 comment = "Image-controlled libkrun entrypoint adapter (read-only)"
-source = "/usr/share/custom-coreos/prowlarr"
-target = "/usr/share/custom-coreos/prowlarr"
+source = "/usr/share/nas/prowlarr"
+target = "/usr/share/nas/prowlarr"
 options = "ro"
 
 [krun]
@@ -53,7 +53,7 @@ port = 9696
 consumers = ["caddy", "sonarr", "radarr"]
 
 [assets]
-path = "/usr/share/custom-coreos/prowlarr"
+path = "/usr/share/nas/prowlarr"
 
 [[storage]]
 name = "config"

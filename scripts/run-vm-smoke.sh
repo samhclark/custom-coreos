@@ -76,7 +76,7 @@ set +e
 TMPDIR="${run_dir}" "${timeout_bin}" \
     --foreground --signal=TERM --kill-after=10s 180s \
     "${qemu}" \
-    -name custom-coreos-vm-smoke \
+    -name nas-vm-smoke \
     -machine q35,accel=kvm \
     -cpu host \
     -smp 2 \
@@ -107,18 +107,18 @@ readonly after_hash
 
 if [[ -f "${serial_log}" ]]; then
     tr -d '\r' < "${serial_log}" > "${normalized_serial}"
-    sed -n '/CUSTOM_COREOS_VM_SMOKE_BEGIN/,$p' "${normalized_serial}"
+    sed -n '/NAS_VM_SMOKE_BEGIN/,$p' "${normalized_serial}"
 fi
 if [[ "${qemu_status}" -ne 0 ]]; then
     printf 'QEMU failed with status %s; artifacts: %s\n' \
         "${qemu_status}" "${run_dir}" >&2
     exit "${qemu_status}"
 fi
-if grep -Fq 'CUSTOM_COREOS_VM_SMOKE_FAIL' "${normalized_serial}"; then
+if grep -Fq 'NAS_VM_SMOKE_FAIL' "${normalized_serial}"; then
     printf 'Guest reported a failed assertion; artifacts: %s\n' "${run_dir}" >&2
     exit 1
 fi
-grep -Fqx 'CUSTOM_COREOS_VM_SMOKE_PASS' "${normalized_serial}" || {
+grep -Fqx 'NAS_VM_SMOKE_PASS' "${normalized_serial}" || {
     printf 'Guest did not report a pass sentinel; artifacts: %s\n' "${run_dir}" >&2
     exit 1
 }

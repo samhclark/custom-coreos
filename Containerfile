@@ -64,10 +64,10 @@ ARG KERNEL_VERSION
 ARG ZFS_VERSION
 
 # Add container labels for future deduplication
-LABEL org.opencontainers.image.title="Custom CoreOS with ZFS and Tailscale"
-LABEL org.opencontainers.image.description="CoreOS with prebuilt ZFS kernel modules and Tailscale"
-LABEL custom-coreos.zfs-version="${ZFS_VERSION}"
-LABEL custom-coreos.kernel-version="${KERNEL_VERSION}"
+LABEL org.opencontainers.image.title="NAS with ZFS and Tailscale"
+LABEL org.opencontainers.image.description="NAS bootc image with prebuilt ZFS kernel modules and Tailscale"
+LABEL nas.bootc.zfs-version="${ZFS_VERSION}"
+LABEL nas.bootc.kernel-version="${KERNEL_VERSION}"
 
 COPY overlay-root/ /
 COPY --from=sops /usr/local/bin/sops /usr/local/bin/sops
@@ -91,7 +91,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     cp -a /etc/selinux/targeted /etc/selinux/targeted.rebuilt; \
     rm -rf /etc/selinux/targeted; \
     mv /etc/selinux/targeted.rebuilt /etc/selinux/targeted; \
-    # Validate that provided kernel version matches actual CoreOS kernel \
+    # Validate that provided kernel version matches the base image kernel \
     [[ "$(rpm -qa kernel --queryformat "%{VERSION}-%{RELEASE}.%{ARCH}")" == "${KERNEL_VERSION}" ]]; \
     arch="$(rpm -qa kernel --queryformat "%{ARCH}")"; \
     dnf install -y \
@@ -110,14 +110,14 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     semodule --noreload --install \
         /usr/share/selinux/targeted/nas-krun-tun.cil; \
     mapfile -t image_assets < <( \
-        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/assets.list \
+        awk "NF && !/^#/" /usr/share/nas/fleet/assets.list \
     ); \
     for asset in "${image_assets[@]}"; do \
         semanage fcontext -a -t container_file_t -r s0 "${asset}(/.*)?"; \
         restorecon -F -R -- "${asset}"; \
     done; \
     mapfile -t shared_storage_paths < <( \
-        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/shared-storage-paths.list \
+        awk "NF && !/^#/" /usr/share/nas/fleet/shared-storage-paths.list \
     ); \
     for path in "${shared_storage_paths[@]}"; do \
         # The production dataset is not present in the image layer. Install \
@@ -128,13 +128,13 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
     echo "zfs" > /etc/modules-load.d/zfs.conf; \
     rm -rf /var/lib/pcp /var/cache/dnf; \
     mapfile -t account_units < <( \
-        awk "!/^#/" /usr/share/custom-coreos/fleet/account-units.list \
+        awk "!/^#/" /usr/share/nas/fleet/account-units.list \
     ); \
     mapfile -t storage_units < <( \
-        awk "!/^#/" /usr/share/custom-coreos/fleet/storage-units.list \
+        awk "!/^#/" /usr/share/nas/fleet/storage-units.list \
     ); \
     mapfile -t egress_units < <( \
-        awk "NF && !/^#/" /usr/share/custom-coreos/fleet/egress-units.list \
+        awk "NF && !/^#/" /usr/share/nas/fleet/egress-units.list \
     ); \
     systemctl enable \
         "${account_units[@]}" \

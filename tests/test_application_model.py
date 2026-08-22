@@ -72,7 +72,7 @@ class ImmichDeploymentTests(unittest.TestCase):
         self.assertIn("User=1000:1000\n", database)
         self.assertIn("UserNS=keep-id:uid=1000,gid=1000", database)
         self.assertIn(
-            "Entrypoint=/usr/share/custom-coreos/immich-database/"
+            "Entrypoint=/usr/share/nas/immich-database/"
             "immich-database-entrypoint.sh",
             database,
         )
@@ -81,8 +81,8 @@ class ImmichDeploymentTests(unittest.TestCase):
             database,
         )
         self.assertIn(
-            "Volume=/usr/share/custom-coreos/immich-database:"
-            "/usr/share/custom-coreos/immich-database:ro",
+            "Volume=/usr/share/nas/immich-database:"
+            "/usr/share/nas/immich-database:ro",
             database,
         )
         self.assertIn("ShmSize=128m", database)
@@ -90,13 +90,13 @@ class ImmichDeploymentTests(unittest.TestCase):
         self.assertIn("Environment=DB_STORAGE_TYPE=HDD", database)
 
         assets = self.artifacts[
-            Path("usr/share/custom-coreos/fleet/assets.list")
+            Path("usr/share/nas/fleet/assets.list")
         ]
-        self.assertIn("/usr/share/custom-coreos/immich-database", assets)
+        self.assertIn("/usr/share/nas/immich-database", assets)
 
         entrypoint = (
             REPO
-            / "overlay-root/usr/share/custom-coreos/immich-database/"
+            / "overlay-root/usr/share/nas/immich-database/"
             "immich-database-entrypoint.sh"
         )
         self.assertTrue(entrypoint.stat().st_mode & 0o111)
@@ -111,13 +111,13 @@ class ImmichDeploymentTests(unittest.TestCase):
         )
 
         server_manifest = self.artifacts[
-            Path("usr/share/custom-coreos/storage/immich-server.storage-manifest")
+            Path("usr/share/nas/storage/immich-server.storage-manifest")
         ]
         self.assertIn("tank/immich-server/library", server_manifest)
         self.assertIn("tank/immich-server/thumbs", server_manifest)
         self.assertIn("tank/immich-server/encoded-video", server_manifest)
         database_manifest = self.artifacts[
-            Path("usr/share/custom-coreos/storage/immich-database.storage-manifest")
+            Path("usr/share/nas/storage/immich-database.storage-manifest")
         ]
         self.assertIn("tank/immich-database/data", database_manifest)
         self.assertIn("|0700|", database_manifest)
@@ -157,26 +157,26 @@ class ImmichDeploymentTests(unittest.TestCase):
                 self.assertIn(port, matching_line)
 
     def test_ingress_monitoring_and_encrypted_secret_are_wired(self):
-        caddyfile = (OVERLAY / "usr/share/custom-coreos/caddy/Caddyfile").read_text()
+        caddyfile = (OVERLAY / "usr/share/nas/caddy/Caddyfile").read_text()
         self.assertIn("photos.i.samhclark.com", caddyfile)
         self.assertIn("reverse_proxy immich-server.krun:2283", caddyfile)
 
         scrape = (
             OVERLAY
-            / "usr/share/custom-coreos/victoria-metrics/promscrape.yml"
+            / "usr/share/nas/victoria-metrics/promscrape.yml"
         ).read_text()
         self.assertIn("job_name: 'immich-health'", scrape)
         self.assertIn("/api/server/ping", scrape)
 
         rules = (
-            OVERLAY / "usr/share/custom-coreos/vmalert/alert-rules.yml"
+            OVERLAY / "usr/share/nas/vmalert/alert-rules.yml"
         ).read_text()
         self.assertIn("alert: ImmichHealthDown", rules)
         self.assertIn("alert: ImmichHealthProbeBroken", rules)
 
         secrets = (
             REPO
-            / "overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml"
+            / "overlay-root/usr/share/nas/secrets/secrets.sops.yaml"
         ).read_text()
         self.assertIn("immich-db-password: ENC[AES256_GCM", secrets)
 

@@ -35,7 +35,7 @@ DNS=100.100.100.100
 User=0
 
 # Image-controlled configuration (read-only)
-Volume=/usr/share/custom-coreos/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+Volume=/usr/share/nas/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
 
 # Declarative data storage
 Volume=/var/lib/caddy:/data

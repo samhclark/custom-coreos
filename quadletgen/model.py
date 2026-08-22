@@ -860,7 +860,7 @@ def _validate_assets(service: Service) -> None:
     if service.assets is not None:
         path = f"{service.source.name}: [assets].path"
         _validate_absolute_path(service.assets.path, path)
-        expected = f"/usr/share/custom-coreos/{service.info.name}"
+        expected = f"/usr/share/nas/{service.info.name}"
         if service.assets.path != expected:
             _fail(path, f"must be exactly {expected}")
 

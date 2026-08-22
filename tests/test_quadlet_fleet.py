@@ -201,7 +201,7 @@ class FleetValidationTests(unittest.TestCase):
                     ),
                     extra=(
                         "\n[assets]\n"
-                        'path = "/usr/share/custom-coreos/disabled"'
+                        'path = "/usr/share/nas/disabled"'
                     ),
                 ),
             )
@@ -246,19 +246,19 @@ class FleetValidationTests(unittest.TestCase):
         )
         self.assertIn(
             "ensure-nas-disabled-account.service",
-            artifacts[Path("usr/share/custom-coreos/fleet/account-units.list")],
+            artifacts[Path("usr/share/nas/fleet/account-units.list")],
         )
         self.assertNotIn(
             "krun-51999\t",
-            artifacts[Path("usr/share/custom-coreos/fleet/active-taps.tsv")],
+            artifacts[Path("usr/share/nas/fleet/active-taps.tsv")],
         )
         self.assertIn(
             "disabled\t_nas_disabled\tdisabled-token",
-            artifacts[Path("usr/share/custom-coreos/fleet/secrets.tsv")],
+            artifacts[Path("usr/share/nas/fleet/secrets.tsv")],
         )
         self.assertIn(
-            "/usr/share/custom-coreos/disabled",
-            artifacts[Path("usr/share/custom-coreos/fleet/assets.list")],
+            "/usr/share/nas/disabled",
+            artifacts[Path("usr/share/nas/fleet/assets.list")],
         )
 
     def test_fleet_requires_at_least_one_active_tap(self):
@@ -303,7 +303,7 @@ class FleetValidationTests(unittest.TestCase):
             }
 
         assets = artifacts[
-            Path("usr/share/custom-coreos/fleet/assets.list")
+            Path("usr/share/nas/fleet/assets.list")
         ]
         self.assertEqual(
             [line for line in assets.splitlines() if not line.startswith("#")],

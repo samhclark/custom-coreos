@@ -23,7 +23,7 @@ mapped-group = "media"
 image = "lscr.io/linuxserver/sabnzbd:5.1.0-ls266@sha256:b0f9755d795913bd26ae3f3a12805668ab0681ab847a7624568559c573fc7cae"
 network = "host"
 container-user = 1000
-entrypoint = "/usr/share/custom-coreos/sabnzbd/sabnzbd-entrypoint.sh"
+entrypoint = "/usr/share/nas/sabnzbd/sabnzbd-entrypoint.sh"
 health-cmd = "none"
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
@@ -31,17 +31,17 @@ dns = ["100.100.100.100"]
 
 [container.environment]
 TZ = "America/Chicago"
-CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES = "sabnzbd.i.samhclark.com,sabnzbd.krun"
+NAS_SABNZBD_ALLOWED_HOSTNAMES = "sabnzbd.i.samhclark.com,sabnzbd.krun"
 # SABnzbd applies this mode recursively after unpacking, including archives
 # whose entries carry restrictive Unix mode bits. The setgid directory mode
 # keeps the fleet media group on descendants; regular files lose x bits and
 # become 0660.
-CUSTOM_COREOS_SABNZBD_COMPLETED_PERMISSIONS = "2770"
+NAS_SABNZBD_COMPLETED_PERMISSIONS = "2770"
 
 [[container.volumes]]
 comment = "Image-controlled libkrun entrypoint adapter (read-only)"
-source = "/usr/share/custom-coreos/sabnzbd"
-target = "/usr/share/custom-coreos/sabnzbd"
+source = "/usr/share/nas/sabnzbd"
+target = "/usr/share/nas/sabnzbd"
 options = "ro"
 
 [krun]
@@ -60,7 +60,7 @@ port = 8080
 consumers = ["caddy", "radarr", "sonarr", "prowlarr"]
 
 [assets]
-path = "/usr/share/custom-coreos/sabnzbd"
+path = "/usr/share/nas/sabnzbd"
 
 [[storage]]
 name = "config"

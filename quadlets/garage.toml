@@ -29,7 +29,7 @@ probe-endpoint = "s3"
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"
-source = "/usr/share/custom-coreos/garage/garage.toml"
+source = "/usr/share/nas/garage/garage.toml"
 target = "/etc/garage.toml"
 options = "ro"
 
@@ -60,7 +60,7 @@ host = "127.0.0.1:3903"
 consumers = ["caddy", "victoria-metrics", "blackbox-exporter"]
 
 [assets]
-path = "/usr/share/custom-coreos/garage"
+path = "/usr/share/nas/garage"
 
 [[storage]]
 name = "meta"

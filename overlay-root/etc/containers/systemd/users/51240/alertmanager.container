@@ -35,7 +35,7 @@ DNS=100.100.100.100
 User=0
 
 # Image-controlled configuration (read-only)
-Volume=/usr/share/custom-coreos/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+Volume=/usr/share/nas/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
 
 # Declarative state storage
 Volume=/var/lib/alertmanager/data:/alertmanager

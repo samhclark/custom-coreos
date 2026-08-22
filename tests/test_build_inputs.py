@@ -118,7 +118,7 @@ class BuildInputTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("No prebuilt ZFS kmods", result.stderr)
-        self.assertNotIn("Building custom-coreos", result.stdout)
+        self.assertNotIn("Building nas/bootc", result.stdout)
         self.assertFalse(marker.exists())
 
     def test_untrusted_resolver_output_cannot_inject_github_fields(self):

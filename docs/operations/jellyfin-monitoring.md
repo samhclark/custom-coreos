@@ -29,7 +29,7 @@ In Jellyfin, open **Dashboard → API Keys**, create a key named
 secret file:
 
 ```bash
-sops overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml
+sops overlay-root/usr/share/nas/secrets/secrets.sops.yaml
 ```
 
 Add this top-level value and save:

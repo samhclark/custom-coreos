@@ -20,7 +20,7 @@ allocation and HDD-oriented configuration.
 The PostgreSQL service has an additional compatibility boundary because
 libkrun may supply guest root to an entrypoint despite the requested
 `User=1000:1000`. Its Quadlet mounts the image-controlled
-`/usr/share/custom-coreos/immich-database/` adapter tree read-only and uses
+`/usr/share/nas/immich-database/` adapter tree read-only and uses
 that adapter as the entrypoint before the upstream Immich PostgreSQL wrapper.
 The adapter has exactly two supported branches: it uses the image's existing
 `gosu` to become 1000:1000 when it starts as guest root, and delegates directly

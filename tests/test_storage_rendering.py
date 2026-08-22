@@ -111,7 +111,7 @@ interval-sec = 1
         self.assertIn("ConditionPathIsDirectory=/sys/module/zfs", unit)
         self.assertIn(
             "ExecStart=/usr/local/bin/nas-prepare-storage.sh "
-            "/usr/share/custom-coreos/storage/service.storage-manifest",
+            "/usr/share/nas/storage/service.storage-manifest",
             unit,
         )
         self.assertIn("RestartPreventExitStatus=78", unit)

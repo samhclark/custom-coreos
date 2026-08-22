@@ -33,7 +33,7 @@ AddHost=sabnzbd.krun:10.253.17.2
 AddHost=host.krun.internal:10.253.5.1
 
 # Image-controlled local probe configuration (read-only)
-Volume=/usr/share/custom-coreos/blackbox-exporter:/config:ro
+Volume=/usr/share/nas/blackbox-exporter:/config:ro
 
 Exec=--config.file=/config/blackbox.yml --web.listen-address=0.0.0.0:9115
 

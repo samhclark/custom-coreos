@@ -15,7 +15,7 @@ age private key. This boundary is deliberate, not unfinished migration work.
 The repository contains only ciphertext at:
 
 ```text
-/usr/share/custom-coreos/secrets/secrets.sops.yaml
+/usr/share/nas/secrets/secrets.sops.yaml
 ```
 
 The NAS operator installs the age private key as a `systemd-creds` credential:

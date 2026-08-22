@@ -9,7 +9,7 @@ export LC_ALL=C
 export SYSTEMD_COLORS=0
 export SYSTEMD_PAGER=cat
 
-TAP_MANIFEST=/usr/share/custom-coreos/fleet/active-taps.tsv
+TAP_MANIFEST=/usr/share/nas/fleet/active-taps.tsv
 
 if (( EUID != 0 )); then
     echo "Run this script as root (for example: sudo bash $0)." >&2

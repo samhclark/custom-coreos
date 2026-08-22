@@ -42,7 +42,7 @@ consumers = ["victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled dependency-free exporter (read-only)"
-source = "/usr/share/custom-coreos/jellyfin-exporter"
+source = "/usr/share/nas/jellyfin-exporter"
 target = "/app"
 options = "ro"
 
@@ -50,7 +50,7 @@ options = "ro"
 name = "jellyfin-api-key"
 
 [assets]
-path = "/usr/share/custom-coreos/jellyfin-exporter"
+path = "/usr/share/nas/jellyfin-exporter"
 
 [startup]
 require-published-tcp-ports-free = true

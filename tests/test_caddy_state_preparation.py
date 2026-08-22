@@ -9,13 +9,13 @@ SERVICE = (
     REPO / "overlay-root/etc/systemd/system/nas-prepare-caddy-storage.service"
 ).read_text()
 MANIFEST = (
-    REPO / "overlay-root/usr/share/custom-coreos/storage/caddy.storage-manifest"
+    REPO / "overlay-root/usr/share/nas/storage/caddy.storage-manifest"
 ).read_text()
 QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51310/caddy.container"
 ).read_text()
 CADDYFILE = (
-    REPO / "overlay-root/usr/share/custom-coreos/caddy/Caddyfile"
+    REPO / "overlay-root/usr/share/nas/caddy/Caddyfile"
 ).read_text()
 
 
@@ -35,7 +35,7 @@ class CaddyStatePreparationTests(unittest.TestCase):
         self.assertNotIn("zfs.target", SERVICE)
         self.assertIn(
             "ExecStart=/usr/local/bin/nas-prepare-storage.sh "
-            "/usr/share/custom-coreos/storage/caddy.storage-manifest",
+            "/usr/share/nas/storage/caddy.storage-manifest",
             SERVICE,
         )
         self.assertIn("TimeoutStartSec=infinity", SERVICE)

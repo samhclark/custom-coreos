@@ -6,7 +6,7 @@ Documentation=https://prowlarr.com/
 [Container]
 ContainerName=prowlarr
 Image=lscr.io/linuxserver/prowlarr:2.5.2.5491-ls156@sha256:1295cff29d10b486c0d8324d1559a552140a5932bf8b3d87e398654414f63f92
-Entrypoint=/usr/share/custom-coreos/prowlarr/prowlarr-entrypoint.sh
+Entrypoint=/usr/share/nas/prowlarr/prowlarr-entrypoint.sh
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=1
 Annotation=krun.ram_mib=512
@@ -44,7 +44,7 @@ Environment=TZ=America/Chicago
 Environment=TMPDIR=/tmp
 
 # Image-controlled libkrun entrypoint adapter (read-only)
-Volume=/usr/share/custom-coreos/prowlarr:/usr/share/custom-coreos/prowlarr:ro
+Volume=/usr/share/nas/prowlarr:/usr/share/nas/prowlarr:ro
 
 # Declarative config storage
 Volume=/var/lib/prowlarr/config:/config

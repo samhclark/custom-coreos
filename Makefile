@@ -1,12 +1,12 @@
 ##########################################
-#### Custom CoreOS Developer Experience ##
+#### NAS Developer Experience ##
 ##########################################
 ##
 ## If you don't really know what to do, run `make help`.
 ##
 
 ## Image coordinates
-IMAGE_NAME ?= custom-coreos
+IMAGE_NAME ?= nas/bootc
 TAG        ?= stable
 
 ## ZFS stream to track (prefix of release tag, e.g. zfs-2.4)

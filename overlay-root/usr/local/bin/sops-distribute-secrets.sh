@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-SOPS_FILE="/usr/share/custom-coreos/secrets/secrets.sops.yaml"
-SECRET_MANIFEST="/usr/share/custom-coreos/fleet/secrets.tsv"
+SOPS_FILE="/usr/share/nas/secrets/secrets.sops.yaml"
+SECRET_MANIFEST="/usr/share/nas/fleet/secrets.tsv"
 AGE_CREDENTIAL="/var/lib/nas-secrets/age-key.cred"
 RUNTIME_DIR="/run/nas-secrets"
 

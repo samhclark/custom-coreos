@@ -556,7 +556,7 @@ shm-size-mib = 128'''
             "[assets].path": service_toml(
                 extra=(
                     "[assets]\n"
-                    'path = "/usr/share/custom-coreos/somewhere-else"'
+                    'path = "/usr/share/nas/somewhere-else"'
                 )
             ),
         }

@@ -3,7 +3,7 @@ version: 1.6.0
 
 storage:
   files:
-    - path: /etc/custom-coreos-vm-smoke
+    - path: /etc/nas-vm-smoke
       mode: 0755
       overwrite: true
       contents:
@@ -15,20 +15,20 @@ storage:
           fail() {
               local status="$?"
               trap - ERR TERM
-              printf 'CUSTOM_COREOS_VM_SMOKE_FAIL status=%s\n' "${status}"
+              printf 'NAS_VM_SMOKE_FAIL status=%s\n' "${status}"
               systemctl poweroff --no-block || true
               exit "${status}"
           }
           terminate() {
               trap - ERR TERM
-              printf 'CUSTOM_COREOS_VM_SMOKE_FAIL signal=TERM\n'
+              printf 'NAS_VM_SMOKE_FAIL signal=TERM\n'
               systemctl poweroff --no-block || true
               exit 124
           }
           trap fail ERR
           trap terminate TERM
 
-          printf 'CUSTOM_COREOS_VM_SMOKE_BEGIN\n'
+          printf 'NAS_VM_SMOKE_BEGIN\n'
           bootc status
           [[ "$(getenforce)" == "Enforcing" ]]
           modprobe zfs
@@ -43,12 +43,12 @@ storage:
           while IFS= read -r unit; do
               [[ -z "${unit}" || "${unit}" == \#* ]] && continue
               [[ "$(systemctl is-active "${unit}")" == "active" ]]
-          done < /usr/share/custom-coreos/fleet/account-units.list
+          done < /usr/share/nas/fleet/account-units.list
 
           while IFS= read -r unit; do
               [[ -z "${unit}" || "${unit}" == \#* ]] && continue
               [[ "$(systemctl is-enabled "${unit}")" == "masked" ]]
-          done < /usr/share/custom-coreos/fleet/storage-units.list
+          done < /usr/share/nas/fleet/storage-units.list
 
           while IFS=$'\t' read -r tap user_unit _; do
               [[ -z "${tap}" || "${tap}" == \#* ]] && continue
@@ -65,7 +65,7 @@ storage:
                   <<< "${quadlet_output}"
               grep -Eq '^---[a-z0-9-]+\.service---$' \
                   <<< "${quadlet_output}"
-          done < /usr/share/custom-coreos/fleet/active-taps.tsv
+          done < /usr/share/nas/fleet/active-taps.tsv
 
           deadline=$((SECONDS + 30))
           while true; do
@@ -73,7 +73,7 @@ storage:
               while IFS=$'\t' read -r tap _; do
                   [[ -z "${tap}" || "${tap}" == \#* ]] && continue
                   [[ -e "/sys/class/net/${tap}" ]] || missing+=("${tap}")
-              done < /usr/share/custom-coreos/fleet/active-taps.tsv
+              done < /usr/share/nas/fleet/active-taps.tsv
               ((${#missing[@]} == 0)) && break
               ((SECONDS < deadline))
               sleep 1
@@ -81,21 +81,21 @@ storage:
           nft list table ip nas_krun_nat >/dev/null
           [[ -z "$(systemctl --failed --no-legend --plain)" ]]
 
-          printf 'CUSTOM_COREOS_VM_SMOKE_PASS\n'
+          printf 'NAS_VM_SMOKE_PASS\n'
           systemctl poweroff --no-block
 
 systemd:
   units:
-    - name: custom-coreos-vm-smoke.service
+    - name: nas-vm-smoke.service
       enabled: true
       contents: |
         [Unit]
-        Description=Run isolated custom CoreOS VM assertions
+        Description=Run isolated NAS VM assertions
         After=systemd-networkd.service nftables.service
 
         [Service]
         Type=oneshot
-        ExecStart=/etc/custom-coreos-vm-smoke
+        ExecStart=/etc/nas-vm-smoke
         TimeoutStartSec=120
 
         [Install]

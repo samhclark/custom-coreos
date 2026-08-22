@@ -780,7 +780,7 @@ limits, or access-log contract, so client source addresses are not an
 operational dependency in this deployment. A future source-IP-dependent policy
 must validate TSI behavior before relying on it.
 
-Retain `90-custom-coreos-rootless-ports.conf` for the selected direct-low-port
+Retain `90-nas-rootless-ports.conf` for the selected direct-low-port
 design. Remove it only after selecting and validating a different listener or
 redirect design that does not require unprivileged TCP 80/443.
 

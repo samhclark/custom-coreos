@@ -62,7 +62,7 @@ class ArrSmokeUnitTests(unittest.TestCase):
             self.assertIn("--env", arguments)
             self.assertIn("TZ=America/Chicago", arguments)
             self.assertIn(
-                "--entrypoint=/usr/share/custom-coreos/sonarr/sonarr-entrypoint.sh",
+                "--entrypoint=/usr/share/nas/sonarr/sonarr-entrypoint.sh",
                 arguments,
             )
             volume_values = [
@@ -70,7 +70,7 @@ class ArrSmokeUnitTests(unittest.TestCase):
                 for index, value in enumerate(arguments[:-1])
                 if value == "--volume"
             ]
-            self.assertTrue(any(":/usr/share/custom-coreos/sonarr:ro,Z" in value for value in volume_values))
+            self.assertTrue(any(":/usr/share/nas/sonarr:ro,Z" in value for value in volume_values))
             self.assertTrue(any(":/config:rw,Z" in value for value in volume_values))
             self.assertTrue(any(":/data:rw,Z" in value for value in volume_values))
             self.assertTrue(all(str(temporary) in value for value in volume_values))
@@ -126,7 +126,7 @@ class ArrSmokeUnitTests(unittest.TestCase):
             self.assertEqual(arguments[1], "run")
             self.assertIn("--user=1000:1000", arguments)
             self.assertNotIn("exec", arguments)
-            self.assertIn("--entrypoint=/usr/share/custom-coreos/sabnzbd/sabnzbd-entrypoint.sh", arguments)
+            self.assertIn("--entrypoint=/usr/share/nas/sabnzbd/sabnzbd-entrypoint.sh", arguments)
 
     def test_both_runtime_modes_request_each_service_mapped_identity(self):
         with tempfile.TemporaryDirectory(dir="/var/tmp") as root:

@@ -33,7 +33,7 @@ AddHost=sabnzbd.krun:10.253.17.2
 AddHost=host.krun.internal:10.253.4.1
 
 # Image-controlled alerting rules (read-only)
-Volume=/usr/share/custom-coreos/vmalert:/etc/vmalert:ro
+Volume=/usr/share/nas/vmalert:/etc/vmalert:ro
 
 Exec=-datasource.url=http://victoria-metrics.krun:8428 -remoteWrite.url=http://victoria-metrics.krun:8428 -remoteRead.url=http://victoria-metrics.krun:8428 -notifier.url=http://alertmanager.krun:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=0.0.0.0:8880
 

@@ -39,7 +39,7 @@ consumers = ["vmalert", "victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"
-source = "/usr/share/custom-coreos/alertmanager/alertmanager.yml"
+source = "/usr/share/nas/alertmanager/alertmanager.yml"
 target = "/etc/alertmanager/alertmanager.yml"
 options = "ro"
 
@@ -50,7 +50,7 @@ name = "pushover-user-key"
 name = "pushover-api-token"
 
 [assets]
-path = "/usr/share/custom-coreos/alertmanager"
+path = "/usr/share/nas/alertmanager"
 
 [[storage]]
 name = "state"

@@ -48,18 +48,18 @@ consumers = ["caddy", "victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled provisioning configs (read-only)"
-source = "/usr/share/custom-coreos/grafana/provisioning"
+source = "/usr/share/nas/grafana/provisioning"
 target = "/etc/grafana/provisioning"
 options = "ro"
 
 [[container.volumes]]
 comment = "Image-controlled dashboards (read-only)"
-source = "/usr/share/custom-coreos/grafana/dashboards"
+source = "/usr/share/nas/grafana/dashboards"
 target = "/etc/grafana/dashboards"
 options = "ro"
 
 [assets]
-path = "/usr/share/custom-coreos/grafana"
+path = "/usr/share/nas/grafana"
 
 [[storage]]
 name = "state"

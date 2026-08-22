@@ -17,7 +17,7 @@ display-name = "Immich database"
 image = "ghcr.io/immich-app/postgres:18-vectorchord1.1.1-pgvector0.8.5@sha256:4303394b926b7b7af5d4d15a6372c3cfff4ee994a4cf32c5479aa5ef73972077"
 network = "host"
 container-user = 1000
-entrypoint = "/usr/share/custom-coreos/immich-database/immich-database-entrypoint.sh"
+entrypoint = "/usr/share/nas/immich-database/immich-database-entrypoint.sh"
 exec = "postgres -c config_file=/etc/postgresql/postgresql.conf"
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
@@ -34,8 +34,8 @@ IGNORE_DATABASE_FSTYPE = "true" # ignoring this warning from Immich for now
 
 [[container.volumes]]
 comment = "Image-controlled PostgreSQL entrypoint adapter (read-only)"
-source = "/usr/share/custom-coreos/immich-database"
-target = "/usr/share/custom-coreos/immich-database"
+source = "/usr/share/nas/immich-database"
+target = "/usr/share/nas/immich-database"
 options = "ro"
 
 [krun]
@@ -51,7 +51,7 @@ probe-timeout-sec = 120
 name = "immich-db-password"
 
 [assets]
-path = "/usr/share/custom-coreos/immich-database"
+path = "/usr/share/nas/immich-database"
 
 [[container.endpoints]]
 name = "postgres"

@@ -15,6 +15,15 @@
                     }
                 }
             ],
+            "ghcr.io/samhclark/nas/bootc": [
+                {
+                    "type": "sigstoreSigned",
+                    "keyPath": "/etc/pki/cosign/cosign.pub",
+                    "signedIdentity": {
+                        "type": "matchRepository"
+                    }
+                }
+            ],
             "": [
                 {
                     "type": "insecureAcceptAnything"

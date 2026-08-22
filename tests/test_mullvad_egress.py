@@ -100,7 +100,7 @@ class MullvadEgressTests(unittest.TestCase):
 
         verify_sops(
             fleet,
-            REPO / "overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml",
+            REPO / "overlay-root/usr/share/nas/secrets/secrets.sops.yaml",
         )
 
     def test_renders_host_wireguard_and_networkd_dependency_contract(self):
@@ -163,7 +163,7 @@ class MullvadEgressTests(unittest.TestCase):
             Path("etc/systemd/system/nas-egress-mullvad.service")
         ]
         manifest = artifacts[
-            Path("usr/share/custom-coreos/fleet/egress-units.list")
+            Path("usr/share/nas/fleet/egress-units.list")
         ]
 
         self.assertIn("clear_readiness", script)
@@ -574,7 +574,7 @@ class MullvadEgressTests(unittest.TestCase):
                 for artifact in compile_fleet(Fleet.build([service]))
             }
             manifest = artifacts[
-                Path("usr/share/custom-coreos/fleet/egress-units.list")
+                Path("usr/share/nas/fleet/egress-units.list")
             ]
         self.assertNotIn("nas-egress-mullvad.service", manifest)
 
@@ -583,7 +583,7 @@ class MullvadEgressTests(unittest.TestCase):
         artifacts = {
             artifact.path: artifact.content for artifact in compile_fleet(fleet)
         }
-        manifest = artifacts[Path("usr/share/custom-coreos/fleet/secrets.tsv")]
+        manifest = artifacts[Path("usr/share/nas/fleet/secrets.tsv")]
         rows = [
             line.split("\t")
             for line in manifest.splitlines()

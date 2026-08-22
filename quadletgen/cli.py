@@ -48,7 +48,7 @@ def run(repo: Path, *, check: bool = False) -> int:
     )
     verify_sops(
         fleet,
-        overlay / "usr/share/custom-coreos/secrets/secrets.sops.yaml",
+        overlay / "usr/share/nas/secrets/secrets.sops.yaml",
     )
     for service in fleet.services:
         if not service.container.enabled:

@@ -18,7 +18,7 @@ Assumptions:
 - the rootless Quadlet path is `/etc/containers/systemd/users/51210/grafana.container`
 - Grafana mutable state is `/var/lib/grafana`
 - Grafana home for rootless Podman state is `/var/home/_nas_grafana`
-- image-controlled Grafana provisioning lives under `/usr/share/custom-coreos/grafana`
+- image-controlled Grafana provisioning lives under `/usr/share/nas/grafana`
 
 Note:
 - image-managed service accounts reserve `51000-51999`, with `512xx` used for observability services
@@ -104,22 +104,22 @@ Run:
 
 ```bash
 stat -c '%U:%G %a %n' /var/lib/grafana /var/home/_nas_grafana
-ls -Zd /usr/share/custom-coreos/grafana /usr/share/custom-coreos/grafana/provisioning /usr/share/custom-coreos/grafana/dashboards /var/lib/grafana
-namei -om /usr/share/custom-coreos/grafana/provisioning
+ls -Zd /usr/share/nas/grafana /usr/share/nas/grafana/provisioning /usr/share/nas/grafana/dashboards /var/lib/grafana
+namei -om /usr/share/nas/grafana/provisioning
 namei -om /var/lib/grafana
 ```
 
 Expected:
 - `/var/lib/grafana` is owned by `_nas_grafana:_nas_grafana`
 - `/var/home/_nas_grafana` is owned by `_nas_grafana:_nas_grafana`
-- `/usr/share/custom-coreos/grafana` exists and is readable
+- `/usr/share/nas/grafana` exists and is readable
 - SELinux context on the shipped Grafana config tree and `/var/lib/grafana` is `container_file_t`
 
 If this fails, gather:
 
 ```bash
-ls -lR /usr/share/custom-coreos/grafana
-ls -ldZ /usr/share/custom-coreos/grafana /usr/share/custom-coreos/grafana/provisioning /usr/share/custom-coreos/grafana/dashboards /var/lib/grafana
+ls -lR /usr/share/nas/grafana
+ls -ldZ /usr/share/nas/grafana /usr/share/nas/grafana/provisioning /usr/share/nas/grafana/dashboards /var/lib/grafana
 ```
 
 ## 5. Check The User Unit
@@ -256,7 +256,7 @@ Check:
 
 ```bash
 journalctl -b | grep -i avc
-ls -Zd /usr/share/custom-coreos/grafana /var/lib/grafana
+ls -Zd /usr/share/nas/grafana /var/lib/grafana
 ```
 
 ### VictoriaMetrics datasource is broken
@@ -285,5 +285,5 @@ journalctl -b -u user@51210.service
 journalctl --machine _nas_grafana@ --user -u grafana.service -b
 sudo -u _nas_grafana env HOME=/var/home/_nas_grafana XDG_RUNTIME_DIR=/run/user/51210 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/51210/bus bash -lc 'cd / && podman ps -a --no-trunc'
 sudo -u _nas_grafana env HOME=/var/home/_nas_grafana XDG_RUNTIME_DIR=/run/user/51210 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/51210/bus bash -lc 'cd / && podman logs grafana'
-ls -Zd /usr/share/custom-coreos/grafana /var/lib/grafana
+ls -Zd /usr/share/nas/grafana /var/lib/grafana
 ```

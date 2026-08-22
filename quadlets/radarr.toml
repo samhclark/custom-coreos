@@ -23,7 +23,7 @@ mapped-group = "media"
 image = "lscr.io/linuxserver/radarr:6.3.0.10514-ls313@sha256:a45b5ab0f850f39edb4cc9c95bbd967b52ddc3d4574a4dfb45561177db6c88f4"
 network = "host"
 container-user = 1000
-entrypoint = "/usr/share/custom-coreos/radarr/radarr-entrypoint.sh"
+entrypoint = "/usr/share/nas/radarr/radarr-entrypoint.sh"
 health-cmd = "none"
 no-new-privileges = true
 drop-capabilities = ["NET_RAW"]
@@ -35,8 +35,8 @@ TMPDIR = "/tmp"
 
 [[container.volumes]]
 comment = "Image-controlled libkrun entrypoint adapter (read-only)"
-source = "/usr/share/custom-coreos/radarr"
-target = "/usr/share/custom-coreos/radarr"
+source = "/usr/share/nas/radarr"
+target = "/usr/share/nas/radarr"
 options = "ro"
 
 [krun]
@@ -55,7 +55,7 @@ port = 7878
 consumers = ["caddy", "prowlarr"]
 
 [assets]
-path = "/usr/share/custom-coreos/radarr"
+path = "/usr/share/nas/radarr"
 
 [[storage]]
 name = "config"

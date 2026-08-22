@@ -152,7 +152,7 @@ reboot-based transition:
    `51310:51310`, install persistent `container_file_t:s0` fcontext rules, and
    use `restorecon -F -R` to clear the old private MCS categories.
 3. Move the static Caddyfile from `/etc/caddy/` into
-   `/usr/share/custom-coreos/caddy/` so it remains image-controlled.
+   `/usr/share/nas/caddy/` so it remains image-controlled.
 4. Complete `quadlets/caddy.toml`: generate the service, mount the image-controlled
    Caddyfile, the two prepared state trees, and the runtime Cloudflare token;
    retain host networking and add bounded readiness guards for the secret and

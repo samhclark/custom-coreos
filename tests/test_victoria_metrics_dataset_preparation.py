@@ -11,7 +11,7 @@ SERVICE = (
 ).read_text()
 MANIFEST = (
     REPO
-    / "overlay-root/usr/share/custom-coreos/storage/"
+    / "overlay-root/usr/share/nas/storage/"
     "victoria-metrics.storage-manifest"
 ).read_text()
 QUADLET = (

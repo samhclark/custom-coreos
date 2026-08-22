@@ -14,9 +14,9 @@ inspect_label() {
         "${image}"
 }
 
-kernel_version="$(inspect_label custom-coreos.kernel-version)"
+kernel_version="$(inspect_label nas.bootc.kernel-version)"
 readonly kernel_version
-zfs_version="$(inspect_label custom-coreos.zfs-version)"
+zfs_version="$(inspect_label nas.bootc.zfs-version)"
 readonly zfs_version
 
 for value in "${kernel_version}" "${zfs_version}"; do

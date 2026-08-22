@@ -35,12 +35,12 @@ consumers = ["victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled alerting rules (read-only)"
-source = "/usr/share/custom-coreos/vmalert"
+source = "/usr/share/nas/vmalert"
 target = "/etc/vmalert"
 options = "ro"
 
 [assets]
-path = "/usr/share/custom-coreos/vmalert"
+path = "/usr/share/nas/vmalert"
 
 [unit]
 timeout-start-sec = 330

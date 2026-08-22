@@ -38,7 +38,7 @@ consumers = ["caddy", "grafana", "vmalert"]
 
 [[container.volumes]]
 comment = "Image-controlled scrape configuration (read-only)"
-source = "/usr/share/custom-coreos/victoria-metrics/promscrape.yml"
+source = "/usr/share/nas/victoria-metrics/promscrape.yml"
 target = "/etc/victoria-metrics/promscrape.yml"
 options = "ro"
 
@@ -46,7 +46,7 @@ options = "ro"
 name = "garage-metrics-token"
 
 [assets]
-path = "/usr/share/custom-coreos/victoria-metrics"
+path = "/usr/share/nas/victoria-metrics"
 
 [[storage]]
 name = "data"

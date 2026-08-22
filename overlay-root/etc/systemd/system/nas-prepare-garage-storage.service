@@ -8,7 +8,7 @@ ConditionPathIsDirectory=/sys/module/zfs
 [Service]
 Type=oneshot
 User=root
-ExecStart=/usr/local/bin/nas-prepare-storage.sh /usr/share/custom-coreos/storage/garage.storage-manifest
+ExecStart=/usr/local/bin/nas-prepare-storage.sh /usr/share/nas/storage/garage.storage-manifest
 TimeoutStartSec=infinity
 Restart=on-failure
 RestartPreventExitStatus=78

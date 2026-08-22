@@ -26,9 +26,9 @@ class BuiltImageContractTests(unittest.TestCase):
                     #!/usr/bin/env bash
                     set -eu
                     printf '%s\\n' "$*" >> "${FAKE_LOG}"
-                    if [[ "$*" == *custom-coreos.kernel-version* ]]; then
+                    if [[ "$*" == *nas.bootc.kernel-version* ]]; then
                         printf '%s\\n' '7.1.4-200.fc44.x86_64'
-                    elif [[ "$*" == *custom-coreos.zfs-version* ]]; then
+                    elif [[ "$*" == *nas.bootc.zfs-version* ]]; then
                         printf '%s\\n' '2.4.3'
                     elif [[ "${1}" == run ]]; then
                         contract="$(cat)"
@@ -46,7 +46,7 @@ class BuiltImageContractTests(unittest.TestCase):
             }
 
             subprocess.run(
-                [str(VERIFY), "custom-coreos:contract-test"],
+                [str(VERIFY), "nas/bootc:contract-test"],
                 cwd=REPO,
                 env=environment,
                 check=True,
@@ -77,7 +77,7 @@ class BuiltImageContractTests(unittest.TestCase):
             fake.chmod(0o755)
 
             result = subprocess.run(
-                [str(VERIFY), "custom-coreos:contract-test"],
+                [str(VERIFY), "nas/bootc:contract-test"],
                 cwd=REPO,
                 env=os.environ | {"CONTAINER_CLI": str(fake)},
                 text=True,

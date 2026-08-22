@@ -138,7 +138,7 @@ def networkmanager_policy(fleet: Fleet) -> str:
     unmanaged = ";".join(f"interface-name:{name}" for name in interfaces)
     return f"""{fleet_header("network manager unmanaged devices")}
 # The libkrun TAPs and host WireGuard egress are created by systemd-networkd.
-# Keep NetworkManager, which owns the physical CoreOS links, away from them.
+# Keep NetworkManager, which owns the physical host links, away from them.
 [keyfile]
 unmanaged-devices={unmanaged}
 """

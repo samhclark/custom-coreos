@@ -55,7 +55,7 @@ consumers = ["victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled configuration (read-only)"
-source = "/usr/share/custom-coreos/caddy/Caddyfile"
+source = "/usr/share/nas/caddy/Caddyfile"
 target = "/etc/caddy/Caddyfile"
 options = "ro"
 
@@ -63,7 +63,7 @@ options = "ro"
 name = "cf-api-token"
 
 [assets]
-path = "/usr/share/custom-coreos/caddy"
+path = "/usr/share/nas/caddy"
 
 [[storage]]
 name = "data"

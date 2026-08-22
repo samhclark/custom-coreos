@@ -39,7 +39,7 @@ Environment=LISTEN_HOST=0.0.0.0
 Environment=LISTEN_PORT=9594
 
 # Image-controlled dependency-free exporter (read-only)
-Volume=/usr/share/custom-coreos/jellyfin-exporter:/app:ro
+Volume=/usr/share/nas/jellyfin-exporter:/app:ro
 
 # Runtime secret written at boot by sops-distribute-secrets.service
 Volume=/run/nas-secrets/jellyfin-exporter/jellyfin-api-key:/run/secrets/jellyfin-api-key:ro,Z

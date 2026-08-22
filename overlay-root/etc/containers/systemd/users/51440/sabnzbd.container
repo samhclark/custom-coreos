@@ -6,7 +6,7 @@ Documentation=https://sabnzbd.org/
 [Container]
 ContainerName=sabnzbd
 Image=lscr.io/linuxserver/sabnzbd:5.1.0-ls266@sha256:b0f9755d795913bd26ae3f3a12805668ab0681ab847a7624568559c573fc7cae
-Entrypoint=/usr/share/custom-coreos/sabnzbd/sabnzbd-entrypoint.sh
+Entrypoint=/usr/share/nas/sabnzbd/sabnzbd-entrypoint.sh
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=2048
@@ -42,11 +42,11 @@ NoNewPrivileges=true
 DropCapability=NET_RAW
 
 Environment=TZ=America/Chicago
-Environment=CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES=sabnzbd.i.samhclark.com,sabnzbd.krun
-Environment=CUSTOM_COREOS_SABNZBD_COMPLETED_PERMISSIONS=2770
+Environment=NAS_SABNZBD_ALLOWED_HOSTNAMES=sabnzbd.i.samhclark.com,sabnzbd.krun
+Environment=NAS_SABNZBD_COMPLETED_PERMISSIONS=2770
 
 # Image-controlled libkrun entrypoint adapter (read-only)
-Volume=/usr/share/custom-coreos/sabnzbd:/usr/share/custom-coreos/sabnzbd:ro
+Volume=/usr/share/nas/sabnzbd:/usr/share/nas/sabnzbd:ro
 
 # Declarative config storage
 Volume=/var/lib/sabnzbd/config:/config

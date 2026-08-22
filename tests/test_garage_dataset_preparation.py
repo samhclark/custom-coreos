@@ -12,7 +12,7 @@ SERVICE = (
     REPO / "overlay-root/etc/systemd/system/nas-prepare-garage-storage.service"
 ).read_text()
 MANIFEST = (
-    REPO / "overlay-root/usr/share/custom-coreos/storage/garage.storage-manifest"
+    REPO / "overlay-root/usr/share/nas/storage/garage.storage-manifest"
 ).read_text()
 
 
@@ -36,7 +36,7 @@ class GarageDatasetPreparationTests(unittest.TestCase):
     def test_one_service_prepares_the_atomic_storage_group(self):
         self.assertIn("Requires=zfs.target ensure-nas-garage-account.service", SERVICE)
         self.assertIn(
-            "/usr/share/custom-coreos/storage/garage.storage-manifest",
+            "/usr/share/nas/storage/garage.storage-manifest",
             SERVICE,
         )
         self.assertEqual(MANIFEST.count("service|garage|"), 1)

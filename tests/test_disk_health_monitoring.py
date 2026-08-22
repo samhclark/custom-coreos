@@ -11,10 +11,10 @@ OVERLAY = REPO / "overlay-root"
 CONTAINERFILE = (REPO / "Containerfile").read_text()
 COLLECTOR = (OVERLAY / "usr/local/bin/disk-health-metrics.sh").read_text()
 ALERTS = (
-    OVERLAY / "usr/share/custom-coreos/vmalert/alert-rules.yml"
+    OVERLAY / "usr/share/nas/vmalert/alert-rules.yml"
 ).read_text()
 DASHBOARD = (
-    OVERLAY / "usr/share/custom-coreos/grafana/dashboards/zfs-disk-health.json"
+    OVERLAY / "usr/share/nas/grafana/dashboards/zfs-disk-health.json"
 ).read_text()
 
 

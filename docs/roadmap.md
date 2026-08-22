@@ -33,7 +33,7 @@ architecture or operating instructions.
    stopping networkd or nftables first quiesces the service user managers.
 5. Cross-manager startup requirements use typed, bounded readiness checks,
    not raw systemd directive escape hatches.
-6. Image assets live under `/usr/share/custom-coreos`; mutable state lives
+6. Image assets live under `/usr/share/nas`; mutable state lives
    under `/var`; large ZFS data keeps host-managed SELinux labels.
 7. The production NAS is never an agent execution target. Operators run the
    smallest reviewed commands when live evidence is necessary.

@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-ENTRYPOINT_ROOT = REPO / "overlay-root/usr/share/custom-coreos"
+ENTRYPOINT_ROOT = REPO / "overlay-root/usr/share/nas"
 SAB_HELPER = ENTRYPOINT_ROOT / "sabnzbd/ensure-host-whitelist.py"
 SAB_HOSTNAMES = "sabnzbd.i.samhclark.com,sabnzbd.krun"
 SAB_IMAGE = (
@@ -345,7 +345,7 @@ class ArrEntrypointContractTests(unittest.TestCase):
     @staticmethod
     def _invoke_sab_helper(config: Path) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
-        environment["CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES"] = SAB_HOSTNAMES
+        environment["NAS_SABNZBD_ALLOWED_HOSTNAMES"] = SAB_HOSTNAMES
         if HELPER_RUNNER == "host":
             command = ["python3", str(SAB_HELPER), str(config)]
         else:
@@ -362,7 +362,7 @@ class ArrEntrypointContractTests(unittest.TestCase):
                 "--user=1000:1000",
                 "--userns=keep-id:uid=1000,gid=1000",
                 "--env",
-                f"CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES={SAB_HOSTNAMES}",
+                f"NAS_SABNZBD_ALLOWED_HOSTNAMES={SAB_HOSTNAMES}",
                 "--volume",
                 f"{config.parent}:/test:rw,Z",
                 "--entrypoint",

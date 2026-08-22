@@ -108,7 +108,7 @@ The scheduled publisher is serialized and never cancels an in-progress run.
 It currently moves the `stable` tag before attaching the signature and
 attestation to the resulting digest.
 
-The host's containers/image policy rejects an unsigned `custom-coreos` image,
+The host's containers/image policy rejects an unsigned `nas` image,
 so the accepted failure mode during that short window is a refused or delayed
 update rather than accepting unsigned content. Candidate-to-stable promotion
 is deferred until there is an automated candidate gate worth placing between

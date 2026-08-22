@@ -36,9 +36,9 @@ consumers = ["victoria-metrics"]
 
 [[container.volumes]]
 comment = "Image-controlled local probe configuration (read-only)"
-source = "/usr/share/custom-coreos/blackbox-exporter"
+source = "/usr/share/nas/blackbox-exporter"
 target = "/config"
 options = "ro"
 
 [assets]
-path = "/usr/share/custom-coreos/blackbox-exporter"
+path = "/usr/share/nas/blackbox-exporter"

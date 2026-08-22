@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 REPO = Path(__file__).resolve().parents[1]
-EXPORTER_PATH = REPO / "overlay-root/usr/share/custom-coreos/jellyfin-exporter/jellyfin_exporter.py"
+EXPORTER_PATH = REPO / "overlay-root/usr/share/nas/jellyfin-exporter/jellyfin_exporter.py"
 SPEC = importlib.util.spec_from_file_location("jellyfin_exporter", EXPORTER_PATH)
 EXPORTER = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None

@@ -75,7 +75,7 @@ Both inspect commands should report that the secret does not exist.
 
 ```bash
 stat -c '%U:%G %a %n' /var/lib/alertmanager /var/lib/alertmanager/data
-ls -Zd /usr/share/custom-coreos/alertmanager /var/lib/alertmanager /var/lib/alertmanager/data
+ls -Zd /usr/share/nas/alertmanager /var/lib/alertmanager /var/lib/alertmanager/data
 test ! -e /var/lib/alertmanager/alertmanager.yml
 ```
 

@@ -34,7 +34,7 @@ AddHost=host.krun.internal:10.253.1.1
 User=0
 
 # Image-controlled configuration (read-only)
-Volume=/usr/share/custom-coreos/garage/garage.toml:/etc/garage.toml:ro
+Volume=/usr/share/nas/garage/garage.toml:/etc/garage.toml:ro
 
 # Declarative meta storage
 Volume=/var/lib/garage/meta:/var/lib/garage/meta

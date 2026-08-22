@@ -82,11 +82,11 @@ class FleetManifestTests(unittest.TestCase):
         account_units = [
             line
             for line in self.artifacts[
-                Path("usr/share/custom-coreos/fleet/account-units.list")
+                Path("usr/share/nas/fleet/account-units.list")
             ].splitlines()
             if line and not line.startswith("#")
         ]
-        tap_rows = self.rows("usr/share/custom-coreos/fleet/active-taps.tsv")
+        tap_rows = self.rows("usr/share/nas/fleet/active-taps.tsv")
 
         self.assertEqual(
             account_units,
@@ -108,11 +108,11 @@ class FleetManifestTests(unittest.TestCase):
         )
 
     def test_secret_and_asset_manifests_are_derived_from_typed_fields(self):
-        secret_rows = self.rows("usr/share/custom-coreos/fleet/secrets.tsv")
+        secret_rows = self.rows("usr/share/nas/fleet/secrets.tsv")
         asset_rows = [
             [line]
             for line in self.artifacts[
-                Path("usr/share/custom-coreos/fleet/assets.list")
+                Path("usr/share/nas/fleet/assets.list")
             ].splitlines()
             if line and not line.startswith("#")
         ]
@@ -250,7 +250,7 @@ class StartupPolicyTests(unittest.TestCase):
         self.assertNotIn("/var/lib/alertmanager", tmpfiles)
         manifest = self.artifacts[
             Path(
-                "usr/share/custom-coreos/storage/"
+                "usr/share/nas/storage/"
                 "alertmanager.storage-manifest"
             )
         ]

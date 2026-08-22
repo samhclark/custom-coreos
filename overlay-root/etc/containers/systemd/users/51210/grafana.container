@@ -42,10 +42,10 @@ Environment=GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
 Environment=GF_AUTH_DISABLE_LOGIN_FORM=true
 
 # Image-controlled provisioning configs (read-only)
-Volume=/usr/share/custom-coreos/grafana/provisioning:/etc/grafana/provisioning:ro
+Volume=/usr/share/nas/grafana/provisioning:/etc/grafana/provisioning:ro
 
 # Image-controlled dashboards (read-only)
-Volume=/usr/share/custom-coreos/grafana/dashboards:/etc/grafana/dashboards:ro
+Volume=/usr/share/nas/grafana/dashboards:/etc/grafana/dashboards:ro
 
 # Declarative state storage
 Volume=/var/lib/grafana:/var/lib/grafana

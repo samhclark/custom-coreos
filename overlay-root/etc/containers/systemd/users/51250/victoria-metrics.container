@@ -34,7 +34,7 @@ AddHost=host.krun.internal:10.253.7.1
 User=0
 
 # Image-controlled scrape configuration (read-only)
-Volume=/usr/share/custom-coreos/victoria-metrics/promscrape.yml:/etc/victoria-metrics/promscrape.yml:ro
+Volume=/usr/share/nas/victoria-metrics/promscrape.yml:/etc/victoria-metrics/promscrape.yml:ro
 
 # Declarative data storage
 Volume=/var/lib/victoria-metrics:/victoria-metrics-data

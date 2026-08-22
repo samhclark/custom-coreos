@@ -143,12 +143,12 @@ checked into the repo, and store the age private key on the NAS.
 2. Create `.sops.yaml` in the repo root to configure SOPS:
    ```yaml
    creation_rules:
-     - path_regex: ^overlay-root/usr/share/custom-coreos/secrets/.*\.sops\.yaml$
+     - path_regex: ^overlay-root/usr/share/nas/secrets/.*\.sops\.yaml$
        age: "age1<public-key-here>"
    ```
 
 3. Create the secrets file at
-   `overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` with all
+   `overlay-root/usr/share/nas/secrets/secrets.sops.yaml` with all
    current secrets as a flat key-value map:
    ```yaml
    garage-rpc-secret: "<value>"
@@ -158,7 +158,7 @@ checked into the repo, and store the age private key on the NAS.
    pushover-user-key: "<value>"
    pushover-api-token: "<value>"
    ```
-   Encrypt with `sops --encrypt --in-place overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml`.
+   Encrypt with `sops --encrypt --in-place overlay-root/usr/share/nas/secrets/secrets.sops.yaml`.
 
 4. Store the age public key in the repo at `secrets/age-recipients.txt` (one
    public key per line, standard age format). This is what SOPS uses to encrypt.
@@ -177,7 +177,7 @@ checked into the repo, and store the age private key on the NAS.
 
 **Files created/modified**:
 - `NEW: .sops.yaml`
-- `NEW: overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml` (encrypted)
+- `NEW: overlay-root/usr/share/nas/secrets/secrets.sops.yaml` (encrypted)
 - `NEW: secrets/age-recipients.txt`
 - `MODIFIED: Containerfile` (add `sops` and `age` packages)
 - `MODIFIED: .gitignore` (ensure plaintext key files are excluded)
@@ -280,13 +280,13 @@ are two sources:
 
 1. **Rootless services** (have TOML configs): The service reads every
    `quadlets/*.toml` file on the image (installed at
-   `/usr/share/custom-coreos/quadlets/*.toml` — see note below). For each
+   `/usr/share/nas/quadlets/*.toml` — see note below). For each
    file, it extracts `[host].username` and `[[container.secrets]]` entries.
    This tells it e.g. "write secret `garage-metrics-token` to
    `/run/nas-secrets/grafana/garage-metrics-token`, owned by `_nas_grafana`."
 
 2. **Rootful services** (no TOML configs): A separate manifest file at
-   `overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.json`
+   `overlay-root/usr/share/nas/secrets/rootful-secrets.json`
    declares which secrets go to root:
    ```json
    {
@@ -311,11 +311,11 @@ gets its own runtime file.
 For the distribution service to read them at boot, they need to be installed
 into the image. Add to the Containerfile:
 ```dockerfile
-COPY quadlets/ /usr/share/custom-coreos/quadlets/
+COPY quadlets/ /usr/share/nas/quadlets/
 ```
-This makes the TOMLs available at `/usr/share/custom-coreos/quadlets/*.toml`
+This makes the TOMLs available at `/usr/share/nas/quadlets/*.toml`
 on the running NAS. They are read-only image-controlled files, consistent with
-the existing pattern for assets under `/usr/share/custom-coreos/`.
+the existing pattern for assets under `/usr/share/nas/`.
 
 #### Runtime secret directory creation
 
@@ -354,16 +354,16 @@ by the owning service user.
 
 3. Decrypt the SOPS file using the age key:
    SOPS_AGE_KEY_FILE=/run/nas-secrets/.work/age-key.txt \
-     sops --decrypt /usr/share/custom-coreos/secrets/secrets.sops.yaml \
+     sops --decrypt /usr/share/nas/secrets/secrets.sops.yaml \
      > /run/nas-secrets/.work/secrets-plain.yaml
 
 4. Shred the age key from /run:
    shred -u /run/nas-secrets/.work/age-key.txt
 
 5. Build the secret-to-consumer mapping:
-   a. Read /usr/share/custom-coreos/secrets/rootful-secrets.json
+   a. Read /usr/share/nas/secrets/rootful-secrets.json
       → all listed secrets map to the rootful Podman secret store
-   b. Read each /usr/share/custom-coreos/quadlets/*.toml
+   b. Read each /usr/share/nas/quadlets/*.toml
       → for each file, map [container.secrets].name entries to
         [service].name, [host].username, [host].uid, and the container target
    Result example:
@@ -451,7 +451,7 @@ missing-file check if the distributor did not complete.
 **Files created**:
 - `NEW: overlay-root/usr/local/bin/sops-distribute-secrets.sh`
 - `NEW: overlay-root/etc/systemd/system/sops-distribute-secrets.service`
-- `NEW: overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.json`
+- `NEW: overlay-root/usr/share/nas/secrets/rootful-secrets.json`
 
 **Files modified**:
 - `overlay-root/etc/containers/systemd/garage.container`
@@ -461,7 +461,7 @@ missing-file check if the distributor did not complete.
   (same change)
 - `Containerfile` (enable `sops-distribute-secrets.service`,
   add `sops` and `age` packages,
-  `COPY quadlets/ /usr/share/custom-coreos/quadlets/`)
+  `COPY quadlets/ /usr/share/nas/quadlets/`)
 
 **NAS setup (manual, one-time)**:
 - The age private key must already be encrypted and stored at
@@ -647,12 +647,12 @@ GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin"
 GF_AUTH_DISABLE_LOGIN_FORM = "true"
 
 [[container.volumes]]
-source = "/usr/share/custom-coreos/grafana/provisioning"
+source = "/usr/share/nas/grafana/provisioning"
 target = "/etc/grafana/provisioning"
 options = "ro"
 
 [[container.volumes]]
-source = "/usr/share/custom-coreos/grafana/dashboards"
+source = "/usr/share/nas/grafana/dashboards"
 target = "/etc/grafana/dashboards"
 options = "ro"
 
@@ -670,7 +670,7 @@ path = "/var/lib/grafana"
 mode = "0750"
 
 [assets]
-path = "/usr/share/custom-coreos/grafana"
+path = "/usr/share/nas/grafana"
 
 [unit]
 restart-sec = 30
@@ -842,8 +842,8 @@ done
 ```
 .sops.yaml
 secrets/age-recipients.txt
-overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml
-overlay-root/usr/share/custom-coreos/secrets/rootful-secrets.json
+overlay-root/usr/share/nas/secrets/secrets.sops.yaml
+overlay-root/usr/share/nas/secrets/rootful-secrets.json
 overlay-root/usr/local/bin/sops-distribute-secrets.sh
 overlay-root/etc/systemd/system/sops-distribute-secrets.service
 generate-quadlets.py
@@ -966,7 +966,7 @@ mode = "0750"               # Default: 0750
 
 # Optional: image-controlled read-only assets
 [assets]
-path = "/usr/share/custom-coreos/something"  # SELinux-labeled in Containerfile
+path = "/usr/share/nas/something"  # SELinux-labeled in Containerfile
 
 # Optional: unit configuration
 [unit]

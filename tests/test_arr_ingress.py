@@ -7,7 +7,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 CADDYFILE = (
-    REPO / "overlay-root/usr/share/custom-coreos/caddy/Caddyfile"
+    REPO / "overlay-root/usr/share/nas/caddy/Caddyfile"
 ).read_text()
 
 

@@ -86,12 +86,12 @@ class ArrStackTests(unittest.TestCase):
             Path("etc/containers/systemd/users/51440/sabnzbd.container")
         ]
         self.assertIn(
-            "Environment=CUSTOM_COREOS_SABNZBD_ALLOWED_HOSTNAMES="
+            "Environment=NAS_SABNZBD_ALLOWED_HOSTNAMES="
             "sabnzbd.i.samhclark.com,sabnzbd.krun",
             quadlet,
         )
         self.assertIn(
-            "Environment=CUSTOM_COREOS_SABNZBD_COMPLETED_PERMISSIONS=2770",
+            "Environment=NAS_SABNZBD_COMPLETED_PERMISSIONS=2770",
             quadlet,
         )
 
@@ -121,7 +121,7 @@ class ArrStackTests(unittest.TestCase):
         for name, uid in (("sonarr", 51410), ("radarr", 51420), ("sabnzbd", 51440)):
             with self.subTest(storage_manifest=name):
                 manifest = self.artifacts[
-                    Path(f"usr/share/custom-coreos/storage/{name}.storage-manifest")
+                    Path(f"usr/share/nas/storage/{name}.storage-manifest")
                 ]
                 self.assertIn(
                     f"service|{name}|_nas_{name}|{uid}|{uid}|"

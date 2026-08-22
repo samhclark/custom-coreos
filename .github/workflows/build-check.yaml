@@ -10,7 +10,7 @@ on:
     branches: [main]
 
 env:
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME: ${{ github.repository }}/bootc
 
 jobs:
   preflight:

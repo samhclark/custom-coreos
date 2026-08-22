@@ -121,7 +121,7 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
             artifacts += [
                 Artifact(
                     Path(
-                        "usr/share/custom-coreos/storage/"
+                        "usr/share/nas/storage/"
                         f"{service.info.name}.storage-manifest"
                     ),
                     storage_manifest(service, fleet),
@@ -148,7 +148,7 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
         artifacts += [
             Artifact(
                 Path(
-                    "usr/share/custom-coreos/storage/"
+                    "usr/share/nas/storage/"
                     f"{resource.name}.storage-manifest"
                 ),
                 shared_storage_manifest(resource, group.gid),
@@ -194,31 +194,31 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
         Artifact(Path("etc/nftables/nas-krun-filter.nft"), nft_filter(fleet)),
         Artifact(Path("etc/nftables/nas-krun-nat.nft"), nft_nat(fleet)),
         Artifact(
-            Path("usr/share/custom-coreos/fleet/account-units.list"),
+            Path("usr/share/nas/fleet/account-units.list"),
             account_units_manifest(fleet),
         ),
         Artifact(
-            Path("usr/share/custom-coreos/fleet/egress-units.list"),
+            Path("usr/share/nas/fleet/egress-units.list"),
             egress_units_manifest(fleet),
         ),
         Artifact(
-            Path("usr/share/custom-coreos/fleet/active-taps.tsv"),
+            Path("usr/share/nas/fleet/active-taps.tsv"),
             active_taps_manifest(fleet),
         ),
         Artifact(
-            Path("usr/share/custom-coreos/fleet/secrets.tsv"),
+            Path("usr/share/nas/fleet/secrets.tsv"),
             secrets_manifest(fleet),
         ),
         Artifact(
-            Path("usr/share/custom-coreos/fleet/assets.list"),
+            Path("usr/share/nas/fleet/assets.list"),
             assets_manifest(fleet),
         ),
         Artifact(
-            Path("usr/share/custom-coreos/fleet/storage-units.list"),
+            Path("usr/share/nas/fleet/storage-units.list"),
             storage_units_manifest(fleet),
         ),
         Artifact(
-            Path("usr/share/custom-coreos/fleet/shared-storage-paths.list"),
+            Path("usr/share/nas/fleet/shared-storage-paths.list"),
             shared_storage_paths_manifest(fleet),
         ),
     ]

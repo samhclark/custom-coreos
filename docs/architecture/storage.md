@@ -77,7 +77,7 @@ Podman `:z` or `:Z` for these trees.
 The compiler derives four artifacts from the typed declaration:
 
 - `Volume=` entries in the rootless Quadlet;
-- `/usr/share/custom-coreos/storage/<service>.storage-manifest`;
+- `/usr/share/nas/storage/<service>.storage-manifest`;
 - `nas-prepare-<service>-storage.service`;
 - a bounded `ExecStartPre` check of `/run/nas-storage/<service>/ready`, exact
   ZFS mount sources, service ownership, and service-user access.

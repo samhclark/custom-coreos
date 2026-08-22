@@ -7,17 +7,17 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 CADDYFILE = (
-    REPO / "overlay-root/usr/share/custom-coreos/caddy/Caddyfile"
+    REPO / "overlay-root/usr/share/nas/caddy/Caddyfile"
 ).read_text()
 SCRAPE_CONFIG = (
     REPO
-    / "overlay-root/usr/share/custom-coreos/victoria-metrics/promscrape.yml"
+    / "overlay-root/usr/share/nas/victoria-metrics/promscrape.yml"
 ).read_text()
 ALERT_RULES = (
-    REPO / "overlay-root/usr/share/custom-coreos/vmalert/alert-rules.yml"
+    REPO / "overlay-root/usr/share/nas/vmalert/alert-rules.yml"
 ).read_text()
 DASHBOARD = (
-    REPO / "overlay-root/usr/share/custom-coreos/grafana/dashboards/jellyfin.json"
+    REPO / "overlay-root/usr/share/nas/grafana/dashboards/jellyfin.json"
 ).read_text()
 JELLYFIN_QUADLET = (
     REPO / "overlay-root/etc/containers/systemd/users/51120/jellyfin.container"

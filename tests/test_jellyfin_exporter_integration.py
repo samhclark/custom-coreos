@@ -10,10 +10,10 @@ REPO = Path(__file__).resolve().parents[1]
 TOML_PATH = REPO / "quadlets/jellyfin-exporter.toml"
 CONTAINERFILE = (REPO / "Containerfile").read_text()
 ASSET_MANIFEST = (
-    REPO / "overlay-root/usr/share/custom-coreos/fleet/assets.list"
+    REPO / "overlay-root/usr/share/nas/fleet/assets.list"
 ).read_text()
 EXPORTER = (
-    REPO / "overlay-root/usr/share/custom-coreos/jellyfin-exporter/jellyfin_exporter.py"
+    REPO / "overlay-root/usr/share/nas/jellyfin-exporter/jellyfin_exporter.py"
 ).read_text()
 
 
@@ -41,7 +41,7 @@ class JellyfinExporterIntegrationTests(unittest.TestCase):
             CONTAINERFILE,
         )
         self.assertIn(
-            "/usr/share/custom-coreos/jellyfin-exporter",
+            "/usr/share/nas/jellyfin-exporter",
             ASSET_MANIFEST,
         )
 

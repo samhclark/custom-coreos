@@ -125,7 +125,7 @@ cannot test or repair the TAP attachment boundary.
 
 Immich PostgreSQL is the current example. Its database Quadlet requests
 `User=1000:1000` and mounts the image-controlled
-`/usr/share/custom-coreos/immich-database/` adapter tree read-only. The adapter
+`/usr/share/nas/immich-database/` adapter tree read-only. The adapter
 uses the image-provided `gosu` to transition guest root to 1000:1000 before
 invoking the upstream wrapper; when the runtime already supplies 1000:1000, it
 delegates without a transition. This makes the image boundary explicit while
@@ -222,7 +222,7 @@ network policy and its static host consumers are intentionally always present.
 ### 4. Classify storage and assets
 
 Use `[assets]` for an image-controlled tree under
-`/usr/share/custom-coreos/<service>`. The generated asset manifest drives
+`/usr/share/nas/<service>`. The generated asset manifest drives
 Containerfile SELinux labeling.
 
 Use `[[storage]]` for mutable application state. A small directory example is:
@@ -255,7 +255,7 @@ multiple containers.
 ### 5. Declare secrets, not routing code
 
 Add each secret as `[[container.secrets]]` and add the encrypted value to
-`overlay-root/usr/share/custom-coreos/secrets/secrets.sops.yaml`. The compiler
+`overlay-root/usr/share/nas/secrets/secrets.sops.yaml`. The compiler
 emits `fleet/secrets.tsv`; the root-owned distributor decrypts once at boot and
 writes a service-owned file below `/run/nas-secrets/<service>/`.
 

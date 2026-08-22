@@ -251,7 +251,7 @@ def storage_unit(service: Service) -> str:
         "Type=oneshot",
         "User=root",
         "ExecStart=/usr/local/bin/nas-prepare-storage.sh "
-        f"/usr/share/custom-coreos/storage/{service.info.name}.storage-manifest",
+        f"/usr/share/nas/storage/{service.info.name}.storage-manifest",
         "TimeoutStartSec=infinity",
         "Restart=on-failure",
         "RestartPreventExitStatus=78",
@@ -310,7 +310,7 @@ def shared_storage_unit(resource: FleetZfsStorage) -> str:
             "Type=oneshot",
             "User=root",
             "ExecStart=/usr/local/bin/nas-prepare-shared-storage.sh "
-            f"/usr/share/custom-coreos/storage/{resource.name}.storage-manifest",
+            f"/usr/share/nas/storage/{resource.name}.storage-manifest",
             "TimeoutStartSec=infinity",
             "Restart=on-failure",
             "RestartPreventExitStatus=78",

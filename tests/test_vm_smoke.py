@@ -67,7 +67,7 @@ class VmSmokeSafetyTests(unittest.TestCase):
 
     def test_serial_sentinel_is_normalized_before_exact_matching(self):
         self.assertIn("tr -d '\\r'", RUNNER)
-        self.assertIn("grep -Fqx 'CUSTOM_COREOS_VM_SMOKE_PASS'", RUNNER)
+        self.assertIn("grep -Fqx 'NAS_VM_SMOKE_PASS'", RUNNER)
 
     def test_smoke_service_has_no_multi_user_ordering_cycle(self):
         self.assertIn("WantedBy=multi-user.target", IGNITION)
@@ -99,7 +99,7 @@ class VmSmokeSafetyTests(unittest.TestCase):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, IGNITION.lower())
         self.assertIn("mask: true", IGNITION)
-        self.assertIn("CUSTOM_COREOS_VM_SMOKE_PASS", IGNITION)
+        self.assertIn("NAS_VM_SMOKE_PASS", IGNITION)
 
 
 class VmSmokeRunnerBehaviorTests(unittest.TestCase):
@@ -163,9 +163,9 @@ class VmSmokeRunnerBehaviorTests(unittest.TestCase):
             if not serial.startswith("file:"):
                 raise SystemExit(65)
             sentinel = os.environ.get("FAKE_GUEST_SENTINEL", "PASS")
-            output = "CUSTOM_COREOS_VM_SMOKE_BEGIN\r\n"
+            output = "NAS_VM_SMOKE_BEGIN\r\n"
             if sentinel != "NONE":
-                output += f"CUSTOM_COREOS_VM_SMOKE_{sentinel}\r\n"
+                output += f"NAS_VM_SMOKE_{sentinel}\r\n"
             Path(serial.removeprefix("file:")).write_bytes(output.encode())
             if os.environ.get("FAKE_MUTATE_QCOW") == "1":
                 drive = qemu_arguments[qemu_arguments.index("-drive") + 1]
@@ -219,7 +219,7 @@ class VmSmokeRunnerBehaviorTests(unittest.TestCase):
         result = self.run_runner()
 
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("CUSTOM_COREOS_VM_SMOKE_PASS", result.stdout)
+        self.assertIn("NAS_VM_SMOKE_PASS", result.stdout)
         invocation = json.loads(self.qemu_log.read_text())
         arguments = invocation["arguments"]
         self.assertEqual(
