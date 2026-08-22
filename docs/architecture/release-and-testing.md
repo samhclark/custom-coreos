@@ -105,14 +105,16 @@ archived history.
 ## Publishing decision
 
 The scheduled publisher is serialized and never cancels an in-progress run.
-It currently moves the `stable` tag before attaching the signature and
-attestation to the resulting digest.
+One Buildx invocation exports the same build result to GHCR and the local
+Docker image store. The workflow verifies the loaded image contract, then
+attaches the signature and attestation to the published digest.
 
-The host's containers/image policy rejects an unsigned `nas` image,
-so the accepted failure mode during that short window is a refused or delayed
-update rather than accepting unsigned content. Candidate-to-stable promotion
-is deferred until there is an automated candidate gate worth placing between
-build and promotion.
+The `stable` tag therefore moves before contract verification, signing, and
+attestation finish. The host's containers/image policy rejects an unsigned
+`nas` image, so a build that fails verification remains unsigned and produces
+a refused or delayed update rather than accepted bad content.
+Candidate-to-stable promotion is deferred until there is an automated
+candidate gate worth placing between build and promotion.
 
 Revisit this decision if there is more than one consumer, if update retry
 behavior changes, or when image/VM validation can run against the candidate

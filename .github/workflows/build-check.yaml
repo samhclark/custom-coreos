@@ -29,17 +29,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       
-      - name: Remove fuse-overlayfs
-        run: |
-          while p=$(command -v fuse-overlayfs 2>/dev/null); do sudo rm -f "$p"; done
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
       - name: Build container image
-        uses: redhat-actions/buildah-build@3a51aade9afa17e5c78256bcbe2e1ee08c7b995b # v3.0.2
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
-          image: ${{ env.IMAGE_NAME }}
-          tags: ci-check
-          containerfiles: |
-            ./Containerfile
+          context: .
+          file: ./Containerfile
+          pull: true
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:ci-check
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             ZFS_VERSION=${{ needs.preflight.outputs.zfs-version }}
             KERNEL_VERSION=${{ needs.preflight.outputs.kernel-version }}

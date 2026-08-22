@@ -33,45 +33,42 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Remove fuse-overlayfs
-        run: |
-          while p=$(command -v fuse-overlayfs 2>/dev/null); do sudo rm -f "$p"; done
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
-      - name: Build container image
-        id: build
-        uses: redhat-actions/buildah-build@3a51aade9afa17e5c78256bcbe2e1ee08c7b995b # v3.0.2
-        with:
-          image: ${{ env.IMAGE_NAME }}
-          tags: stable
-          containerfiles: |
-            ./Containerfile
-          build-args: |
-            ZFS_VERSION=${{ needs.preflight.outputs.zfs-version }}
-            KERNEL_VERSION=${{ needs.preflight.outputs.kernel-version }}
-
-      - name: Verify exact built image contract
-        run: make verify-image IMAGE_NAME="${IMAGE_NAME}" TAG=stable
-
-      - name: Log in to Container Registry
-        uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push to registry
-        id: push
-        uses: redhat-actions/push-to-registry@94ade333c38ecc0e60e94785125d9a52ca423b37 # v3.0.0
+      - name: Build and push container image
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
         with:
-          image: ${{ steps.build.outputs.image }}
-          tags: ${{ steps.build.outputs.tags }}
-          registry: ${{ env.REGISTRY }}
+          context: .
+          file: ./Containerfile
+          pull: true
+          push: true
+          load: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:stable
+          provenance: false
+          sbom: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            ZFS_VERSION=${{ needs.preflight.outputs.zfs-version }}
+            KERNEL_VERSION=${{ needs.preflight.outputs.kernel-version }}
+
+      - name: Verify exact built image contract
+        run: make verify-image IMAGE_NAME="${REGISTRY}/${IMAGE_NAME}" TAG=stable
 
       - name: Generate artifact attestation
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
           create-storage-record: false
 
@@ -84,4 +81,4 @@ jobs:
           registry-token: ${{ secrets.GITHUB_TOKEN }}
           args: >-
             sign --yes --key=env://COSIGN_PRIVATE_KEY --new-bundle-format=false --use-signing-config=false 
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
