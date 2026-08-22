@@ -6,3 +6,10 @@ datasources:
     access: proxy
     url: http://victoria-metrics.krun:8428
     isDefault: true
+  - name: VictoriaLogs
+    type: victoriametrics-logs-datasource
+    access: proxy
+    url: http://victoria-logs.krun:9428
+    isDefault: false
+    jsonData:
+      maxLines: 50

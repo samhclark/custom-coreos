@@ -6,6 +6,7 @@ Documentation=https://docs.victoriametrics.com/
 [Container]
 ContainerName=victoria-metrics
 Image=docker.io/victoriametrics/victoria-metrics:v1.150.0@sha256:54467c7764a3e6579199af1914bb779f01ce32265cd552eb5ae0d4f8a2b80a97
+LogDriver=journald
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=1024
@@ -25,6 +26,7 @@ AddHost=blackbox-exporter.krun:10.253.5.2
 AddHost=alertmanager.krun:10.253.6.2
 AddHost=victoria-metrics.krun:10.253.7.2
 AddHost=jellyfin-exporter.krun:10.253.8.2
+AddHost=victoria-logs.krun:10.253.18.2
 AddHost=caddy.krun:10.253.9.2
 AddHost=sonarr.krun:10.253.14.2
 AddHost=radarr.krun:10.253.15.2

@@ -46,7 +46,23 @@ FROM ghcr.io/getsops/sops:v3.13.3@sha256:857f5a151ac0b2bfc55c1e4e5581d66fb8e268e
 
 #####
 #
-#  Stage 3: Pull prebuilt ZFS kmods
+#  Stage 3: Pull Vector runtime
+#
+#####
+FROM docker.io/timberio/vector:0.57.0-distroless-static@sha256:d96454c4e64db59234d9a2b973b02c3b9b09a0674eef685b3955ef7cd03f70a0 AS vector
+
+
+#####
+#
+#  Stage 4: Pull Vector license and notice material
+#
+#####
+FROM docker.io/timberio/vector:0.57.0-debian@sha256:ed2134fa8f9844c1ca6405260903c2c2c52f94af9e16bc8fa9de9655134e0b39 AS vector-license
+
+
+#####
+#
+#  Stage 5: Pull prebuilt ZFS kmods
 #
 #####
 FROM ghcr.io/samhclark/fedora-zfs-kmods:zfs-${ZFS_VERSION}_kernel-${KERNEL_VERSION} AS zfs-rpms
@@ -56,7 +72,7 @@ ARG ZFS_VERSION
 
 #####
 # 
-#  Stage 4: Final image
+#  Stage 6: Final image
 #
 #####
 FROM quay.io/fedora/fedora-coreos:stable
@@ -75,6 +91,9 @@ LABEL nas.bootc.kernel-version="${KERNEL_VERSION}"
 RUN rm /usr/local
 COPY overlay-root/ /
 COPY --from=sops /usr/local/bin/sops /usr/local/bin/sops
+COPY --from=vector /usr/local/bin/vector /usr/local/bin/vector
+COPY --from=vector-license /usr/share/vector/NOTICE /usr/share/vector/LICENSE-3rdparty.csv /usr/share/vector/
+COPY --from=vector-license /usr/share/vector/licenses /usr/share/vector/licenses
 
 RUN /bin/bash -c 'set -euo pipefail; \
     printf "%s\n" \
@@ -153,6 +172,7 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
         systemd-networkd.service \
         tailscaled.service \
         sops-distribute-secrets.service \
+        nas-vector.service \
         zfs-scrub-monthly@tank.timer \
         zfs-snapshots-frequently@videos.timer \
         zfs-snapshots-hourly@videos.timer \
@@ -169,6 +189,10 @@ RUN --mount=type=bind,from=zfs-rpms,source=/,target=/zfs-rpms \
 COPY --from=crun-builder /out/usr/bin/crun /usr/bin/crun
 
 RUN /bin/bash -c 'set -euo pipefail; \
+    /usr/local/bin/vector --version | grep -F "vector 0.57.0"; \
+    /usr/local/bin/vector validate \
+        --config-yaml /etc/vector/vector.yaml \
+        --no-environment --skip-healthchecks; \
     [[ "$(rpm -E "%{fedora}")" == "44" ]]; \
     [[ "$(rpm -q --queryformat "%{VERSION}" crun)" == "1.28" ]]; \
     [[ "$(readlink /usr/bin/krun)" == "crun" ]]; \

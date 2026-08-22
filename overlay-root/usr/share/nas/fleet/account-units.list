@@ -15,5 +15,6 @@ ensure-nas-prowlarr-account.service
 ensure-nas-radarr-account.service
 ensure-nas-sabnzbd-account.service
 ensure-nas-sonarr-account.service
+ensure-nas-victorialogs-account.service
 ensure-nas-victoriametrics-account.service
 ensure-nas-vmalert-account.service

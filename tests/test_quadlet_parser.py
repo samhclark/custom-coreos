@@ -427,6 +427,14 @@ name = "token"
             "supports only",
         )
 
+    def test_log_driver_supports_only_journald(self):
+        service = self.load(service_toml(container='log-driver = "journald"'))
+        self.assertEqual(service.container.log_driver, "journald")
+        self.assert_invalid(
+            service_toml(container='log-driver = "json-file"'),
+            "supports only",
+        )
+
     def test_container_hardening_and_shared_memory_are_typed(self):
         service = self.load(
             service_toml(

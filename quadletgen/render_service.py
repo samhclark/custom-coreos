@@ -47,6 +47,8 @@ def container_unit(service: Service, fleet: Fleet) -> str:
     lines += ["", "[Container]"]
     lines.append(f"ContainerName={info.name}")
     lines.append(f"Image={container.image}")
+    if container.log_driver is not None:
+        lines.append(f"LogDriver={container.log_driver}")
     if container.entrypoint is not None:
         lines.append(f"Entrypoint={container.entrypoint}")
     if krun is not None:

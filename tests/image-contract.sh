@@ -17,6 +17,10 @@ bootc container lint
 /usr/bin/crun --version | grep -Fq 'crun version 1.28'
 grep -aFq 'krun.tap_name' /usr/bin/crun
 /usr/local/bin/sops --version | grep -Fq 'sops 3.13.3'
+/usr/local/bin/vector --version | grep -Fq 'vector 0.57.0'
+/usr/local/bin/vector validate \
+    --config-yaml /etc/vector/vector.yaml \
+    --no-environment --skip-healthchecks
 test -x /usr/local/bin/nas-diagnose-immich
 test -x \
     /usr/share/nas/immich-database/immich-database-entrypoint.sh
@@ -60,6 +64,7 @@ for unit in \
     nas-krun-network-policy.service \
     nftables.service \
     node_exporter.service \
+    nas-vector.service \
     sops-distribute-secrets.service \
     systemd-networkd.service \
     tailscaled.service; do

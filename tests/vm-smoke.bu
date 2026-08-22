@@ -110,6 +110,8 @@ systemd:
       mask: true
     - name: sops-distribute-secrets.service
       mask: true
+    - name: nas-vector.service
+      mask: true
     - name: tailscaled.service
       mask: true
     - name: disk-health-metrics.timer
@@ -135,6 +137,8 @@ systemd:
     - name: nas-prepare-sonarr-storage.service
       mask: true
     - name: nas-prepare-victoria-metrics-storage.service
+      mask: true
+    - name: nas-prepare-victoria-logs-storage.service
       mask: true
     - name: zfs-scrub-monthly@tank.timer
       mask: true

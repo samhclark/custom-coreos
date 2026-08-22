@@ -6,6 +6,7 @@ Documentation=https://caddyserver.com/docs/
 [Container]
 ContainerName=caddy
 Image=ghcr.io/samhclark/lab-caddy:2.11.4-cf-0.2.4@sha256:142f36c7664fa519a8597f07e71079e0d4945b47833d52b8c99abc2b6da7a094
+LogDriver=journald
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=512
@@ -25,6 +26,7 @@ AddHost=blackbox-exporter.krun:10.253.5.2
 AddHost=alertmanager.krun:10.253.6.2
 AddHost=victoria-metrics.krun:10.253.7.2
 AddHost=jellyfin-exporter.krun:10.253.8.2
+AddHost=victoria-logs.krun:10.253.18.2
 AddHost=caddy.krun:10.253.9.2
 AddHost=sonarr.krun:10.253.14.2
 AddHost=radarr.krun:10.253.15.2

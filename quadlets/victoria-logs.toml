@@ -1,0 +1,54 @@
+# ABOUTME: Declarative config for the pilot VictoriaLogs rootless Quadlet;
+# consumed by generate-quadlets.py (build time).
+
+[service]
+name = "victoria-logs"
+application = "observability"
+role = "logs"
+description = "VictoriaLogs"
+documentation = "https://docs.victoriametrics.com/victorialogs/"
+
+[host]
+username = "_nas_victorialogs"
+uid = 51270
+subid-start = 512700000
+display-name = "VictoriaLogs"
+
+[container]
+image = "docker.io/victoriametrics/victoria-logs:v1.52.0@sha256:47b820890d64c4575a2a0a46415dcd8a4fd59a0f1fcd6a377693d7aea639442e"
+network = "host"
+container-user = 0
+exec = "-storageDataPath=/victoria-logs-data -retentionPeriod=7d -retention.maxDiskUsagePercent=80 -search.maxQueryTimeRange=7d -search.maxQueryDuration=15s -search.maxConcurrentRequests=2 -httpListenAddr=0.0.0.0:9428"
+
+[krun]
+enabled = true
+cpus = 1
+ram-mib = 1024
+network = "tap"
+ipv4 = "10.253.18.2/30"
+probe-endpoint = "http"
+
+[[container.endpoints]]
+name = "http"
+port = 9428
+host = "127.0.0.1:9428"
+consumers = ["grafana", "victoria-metrics"]
+
+[[storage]]
+name = "data"
+kind = "managed-zfs"
+dataset = "tank/victoria-logs/data"
+host-path = "/var/lib/victoria-logs"
+mode = "0750"
+record-size = "128K"
+compression = "lz4"
+atime = false
+primary-cache = "all"
+
+[[storage.exports]]
+subpath = "."
+container-path = "/victoria-logs-data"
+access = "read-write"
+
+[unit]
+timeout-start-sec = 900

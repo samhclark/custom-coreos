@@ -26,6 +26,11 @@ terminator is part of the production service data path.
 The compiler rejects undeclared peers, port mismatches, duplicate subnets,
 unsupported bind addresses, spoofable topology, and overlapping identities.
 
+The configured VictoriaLogs pilot uses the next allocated TAP,
+`10.253.18.2/30`. TCP 9428 is published only on host loopback for the native
+Vector collector and is consumable over the routed TAP network by Grafana and
+VictoriaMetrics. Caddy is not a consumer.
+
 ## Generated data plane
 
 For each active service the compiler emits:

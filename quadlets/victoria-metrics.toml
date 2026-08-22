@@ -17,6 +17,7 @@ display-name = "VictoriaMetrics"
 
 [container]
 image = "docker.io/victoriametrics/victoria-metrics:v1.150.0@sha256:54467c7764a3e6579199af1914bb779f01ce32265cd552eb5ae0d4f8a2b80a97"
+log-driver = "journald"
 network = "host"
 container-user = 0
 exec = "-storageDataPath=/victoria-metrics-data -retentionPeriod=1 -promscrape.config=/etc/victoria-metrics/promscrape.yml -httpListenAddr=0.0.0.0:8428"

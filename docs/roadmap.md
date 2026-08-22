@@ -52,10 +52,14 @@ architecture or operating instructions.
 3. **Jellyfin operational validation.** Continue representative playback,
    monitoring, and recovery checks without weakening the VM boundary or
    privacy-limited exporter contract.
-4. **Documentation maintenance.** Keep README focused on operators and
+4. **Host logging pilot.** Validate persistent journald, native Vector, and
+   VictoriaLogs through outage, restart, and reboot stages before collecting
+   any service beyond Caddy and VictoriaMetrics. See
+   `docs/operations/logging.md`.
+5. **Documentation maintenance.** Keep README focused on operators and
    `AGENTS.md` focused on execution boundaries and invariants; remove stale
    rollout instructions as the platform evolves.
-5. **Manual bootstrap.** TPM enrollment for non-root volumes, the SOPS age
+6. **Manual bootstrap.** TPM enrollment for non-root volumes, the SOPS age
    credential, and occasional `tank` import remain intentionally manual for
    this single-admin reference deployment.
 

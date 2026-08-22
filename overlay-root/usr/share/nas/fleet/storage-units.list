@@ -14,4 +14,5 @@ nas-prepare-prowlarr-storage.service
 nas-prepare-radarr-storage.service
 nas-prepare-sabnzbd-storage.service
 nas-prepare-sonarr-storage.service
+nas-prepare-victoria-logs-storage.service
 nas-prepare-victoria-metrics-storage.service

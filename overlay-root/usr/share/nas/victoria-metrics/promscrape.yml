@@ -6,6 +6,10 @@ scrape_configs:
     static_configs:
       - targets: ['127.0.0.1:8428']
 
+  - job_name: 'victoria-logs'
+    static_configs:
+      - targets: ['victoria-logs.krun:9428']
+
   - job_name: 'garage'
     # Garage's admin/metrics endpoint can respond slowly under load.
     # Give it a longer timeout and a less aggressive scrape cadence.

@@ -133,8 +133,10 @@ failures retain the existing restart policy. Drift logs name the exact sampled
 path and observed ownership, mode, or label before refusing repair.
 
 The current authored stateful services are Caddy, Alertmanager, Grafana,
-Garage, VictoriaMetrics, Jellyfin, all four Immich components, and the four
-media-automation services. The media-automation config datasets and shared
-layout are authored but their NAS deployment and migration remain unvalidated.
+Garage, VictoriaMetrics, VictoriaLogs, Jellyfin, all four Immich components,
+and the four media-automation services. VictoriaLogs and the media-automation
+config datasets and shared layout are authored but their NAS deployment and
+validation remain incomplete. `tank/victoria-logs/data` deliberately has no
+snapshot or backup policy.
 Blackbox exporter, vmalert, and Jellyfin exporter are intentionally stateless;
 image assets and runtime secrets are separate declaration classes.

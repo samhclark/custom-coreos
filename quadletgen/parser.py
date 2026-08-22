@@ -310,13 +310,16 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
         raw,
         path,
         {
-            "image", "entrypoint", "enabled", "network", "container-user",
+            "image", "log-driver", "entrypoint", "enabled", "network", "container-user",
             "health-cmd",
             "no-new-privileges", "drop-capabilities", "shm-size-mib", "dns",
             "sysctls", "environment", "volumes", "secrets", "endpoints", "exec",
         },
     )
     image = _string(_required(table, "image", path), f"{path}.image")
+    log_driver = _optional_string(table, "log-driver", path)
+    if log_driver is not None and log_driver != "journald":
+        _fail(f"{path}.log-driver", 'currently supports only "journald"')
     entrypoint = _optional_string(table, "entrypoint", path)
     health_cmd_text = _optional_string(table, "health-cmd", path)
     if health_cmd_text is not None and health_cmd_text != "none":
@@ -333,6 +336,7 @@ def _parse_container(raw: object, name: str) -> ContainerSpec:
     exec_text = _optional_string(table, "exec", path)
     return ContainerSpec(
         image=image,
+        log_driver=log_driver,
         entrypoint=entrypoint,
         enabled=_boolean(table["enabled"], f"{path}.enabled") if "enabled" in table else True,
         network=network,

@@ -42,8 +42,8 @@ class CompilerCharacterizationTests(unittest.TestCase):
     def test_current_fleet_is_typed_and_uid_ordered(self):
         fleet = current_fleet()
 
-        self.assertEqual(len(fleet.services), 17)
-        self.assertEqual(len(fleet.active_taps), 17)
+        self.assertEqual(len(fleet.services), 18)
+        self.assertEqual(len(fleet.active_taps), 18)
         self.assertEqual(
             [service.host.uid for service in fleet.services],
             sorted(service.host.uid for service in fleet.services),
@@ -55,6 +55,26 @@ class CompilerCharacterizationTests(unittest.TestCase):
                 for service in fleet.active_taps
             )
         )
+
+    def test_journald_log_driver_is_rendered_only_for_declared_services(self):
+        artifacts = {
+            artifact.path: artifact.content
+            for artifact in compile_fleet(current_fleet())
+        }
+        caddy = artifacts[
+            Path("etc/containers/systemd/users/51310/caddy.container")
+        ]
+        victoria_metrics = artifacts[
+            Path(
+                "etc/containers/systemd/users/51250/"
+                "victoria-metrics.container"
+            )
+        ]
+        self.assertIn("LogDriver=journald\n", caddy)
+        self.assertIn("LogDriver=journald\n", victoria_metrics)
+        for path, content in artifacts.items():
+            if path.name not in {"caddy.container", "victoria-metrics.container"}:
+                self.assertNotIn("LogDriver=", content)
 
     def test_artifact_paths_are_normalized_relative_overlay_paths(self):
         for path in (Path("../escape"), Path("/absolute"), Path("bad\\name")):

@@ -52,7 +52,10 @@ These are considered active and in use on the real machine unless explicitly sta
 ### Configured, Awaiting Production Validation
 
 These Quadlets are image-defined but must not be described as deployed until
-the reviewed `tank/videos` migration and NAS validation are complete:
+their service-specific NAS validation is complete:
+- `victoria-logs.container` - seven-day searchable log store for the host
+  Vector pilot; rootless under `etc/containers/systemd/users/51270/`. Both
+  VictoriaLogs and the native Vector collector await production validation.
 - `sonarr.container` - TV-library automation; rootless under `etc/containers/systemd/users/51410/`
 - `radarr.container` - movie-library automation; rootless under `etc/containers/systemd/users/51420/`
 - `prowlarr.container` - indexer management; rootless under `etc/containers/systemd/users/51430/`
@@ -61,6 +64,8 @@ the reviewed `tank/videos` migration and NAS validation are complete:
 ### Supporting Host Units
 
 Important non-container units:
+- `nas-vector.service` - hardened native collector for the Caddy and
+  VictoriaMetrics journald pilot; configured but awaiting production validation
 - `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and writes per-service runtime secret files at boot
 - `nas-prepare-<service>-storage.service` - generated preparation and current-boot readiness for every stateful service, including all four Immich components
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
@@ -77,6 +82,8 @@ Important non-container units:
 - The main data pool is expected to be `tank`
 - Garage datasets live under `tank/garage/{meta,data}`
 - VictoriaMetrics data lives under `tank/victoria-metrics/data`
+- VictoriaLogs data lives under `tank/victoria-logs/data`; it has no snapshot
+  or backup policy
 - Jellyfin state lives under `tank/jellyfin/{config,cache}`; `tank/videos` is mounted at `/var/zfs/tank/videos`, with `movies` and `tv-shows` exposed read-only to Jellyfin
 - The media-automation target layout is directory-based beneath the existing `tank/videos` dataset: `data/usenet/{incomplete,complete/{movies,tv}}` and `data/media/{movies,tv}`. Sonarr and Radarr mount the common `/data` root so imports can use hardlinks; SABnzbd mounts `/data/usenet`; Jellyfin mounts `/data/media` read-only.
 - Required media layout paths are root-owned, group-owned by the fleet `media` GID `52000`, and setgid mode `2775`. Existing descendants retain their user owner during migration but receive the shared group and group access. The generated shared-storage unit validates the required-root contract but never creates, moves, chowns, or relabels production media automatically.
@@ -299,7 +306,7 @@ Images include labels for future deduplication:
 - Reserve `51000-51999` for image-managed service accounts in this repo
 - Use category buckets inside that range: `511xx` for storage, `512xx` for observability, `513xx` for ingress/edge
 - Current storage/application allocation: `_nas_garage` uses host UID/GID `51110`; `_nas_jellyfin` uses `51120`; `_nas_immichserver` uses `51130`; `_nas_immichdatabase` uses `51140`; `_nas_immichvalkey` uses `51150`; `_nas_immichmachinelearning` uses `51160`
-- Current observability/edge allocation: `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_jellyfinmetrics` uses `51260`; `_nas_caddy` uses `51310`
+- Current observability/edge allocation: `_nas_grafana` uses `51210`; `_nas_vmalert` uses `51220`; `_nas_blackbox` uses `51230`; `_nas_alertmanager` uses `51240`; `_nas_victoriametrics` uses `51250`; `_nas_jellyfinmetrics` uses `51260`; `_nas_victorialogs` uses `51270`; `_nas_caddy` uses `51310`
 - Current media-automation allocation: `_nas_sonarr` uses `51410`; `_nas_radarr` uses `51420`; `_nas_prowlarr` uses `51430`; `_nas_sabnzbd` uses `51440`. These identities are configured but not production-validated yet.
 - Subordinate ID ranges are a separate allocator, but keep them globally non-overlapping; the current convention is to derive a `65536`-wide range from the host UID for readability, e.g. `_nas_grafana:512100000:65536`
 - UIDs are allocate-only: never reuse a UID from a retired service. File ownership is numeric and outlives the user — ZFS snapshots in particular can hand a retired UID's files to whatever service reuses it. `quadlets/*.toml` is the registry of active allocations; when the first service is actually retired, record its UID here as retired and add a `retired-uids` check to `generate-quadlets.py`.
@@ -307,8 +314,8 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Thirteen image-defined services are deployed as rootless admin-managed user Quadlets: the existing ingress, observability, Garage, and Jellyfin services plus the four-component Immich application. Four additional media-automation services are configured but await the reviewed media migration and production validation. Immich first use and a clean post-fix reboot are validated; the earlier reboot exposed and motivated the mapped-ownership storage-readiness fix. Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work.
-- All seventeen configured services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
+- Thirteen image-defined services are deployed as rootless admin-managed user Quadlets: the existing ingress, observability, Garage, and Jellyfin services plus the four-component Immich application. VictoriaLogs and four media-automation services are configured but await their production validation. Immich first use and a clean post-fix reboot are validated; the earlier reboot exposed and motivated the mapped-ownership storage-readiness fix. Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work.
+- All eighteen configured services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `make generate-quadlets`, and commit both. Each service declares an application, a unique role within that application, named endpoints with allowed consumers, and any bounded startup dependencies. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, storage-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/nas/secrets/secrets.sops.yaml` for declared secrets.
 
 Useful reference points for future rootless work:
@@ -325,7 +332,7 @@ Useful reference points for future rootless work:
 - Alertmanager's static config lives under `/usr/share/nas/alertmanager/` and uses native Pushover `user_key_file` / `token_file` settings; do not reintroduce plaintext config generation under `/var`
 - Stateful service storage is declared under `[[storage]]`. Generated preparation units create only missing managed resources, verify exact mounts/properties, maintain persistent SELinux policy, and publish `/run/nas-storage/<service>/ready`; see `docs/architecture/storage.md`.
 - Owned storage roots require the exact service UID/GID. Descendants may use that identity, a declared supplemental fleet GID, or IDs inside the service's generated subordinate range; container-root-created mount anchors and app files using the typed shared group are not ownership drift. The versioned storage manifest must carry this identity contract so it survives reboot checks. For descendant labels, enforce `object_r:container_file_t:s0` with no MCS categories rather than requiring a particular SELinux user field.
-- Caddy, Alertmanager, Grafana, Immich Valkey, and Immich machine learning use small directory storage with guarded automatic repair. Garage, VictoriaMetrics, Jellyfin, the Immich server, and the Immich database use explicit-repair ZFS storage; create `/var/lib/nas-repairs/<service>/repair-required` and restart `nas-prepare-<service>-storage.service` only after reviewing why the bounded check failed.
+- Caddy, Alertmanager, Grafana, Immich Valkey, and Immich machine learning use small directory storage with guarded automatic repair. Garage, VictoriaMetrics, VictoriaLogs, Jellyfin, the Immich server, and the Immich database use explicit-repair ZFS storage; create `/var/lib/nas-repairs/<service>/repair-required` and restart `nas-prepare-<service>-storage.service` only after reviewing why the bounded check failed.
 - Jellyfin's `tank/videos` declaration is required-existing, preserve-owner, and read-only. The generic runtime may repair labels after an explicit request but never creates that dataset or changes its ownership/modes.
 - The image carries a narrowly scoped crun 1.28 patch adding `krun.tap_name`; it calls libkrun's upstream `krun_add_net_tap()` with the embedded DHCP client enabled. TAP-backed Quadlets must include `AddDevice=/dev/net/tun` because libkrun opens that device after entering the container mount namespace.
 - `systemd-networkd` owns the generated `krun-*` TAPs and the host `wg-arr` WireGuard interface; NetworkManager explicitly ignores both patterns. Each service has a dedicated /30, a one-address DHCP pool with Rapid Commit, and a TAP owned by that service's host account. Generated nftables rules provide anti-spoofing, declared inter-service edges, host publication, and outbound NAT. Do not hand-edit generated `.netdev`, `.network`, or `nas-krun-*.nft` files.

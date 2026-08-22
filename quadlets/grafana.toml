@@ -31,9 +31,9 @@ ipv4 = "10.253.3.2/30"
 probe-endpoint = "http"
 
 [container.environment]
-# GF_PLUGINS_PREINSTALL_SYNC installs the VictoriaMetrics datasource plugin
-# on first start.
-GF_PLUGINS_PREINSTALL_SYNC = "victoriametrics-metrics-datasource"
+# GF_PLUGINS_PREINSTALL_SYNC installs both datasource plugins before Grafana
+# starts. Pin the VictoriaLogs plugin so provisioning remains reproducible.
+GF_PLUGINS_PREINSTALL_SYNC = "victoriametrics-metrics-datasource,victoriametrics-logs-datasource@0.31.0"
 GF_SERVER_HTTP_ADDR = "0.0.0.0"
 GF_SERVER_HTTP_PORT = "3000"
 GF_AUTH_ANONYMOUS_ENABLED = "true"

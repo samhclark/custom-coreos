@@ -1,0 +1,54 @@
+data_dir: /var/lib/nas-vector
+
+sources:
+  caddy_journald:
+    type: journald
+    include_matches:
+      _UID:
+        - "51310"
+    current_boot_only: false
+    since_now: false
+
+  victoria_metrics_journald:
+    type: journald
+    include_matches:
+      _UID:
+        - "51250"
+    current_boot_only: false
+    since_now: false
+
+transforms:
+  caddy:
+    type: remap
+    inputs:
+      - caddy_journald
+    source: |
+      .host = "nas"
+      .service = "caddy"
+
+  victoria_metrics:
+    type: remap
+    inputs:
+      - victoria_metrics_journald
+    source: |
+      .host = "nas"
+      .service = "victoria-metrics"
+
+sinks:
+  victoria_logs:
+    type: http
+    inputs:
+      - caddy
+      - victoria_metrics
+    uri: http://127.0.0.1:9428/insert/jsonline?_stream_fields=host,service&_msg_field=message&_time_field=timestamp
+    compression: gzip
+    framing:
+      method: newline_delimited
+    encoding:
+      codec: json
+    healthcheck:
+      enabled: false
+    buffer:
+      type: disk
+      max_size: 1073741824
+      when_full: block
