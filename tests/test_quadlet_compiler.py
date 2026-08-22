@@ -61,19 +61,22 @@ class CompilerCharacterizationTests(unittest.TestCase):
             artifact.path: artifact.content
             for artifact in compile_fleet(current_fleet())
         }
-        caddy = artifacts[
-            Path("etc/containers/systemd/users/51310/caddy.container")
-        ]
-        victoria_metrics = artifacts[
-            Path(
-                "etc/containers/systemd/users/51250/"
-                "victoria-metrics.container"
-            )
-        ]
-        self.assertIn("LogDriver=journald\n", caddy)
-        self.assertIn("LogDriver=journald\n", victoria_metrics)
+        expected_logged = {
+            "alertmanager",
+            "blackbox-exporter",
+            "caddy",
+            "garage",
+            "grafana",
+            "jellyfin-exporter",
+            "victoria-metrics",
+            "vmalert",
+        }
         for path, content in artifacts.items():
-            if path.name not in {"caddy.container", "victoria-metrics.container"}:
+            if path.suffix != ".container":
+                continue
+            if path.stem in expected_logged:
+                self.assertIn("LogDriver=journald\n", content)
+            else:
                 self.assertNotIn("LogDriver=", content)
 
     def test_artifact_paths_are_normalized_relative_overlay_paths(self):

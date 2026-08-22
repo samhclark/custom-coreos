@@ -6,6 +6,7 @@ Documentation=https://docs.victoriametrics.com/vmalert/
 [Container]
 ContainerName=vmalert
 Image=docker.io/victoriametrics/vmalert:v1.150.0@sha256:c6e6c1ef6e43c09510dd0aff264bf0ea319c1bdfced1ccc79dad1545950a7989
+LogDriver=journald
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=1
 Annotation=krun.ram_mib=256
@@ -36,7 +37,7 @@ AddHost=host.krun.internal:10.253.4.1
 # Image-controlled alerting rules (read-only)
 Volume=/usr/share/nas/vmalert:/etc/vmalert:ro
 
-Exec=-datasource.url=http://victoria-metrics.krun:8428 -remoteWrite.url=http://victoria-metrics.krun:8428 -remoteRead.url=http://victoria-metrics.krun:8428 -notifier.url=http://alertmanager.krun:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=0.0.0.0:8880
+Exec=-datasource.url=http://victoria-metrics.krun:8428 -remoteWrite.url=http://victoria-metrics.krun:8428 -remoteRead.url=http://victoria-metrics.krun:8428 -notifier.url=http://alertmanager.krun:9093 -rule=/etc/vmalert/alert-rules.yml -httpListenAddr=0.0.0.0:8880 -loggerFormat=json -loggerLevel=INFO
 
 [Service]
 ExecStartPre=/usr/bin/test -c /dev/net/tun

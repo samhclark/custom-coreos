@@ -45,6 +45,7 @@ from .render_storage import (
     storage_unit,
 )
 from .render_egress import mullvad_readiness_script, mullvad_readiness_unit
+from .render_vector import VECTOR_CONFIG_PATH, vector_config
 
 
 ARTIFACT_PATH_RE = re.compile(
@@ -221,6 +222,7 @@ def compile_fleet(fleet: Fleet) -> tuple[Artifact, ...]:
             Path("usr/share/nas/fleet/shared-storage-paths.list"),
             shared_storage_paths_manifest(fleet),
         ),
+        Artifact(Path(VECTOR_CONFIG_PATH), vector_config(fleet)),
     ]
     if fleet.egress is not None:
         artifacts += [

@@ -16,6 +16,7 @@ display-name = "Grafana"
 
 [container]
 image = "docker.io/grafana/grafana:13.2.0@sha256:3fd54ae1214669f8355f065ec9f6445d5279a3d77095ab048ca045685272429b"
+log-driver = "journald"
 network = "host"
 # Avoid the host's loopback-only systemd-resolved stub inside the krun guest.
 # Plugin installation can require external name resolution during startup.
@@ -39,6 +40,10 @@ GF_SERVER_HTTP_PORT = "3000"
 GF_AUTH_ANONYMOUS_ENABLED = "true"
 GF_AUTH_ANONYMOUS_ORG_ROLE = "Admin"
 GF_AUTH_DISABLE_LOGIN_FORM = "true"
+# Keep the container's stdout as the sole Grafana log sink and preserve a
+# structured JSON message without maintaining a duplicate file-log copy.
+GF_LOG_MODE = "console"
+GF_LOG_CONSOLE_FORMAT = "json"
 
 [[container.endpoints]]
 name = "http"

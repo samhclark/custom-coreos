@@ -6,6 +6,7 @@ Documentation=https://garagehq.deuxfleurs.fr/
 [Container]
 ContainerName=garage
 Image=docker.io/dxflrs/garage:v2.3.0@sha256:866bd13ed2038ba7e7190e840482bc27234c4afaf77be8cfa439ae088c1e4690
+LogDriver=journald
 PodmanArgs=--runtime=krun
 Annotation=krun.cpus=2
 Annotation=krun.ram_mib=1024

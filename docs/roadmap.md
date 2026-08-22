@@ -6,7 +6,7 @@ where production evidence justifies it.
 
 ## Current platform
 
-- Thirteen image-defined services run as dedicated rootless users under libkrun.
+- Fourteen image-defined services run as dedicated rootless users under libkrun.
 - Each microVM has a generated root-managed routed TAP, `/30`, DHCP lease,
   nftables policy, and fail-closed readiness lifecycle.
 - `quadlets/*.toml` is the service source of truth. The typed Python compiler
@@ -52,9 +52,18 @@ architecture or operating instructions.
 3. **Jellyfin operational validation.** Continue representative playback,
    monitoring, and recovery checks without weakening the VM boundary or
    privacy-limited exporter contract.
-4. **Host logging pilot.** Validate persistent journald, native Vector, and
-   VictoriaLogs through outage, restart, and reboot stages before collecting
-   any service beyond Caddy and VictoriaMetrics. See
+4. **Host logging rollout.** The Caddy and VictoriaMetrics journald sources
+   established the transport pilot. The first expansion group—Garage,
+   vmalert, Alertmanager, blackbox-exporter, Grafana, and Jellyfin exporter—is
+   configured but remains awaiting production
+   validation. Validate it one group at a time through read-only, backend
+   outage, Vector restart, and clean reboot stages before adding Immich,
+   Jellyfin runtime logs, or the media-automation services. Generate Vector's
+   UID sources from the typed Quadlet declarations so collection membership
+   cannot drift from service identity. Coordinate the media-automation group
+   with optional image vendoring where owning entrypoints or console behavior
+   would materially improve testing. Caddy access logs and host
+   Mullvad/WireGuard logs remain separate projects. See
    `docs/operations/logging.md`.
 5. **Documentation maintenance.** Keep README focused on operators and
    `AGENTS.md` focused on execution boundaries and invariants; remove stale

@@ -45,6 +45,9 @@ These are considered active and in use on the real machine unless explicitly sta
 - `jellyfin.container` - media library and streaming server; rootless under `etc/containers/systemd/users/51120/`, deployed under libkrun with software media processing while VM-isolated hardware transcoding remains under investigation
 - `jellyfin-exporter.container` - privacy-bounded Sessions API exporter for playback/transcode dashboards; rootless under `etc/containers/systemd/users/51260/`
 - `victoria-metrics.container` - metrics storage; rootless under `etc/containers/systemd/users/51250/`, deployed and validated on the NAS
+- `victoria-logs.container` - seven-day searchable log storage for the native
+  Vector collector; rootless under `etc/containers/systemd/users/51270/`,
+  deployed and validated through the initial Caddy and VictoriaMetrics pilot
 - `vmalert.container` - alert rule evaluation; rootless under `etc/containers/systemd/users/51220/`
 - `alertmanager.container` - notification fanout; rootless under `etc/containers/systemd/users/51240/`, deployed and validated on the NAS
 - `grafana.container` - dashboards; rootless under `etc/containers/systemd/users/51210/`
@@ -53,9 +56,6 @@ These are considered active and in use on the real machine unless explicitly sta
 
 These Quadlets are image-defined but must not be described as deployed until
 their service-specific NAS validation is complete:
-- `victoria-logs.container` - seven-day searchable log store for the host
-  Vector pilot; rootless under `etc/containers/systemd/users/51270/`. Both
-  VictoriaLogs and the native Vector collector await production validation.
 - `sonarr.container` - TV-library automation; rootless under `etc/containers/systemd/users/51410/`
 - `radarr.container` - movie-library automation; rootless under `etc/containers/systemd/users/51420/`
 - `prowlarr.container` - indexer management; rootless under `etc/containers/systemd/users/51430/`
@@ -64,8 +64,9 @@ their service-specific NAS validation is complete:
 ### Supporting Host Units
 
 Important non-container units:
-- `nas-vector.service` - hardened native collector for the Caddy and
-  VictoriaMetrics journald pilot; configured but awaiting production validation
+- `nas-vector.service` - hardened native collector for selected rootless-service
+  journald records; the Caddy and VictoriaMetrics pilot is deployed and
+  validated, while later collection groups retain their own rollout gates
 - `sops-distribute-secrets.service` - decrypts the repo-managed SOPS file and writes per-service runtime secret files at boot
 - `nas-prepare-<service>-storage.service` - generated preparation and current-boot readiness for every stateful service, including all four Immich components
 - `disk-health-metrics.timer` - emits SMART and ZFS metrics for node_exporter
@@ -314,7 +315,7 @@ Images include labels for future deduplication:
 ## Rootless Quadlet Note
 
 Current state:
-- Thirteen image-defined services are deployed as rootless admin-managed user Quadlets: the existing ingress, observability, Garage, and Jellyfin services plus the four-component Immich application. VictoriaLogs and four media-automation services are configured but await their production validation. Immich first use and a clean post-fix reboot are validated; the earlier reboot exposed and motivated the mapped-ownership storage-readiness fix. Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work.
+- Fourteen image-defined services are deployed as rootless admin-managed user Quadlets: the existing ingress, observability (including VictoriaLogs), Garage, and Jellyfin services plus the four-component Immich application. Four media-automation services are configured but await their production validation. Immich first use and a clean post-fix reboot are validated; the earlier reboot exposed and motivated the mapped-ownership storage-readiness fix. Jellyfin's service path is operational, while representative playback and VM-isolated hardware transcoding remain active validation work.
 - All eighteen configured services run under libkrun with explicit CPU and RAM annotations, `StopSignal=SIGINT`, and one root-managed routed TAP per microVM
 - Rootless-service files are **generated**: edit `quadlets/<service>.toml`, run `make generate-quadlets`, and commit both. Each service declares an application, a unique role within that application, named endpoints with allowed consumers, and any bounded startup dependencies. Never hand-edit files with a `GENERATED` header — CI (`build-preflight.yaml` job `verify-repository`) fails on drift. The generated account-unit, storage-unit, secret, asset, and active-TAP manifests drive non-Python consumers; adding a service does not require a manual Containerfile enablement line. Add encrypted values to `overlay-root/usr/share/nas/secrets/secrets.sops.yaml` for declared secrets.
 
