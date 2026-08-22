@@ -45,13 +45,33 @@ class BuildWorkflowTests(unittest.TestCase):
                 self.assertNotIn("Verify SOPS image signature", workflow)
                 self.assertNotIn("Resolve and verify build inputs", workflow)
                 self.assertEqual(workflow.count("make verify-image"), 1)
+                self.assertIn("uses: docker/setup-buildx-action@", workflow)
+                self.assertIn("uses: docker/build-push-action@", workflow)
+                self.assertIn("cache-from: type=gha", workflow)
+                self.assertIn("cache-to: type=gha,mode=max", workflow)
+                self.assertNotIn("redhat-actions/", workflow)
+                self.assertNotIn("fuse-overlayfs", workflow)
 
-    def test_production_image_is_verified_before_registry_login_and_push(self):
+    def test_production_build_pushes_and_loads_one_build_result(self):
         workflow = (WORKFLOWS / "build.yaml").read_text()
 
+        self.assertIn("uses: docker/login-action@", workflow)
+        self.assertIn("push: true", workflow)
+        self.assertIn("load: true", workflow)
+        self.assertIn("provenance: false", workflow)
+        self.assertIn("sbom: false", workflow)
+
         verification = workflow.index("make verify-image")
-        self.assertLess(verification, workflow.index("Log in to Container Registry"))
-        self.assertLess(verification, workflow.index("Push to registry"))
+        self.assertGreater(verification, workflow.index("Build and push container image"))
+        self.assertLess(verification, workflow.index("Generate artifact attestation"))
+        self.assertLess(verification, workflow.index("Sign the published OCI image"))
+
+    def test_build_check_loads_without_pushing(self):
+        workflow = (WORKFLOWS / "build-check.yaml").read_text()
+
+        self.assertIn("load: true", workflow)
+        self.assertNotIn("push: true", workflow)
+        self.assertNotIn("docker/login-action", workflow)
 
     def test_signature_policy_exists_only_in_shared_preflight(self):
         identity = "--certificate-identity-regexp=https://github.com/getsops"
